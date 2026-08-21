@@ -7,11 +7,13 @@ final class AppDelegate: NSObject, NSApplicationDelegate, WKNavigationDelegate, 
     private let candidatePorts = [8766, 8765] + Array(8767...8785)
     private var libraryRoot: URL!
     private var window: NSWindow!
+    private var rootView: NSView!
     private var webView: WKWebView!
     private var serverProcess: Process?
     private var serverLog: FileHandle?
     private var healthSession: URLSession!
     private var readerKeyMonitor: Any?
+    private var immersiveReader: ImmersiveReaderCoordinator!
 
     func applicationDidFinishLaunching(_ notification: Notification) {
         NSApp.setActivationPolicy(.regular)
@@ -41,6 +43,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, WKNavigationDelegate, 
     }
 
     func applicationWillTerminate(_ notification: Notification) {
+        immersiveReader?.closePDF(notifyWeb: false)
         if let readerKeyMonitor {
             NSEvent.removeMonitor(readerKeyMonitor)
         }
@@ -71,37 +74,67 @@ final class AppDelegate: NSObject, NSApplicationDelegate, WKNavigationDelegate, 
         let configuration = WKWebViewConfiguration()
         configuration.websiteDataStore = .default()
         configuration.preferences.isElementFullscreenEnabled = true
+        if let script = ImmersiveReaderCoordinator.epubUserScript(libraryRoot: libraryRoot) {
+            configuration.userContentController.addUserScript(script)
+        }
 
         webView = WKWebView(frame: .zero, configuration: configuration)
+        webView.translatesAutoresizingMaskIntoConstraints = false
         webView.navigationDelegate = self
         webView.uiDelegate = self
         webView.allowsMagnification = true
         webView.setValue(false, forKey: "drawsBackground")
 
+        rootView = NSView(frame: .zero)
+        rootView.wantsLayer = true
+        rootView.layer?.backgroundColor = NSColor.windowBackgroundColor.cgColor
+        rootView.addSubview(webView)
+        NSLayoutConstraint.activate([
+            webView.leadingAnchor.constraint(equalTo: rootView.leadingAnchor),
+            webView.trailingAnchor.constraint(equalTo: rootView.trailingAnchor),
+            webView.topAnchor.constraint(equalTo: rootView.topAnchor),
+            webView.bottomAnchor.constraint(equalTo: rootView.bottomAnchor)
+        ])
+
         window = NSWindow(
-            contentRect: NSRect(x: 0, y: 0, width: 1360, height: 860),
+            contentRect: NSRect(x: 0, y: 0, width: 1380, height: 880),
             styleMask: [.titled, .closable, .miniaturizable, .resizable],
             backing: .buffered,
             defer: false
         )
         window.title = "CS Library"
-        window.minSize = NSSize(width: 880, height: 600)
-        window.contentView = webView
+        window.titleVisibility = .hidden
+        window.titlebarAppearsTransparent = true
+        window.minSize = NSSize(width: 980, height: 640)
+        window.contentView = rootView
+        window.backgroundColor = NSColor.windowBackgroundColor
         window.setFrameAutosaveName("CSLibraryMainWindow")
         if !window.setFrameUsingName("CSLibraryMainWindow") {
             window.center()
         }
+
+        immersiveReader = ImmersiveReaderCoordinator(
+            window: window,
+            rootView: rootView,
+            webView: webView,
+            libraryRoot: libraryRoot
+        )
+
         window.makeKeyAndOrderFront(nil)
         NSApp.activate(ignoringOtherApps: true)
     }
 
     private func installReaderKeyMonitor() {
         readerKeyMonitor = NSEvent.addLocalMonitorForEvents(matching: .keyDown) { [weak self] event in
-            guard
-                let self,
-                self.window?.isKeyWindow == true,
-                event.modifierFlags.intersection([.command, .control, .option, .shift]).isEmpty
-            else { return event }
+            guard let self, self.window?.isKeyWindow == true else { return event }
+
+            if self.immersiveReader?.isPDFOpen == true {
+                return self.immersiveReader.handleKeyEvent(event)
+            }
+
+            guard event.modifierFlags.intersection([.command, .control, .option, .shift]).isEmpty else {
+                return event
+            }
 
             let direction: Int
             switch event.keyCode {
@@ -239,6 +272,12 @@ final class AppDelegate: NSObject, NSApplicationDelegate, WKNavigationDelegate, 
             decisionHandler(.cancel)
             return
         }
+
+        if immersiveReader?.openPDFIfNeeded(for: url) == true {
+            decisionHandler(.cancel)
+            return
+        }
+
         if isLocalLibraryURL(url) || url.scheme == "about" {
             decisionHandler(.allow)
         } else if navigationAction.navigationType == .linkActivated || navigationAction.targetFrame == nil {
@@ -269,12 +308,49 @@ final class AppDelegate: NSObject, NSApplicationDelegate, WKNavigationDelegate, 
     }
 
     @objc private func reloadLibrary(_ sender: Any?) {
+        immersiveReader?.closePDF(notifyWeb: false)
         webView?.reloadFromOrigin()
     }
 
     @objc private func openLibraryFolder(_ sender: Any?) {
         if let libraryRoot {
             NSWorkspace.shared.open(libraryRoot)
+        }
+    }
+
+    @objc private func readerPrevious(_ sender: Any?) {
+        if immersiveReader?.previousPage() != true {
+            webView.evaluateJavaScript("window.csLibraryHandleNativeArrow?.(-1)")
+        }
+    }
+
+    @objc private func readerNext(_ sender: Any?) {
+        if immersiveReader?.nextPage() != true {
+            webView.evaluateJavaScript("window.csLibraryHandleNativeArrow?.(1)")
+        }
+    }
+
+    @objc private func readerFocus(_ sender: Any?) {
+        if immersiveReader?.toggleFocus() != true {
+            webView.evaluateJavaScript("document.querySelector('#readerFocusButton:not([hidden])')?.click()")
+        }
+    }
+
+    @objc private func readerSidebar(_ sender: Any?) {
+        if immersiveReader?.toggleSidebar() != true {
+            webView.evaluateJavaScript("document.querySelector('#readerTocButton:not([hidden])')?.click()")
+        }
+    }
+
+    @objc private func readerBookmark(_ sender: Any?) {
+        if immersiveReader?.toggleBookmark() != true {
+            webView.evaluateJavaScript("document.querySelector('#readerBookmarkButton:not([hidden])')?.click()")
+        }
+    }
+
+    @objc private func readerFind(_ sender: Any?) {
+        if immersiveReader?.focusSearch() != true {
+            webView.evaluateJavaScript("document.querySelector('#readerTocButton:not([hidden])')?.click(); setTimeout(() => document.querySelector('#epubTocSearch')?.focus(), 180)")
         }
     }
 
@@ -298,12 +374,37 @@ final class AppDelegate: NSObject, NSApplicationDelegate, WKNavigationDelegate, 
         fileItem.submenu = fileMenu
         mainMenu.addItem(fileItem)
 
+        let readerItem = NSMenuItem()
+        let readerMenu = NSMenu(title: "Reader")
+        let previous = readerMenu.addItem(withTitle: "Previous Page", action: #selector(readerPrevious(_:)), keyEquivalent: "[")
+        previous.keyEquivalentModifierMask = [.command]
+        previous.target = self
+        let next = readerMenu.addItem(withTitle: "Next Page", action: #selector(readerNext(_:)), keyEquivalent: "]")
+        next.keyEquivalentModifierMask = [.command]
+        next.target = self
+        readerMenu.addItem(.separator())
+        let find = readerMenu.addItem(withTitle: "Find in Book", action: #selector(readerFind(_:)), keyEquivalent: "f")
+        find.keyEquivalentModifierMask = [.command]
+        find.target = self
+        let bookmark = readerMenu.addItem(withTitle: "Bookmark Page", action: #selector(readerBookmark(_:)), keyEquivalent: "d")
+        bookmark.keyEquivalentModifierMask = [.command]
+        bookmark.target = self
+        let sidebar = readerMenu.addItem(withTitle: "Toggle Contents", action: #selector(readerSidebar(_:)), keyEquivalent: "s")
+        sidebar.keyEquivalentModifierMask = [.command, .shift]
+        sidebar.target = self
+        let focus = readerMenu.addItem(withTitle: "Toggle Focus Mode", action: #selector(readerFocus(_:)), keyEquivalent: "f")
+        focus.keyEquivalentModifierMask = [.command, .shift]
+        focus.target = self
+        readerItem.submenu = readerMenu
+        mainMenu.addItem(readerItem)
+
         let viewItem = NSMenuItem()
         let viewMenu = NSMenu(title: "View")
         let reloadItem = viewMenu.addItem(withTitle: "Reload Library", action: #selector(reloadLibrary(_:)), keyEquivalent: "r")
         reloadItem.target = self
         viewMenu.addItem(.separator())
-        viewMenu.addItem(withTitle: "Enter Full Screen", action: #selector(NSWindow.toggleFullScreen(_:)), keyEquivalent: "f").keyEquivalentModifierMask = [.command, .control]
+        let fullScreenItem = viewMenu.addItem(withTitle: "Enter Full Screen", action: #selector(NSWindow.toggleFullScreen(_:)), keyEquivalent: "f")
+        fullScreenItem.keyEquivalentModifierMask = [.command, .control]
         viewItem.submenu = viewMenu
         mainMenu.addItem(viewItem)
 
@@ -323,7 +424,12 @@ final class AppDelegate: NSObject, NSApplicationDelegate, WKNavigationDelegate, 
     }
 }
 
-let application = NSApplication.shared
-let delegate = AppDelegate()
-application.delegate = delegate
-application.run()
+@main
+struct CSLibraryApplication {
+    static func main() {
+        let application = NSApplication.shared
+        let delegate = AppDelegate()
+        application.delegate = delegate
+        application.run()
+    }
+}
