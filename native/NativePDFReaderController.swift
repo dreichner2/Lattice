@@ -158,9 +158,7 @@ final class NativePDFReaderController: NSObject, NSTextViewDelegate {
         container.addSubview(focusExit)
         NSLayoutConstraint.activate([
             focusExit.topAnchor.constraint(equalTo: container.topAnchor, constant: 16),
-            focusExit.trailingAnchor.constraint(equalTo: container.trailingAnchor, constant: -16),
-            focusExit.widthAnchor.constraint(equalToConstant: 38),
-            focusExit.heightAnchor.constraint(equalToConstant: 38)
+            focusExit.trailingAnchor.constraint(equalTo: container.trailingAnchor, constant: -16)
         ])
         focusExitButton = focusExit
 
@@ -222,7 +220,7 @@ final class NativePDFReaderController: NSObject, NSTextViewDelegate {
             return event
         }
 
-        let modifiers = event.modifierFlags.intersection([.command, .control, .option, .shift])
+        let modifiers = event.modifierFlags.intersection([.command, .control, .option])
         if modifiers.isEmpty {
             switch event.keyCode {
             case 53:
