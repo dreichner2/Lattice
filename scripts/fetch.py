@@ -336,6 +336,130 @@ OPEN_BOOKS: dict[str, dict[str, Any]] = {
             "acm-code-of-ethics-and-professional-conduct.pdf"
         ),
     },
+    "redbook": {
+        "title": "Readings in Database Systems, 5th Edition",
+        "authors": "Peter Bailis, Joseph M. Hellerstein, and Michael Stonebraker (eds.)",
+        "year": "2015",
+        "license": "CC BY-NC-SA 4.0",
+        "source": "Authors' official book site (redbook.io)",
+        "page_url": "http://www.redbook.io/",
+        "download_url": "http://www.redbook.io/pdf/redbook-5th-edition.pdf",
+        "filename": "readings-db-systems-5e.pdf",
+    },
+    "networks-book": {
+        "title": "Computer Networks: A Systems Approach, Version 6.1",
+        "authors": "Larry Peterson and Bruce Davie",
+        "year": "2019",
+        "license": "CC BY 4.0",
+        "source": "Authors' official GitHub repository (systemsapproach/book), release v6.1",
+        "page_url": "https://github.com/systemsapproach/book",
+        "download_url": (
+            "https://github.com/systemsapproach/book/releases/download/"
+            "v6.1/book.pdf"
+        ),
+        "filename": "computer-networks-6e.pdf",
+    },
+    "semaphores": {
+        "title": "The Little Book of Semaphores, 2nd Edition (2016 build)",
+        "authors": "Allen B. Downey",
+        "year": "2016",
+        "license": "CC BY-NC-SA 4.0",
+        "source": "Green Tea Press (author's official site)",
+        "page_url": "https://greenteapress.com/semaphores/",
+        "download_url": (
+            "http://greenteapress.com/semaphores/LittleBookOfSemaphores.pdf"
+        ),
+        "filename": "little-book-of-semaphores.pdf",
+    },
+    "theory-of-computation": {
+        "title": "Theory of Computation",
+        "authors": "Anil Maheshwari and Michiel Smid",
+        "year": "2024",
+        "license": "CC BY-SA 4.0",
+        "source": "Authors' official page at Carleton University",
+        "page_url": "https://cglab.ca/~michiel/TheoryOfComputation/",
+        "download_url": (
+            "https://cglab.ca/~michiel/TheoryOfComputation/"
+            "TheoryOfComputation.pdf"
+        ),
+        "filename": "theory-of-computation-maheshwari.pdf",
+    },
+    "arora-barak": {
+        "title": "Computational Complexity: A Modern Approach (draft)",
+        "authors": "Sanjeev Arora and Boaz Barak",
+        "year": "2007",
+        "license": "Author-provided free draft from the book's official site",
+        "source": "Princeton University book site (authors' official)",
+        "page_url": "https://theory.cs.princeton.edu/complexity/",
+        "download_url": "https://theory.cs.princeton.edu/complexity/book.pdf",
+        "filename": "computational-complexity-arora-barak.pdf",
+    },
+    "mackay-itila": {
+        "title": "Information Theory, Inference, and Learning Algorithms",
+        "authors": "David J. C. MacKay",
+        "year": "2003",
+        "license": "Author-provided free PDF from the book's official site (Cambridge University Press print)",
+        "source": "Author's official book site (inference.org.uk)",
+        "page_url": "https://www.inference.org.uk/mackay/itila/",
+        "download_url": "https://www.inference.org.uk/itprnn/book.pdf",
+        "filename": "mackay-information-theory.pdf",
+    },
+    "ladr-4e": {
+        "title": "Linear Algebra Done Right, 4th Edition (open access)",
+        "authors": "Sheldon Axler",
+        "year": "2024",
+        "license": "CC BY-NC 4.0 (Springer open-access edition)",
+        "source": "Author's official book site (linear.axler.net)",
+        "page_url": "https://linear.axler.net/",
+        "download_url": "https://linear.axler.net/LADR4e.pdf",
+        "filename": "linear-algebra-done-right-4e.pdf",
+    },
+    "book-of-proof": {
+        "title": "Book of Proof, 3rd Edition",
+        "authors": "Richard Hammack",
+        "year": "2018",
+        "license": "CC BY-NC-ND 4.0",
+        "source": "Author's official site (GitHub Pages mirror of vcu.edu original)",
+        "page_url": "https://richardhammack.github.io/BookOfProof/",
+        "download_url": (
+            "https://richardhammack.github.io/BookOfProof/Main.pdf"
+        ),
+        "filename": "book-of-proof-3e.pdf",
+    },
+    "nand2tetris-projects": {
+        "title": "Nand2Tetris — Official Software Suite (projects 1–12)",
+        "authors": "Noam Nisan and Shimon Schocken",
+        "year": "2017",
+        "license": (
+            "GPL v2 or later (official projects software; supplied freely "
+            "for use with the Nand2Tetris courses)"
+        ),
+        "source": "Official nand2tetris.org download (Google Drive, interstitial-free direct link)",
+        "catalog_type": "course software suite",
+        "page_url": "https://www.nand2tetris.org/",
+        "download_url": (
+            "https://drive.google.com/uc?export=download&"
+            "id=1stcWUSeAixCRHWOjc9sgBhq5voSLvun8"
+        ),
+        "filename": "nand2tetris-projects.zip",
+        "expected": "zip",
+    },
+    "riscv-spec": {
+        "title": "The RISC-V Instruction Set Manual, Volume I: Unprivileged Architecture",
+        "authors": "RISC-V International (editors: Andrew Waterman, Krste Asanović, et al.)",
+        "year": "2026",
+        "license": "CC BY 4.0",
+        "source": "Official riscv/riscv-isa-manual GitHub release riscv-isa-release-b3967cd-2026-08-20",
+        "page_url": (
+            "https://github.com/riscv/riscv-isa-manual/releases/tag/"
+            "riscv-isa-release-b3967cd-2026-08-20"
+        ),
+        "download_url": (
+            "https://github.com/riscv/riscv-isa-manual/releases/download/"
+            "riscv-isa-release-b3967cd-2026-08-20/riscv-spec.pdf"
+        ),
+        "filename": "riscv-spec-unprivileged.pdf",
+    },
 }
 
 # Preserve commands documented before the filename cleanup while keeping the
@@ -476,6 +600,59 @@ BOOK_SETS: dict[str, dict[str, Any]] = {
             ),
             "security-foundations.tgz": (
                 "https://softwarefoundations.cis.upenn.edu/secf-current/secf.tgz"
+            ),
+        },
+    },
+    "art-of-hpc": {
+        "title": "The Art of HPC (Vols. 1–4, current PDF builds)",
+        "authors": "Victor Eijkhout",
+        "year": "2023–2026",
+        "license": "CC BY 4.0 (per repository README)",
+        "page_url": "https://github.com/VictorEijkhout/TheArtofHPC_pdfs",
+        "dest": "books",
+        "prefix": "art-of-hpc",
+        "components": {
+            "vol1-intro-to-hpc.pdf": {
+                "title": "Introduction to High Performance Computing",
+                "version": "build 2026-01-29",
+            },
+            "vol2-parallel-programming.pdf": {
+                "title": "Parallel Programming in MPI, OpenMP, and PETSc (draft)",
+                "version": "build 2026-01-29",
+            },
+            "vol3-scientific-programming.pdf": {
+                "title": "Introduction to Scientific Programming",
+                "version": "build 2026-01-09",
+            },
+            "vol3-programming-projects.pdf": {
+                "title": "Programming Projects with C, PETSc, and Trilinos",
+                "version": "build 2023-08-16",
+            },
+            "vol4-hpc-tutorials.pdf": {
+                "title": "High Performance Computing Tutorials (draft)",
+                "version": "build 2026-01-29",
+            },
+        },
+        "files": {
+            "vol1-intro-to-hpc.pdf": (
+                "https://raw.githubusercontent.com/VictorEijkhout/TheArtofHPC_pdfs/"
+                "main/vol1/EijkhoutIntroToHPC.pdf"
+            ),
+            "vol2-parallel-programming.pdf": (
+                "https://raw.githubusercontent.com/VictorEijkhout/TheArtofHPC_pdfs/"
+                "main/vol2/EijkhoutParallelProgramming.pdf"
+            ),
+            "vol3-scientific-programming.pdf": (
+                "https://raw.githubusercontent.com/VictorEijkhout/TheArtofHPC_pdfs/"
+                "main/vol3/EijkhoutIntroSciProgramming-book.pdf"
+            ),
+            "vol3-programming-projects.pdf": (
+                "https://raw.githubusercontent.com/VictorEijkhout/TheArtofHPC_pdfs/"
+                "main/vol3/EijkhoutProgrammingProjects-book.pdf"
+            ),
+            "vol4-hpc-tutorials.pdf": (
+                "https://raw.githubusercontent.com/VictorEijkhout/TheArtofHPC_pdfs/"
+                "main/vol4/EijkhoutHPCtutorials.pdf"
             ),
         },
     },

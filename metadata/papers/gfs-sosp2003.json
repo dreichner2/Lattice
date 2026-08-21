@@ -1,0 +1,11 @@
+{
+  "title": "The Google File System",
+  "path": "papers/gfs-sosp2003.pdf",
+  "authors": "Ghemawat, Gobioff, Leung",
+  "source": "User-supplied exact URL",
+  "source_url": "https://static.googleusercontent.com/media/research.google.com/en//archive/gfs-sosp2003.pdf",
+  "license": "Publisher PDF (SOSP 2003, author-hosted copy)",
+  "sha256": "108ced8f084131ae6241b2c43c0b8f8bee01a8427c2527cbc204c87f1fdfce33",
+  "bytes": 275941,
+  "downloaded_at": "2026-08-21T17:25:42.441756+00:00"
+}

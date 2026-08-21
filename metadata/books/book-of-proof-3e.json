@@ -1,0 +1,15 @@
+{
+  "title": "Book of Proof, 3rd Edition",
+  "path": "books/book-of-proof-3e.pdf",
+  "authors": "Richard Hammack",
+  "year": "2018",
+  "license": "CC BY-NC-ND 4.0",
+  "source": "Author's official site (GitHub Pages mirror of vcu.edu original)",
+  "page_url": "https://richardhammack.github.io/BookOfProof/",
+  "download_url": "https://richardhammack.github.io/BookOfProof/Main.pdf",
+  "filename": "book-of-proof-3e.pdf",
+  "source_url": "https://richardhammack.github.io/BookOfProof/",
+  "sha256": "e0e471ca794ddda7bc46704b22885e1582350b7fc5881f8ba9a61b3747ec79fd",
+  "bytes": 1841432,
+  "downloaded_at": "2026-08-21T16:57:26.229558+00:00"
+}

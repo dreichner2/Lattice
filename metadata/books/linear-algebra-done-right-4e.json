@@ -1,0 +1,15 @@
+{
+  "title": "Linear Algebra Done Right, 4th Edition (open access)",
+  "path": "books/linear-algebra-done-right-4e.pdf",
+  "authors": "Sheldon Axler",
+  "year": "2024",
+  "license": "CC BY-NC 4.0 (Springer open-access edition)",
+  "source": "Author's official book site (linear.axler.net)",
+  "page_url": "https://linear.axler.net/",
+  "download_url": "https://linear.axler.net/LADR4e.pdf",
+  "filename": "linear-algebra-done-right-4e.pdf",
+  "source_url": "https://linear.axler.net/",
+  "sha256": "1207d90a1310e79dea2ec3068f853e20b8306928eda122ae13fdfab50f41ea08",
+  "bytes": 2795156,
+  "downloaded_at": "2026-08-21T16:57:25.333932+00:00"
+}

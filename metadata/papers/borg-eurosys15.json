@@ -1,0 +1,11 @@
+{
+  "title": "Large-Scale Cluster Management at Google with Borg",
+  "path": "papers/borg-eurosys15.pdf",
+  "authors": "Burns, Grant, Oppenheimer, Brewer",
+  "source": "User-supplied exact URL",
+  "source_url": "https://static.googleusercontent.com/media/research.google.com/en//pubs/archive/44843.pdf",
+  "license": "Publisher PDF (EuroSys 2015, Google Research archive)",
+  "sha256": "0679da43280d8c3903eb23b1516b92087c3168430ff2a65e70e0e426a86a5a4b",
+  "bytes": 379306,
+  "downloaded_at": "2026-08-21T17:41:18.132931+00:00"
+}

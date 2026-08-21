@@ -1,0 +1,20 @@
+{
+  "title": "Denoising Diffusion Probabilistic Models",
+  "path": "papers/ddpm.pdf",
+  "id": "2006.11239v2",
+  "authors": [
+    "Jonathan Ho",
+    "Ajay Jain",
+    "Pieter Abbeel"
+  ],
+  "published": "2020-06-19T17:24:44Z",
+  "summary": "We present high quality image synthesis results using diffusion probabilistic models, a class of latent variable models inspired by considerations from nonequilibrium thermodynamics. Our best results are obtained by training on a weighted variational bound designed according to a novel connection between diffusion probabilistic models and denoising score matching with Langevin dynamics, and our models naturally admit a progressive lossy decompression scheme that can be interpreted as a generalization of autoregressive decoding. On the unconditional CIFAR10 dataset, we obtain an Inception score of 9.46 and a state-of-the-art FID score of 3.17. On 256x256 LSUN, we obtain sample quality similar to ProgressiveGAN. Our implementation is available at https://github.com/hojonathanho/diffusion",
+  "abstract_url": "https://arxiv.org/abs/2006.11239v2",
+  "pdf_url": "https://arxiv.org/pdf/2006.11239v2",
+  "source": "arXiv",
+  "source_url": "https://arxiv.org/abs/2006.11239v2",
+  "license": "See the license field on the arXiv record",
+  "sha256": "aee5e07a802e8dfd2a386374c94fd61d1d056cb7e1e0fec4f28e8120ff5d8505",
+  "bytes": 10267274,
+  "downloaded_at": "2026-08-21T17:25:27.055948+00:00"
+}

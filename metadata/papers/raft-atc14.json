@@ -1,0 +1,11 @@
+{
+  "title": "In Search of an Understandable Consensus Algorithm (Raft)",
+  "path": "papers/raft-atc14.pdf",
+  "authors": "Ongaro, Ousterhout",
+  "source": "User-supplied exact URL",
+  "source_url": "https://raft.github.io/raft.pdf",
+  "license": "Author-hosted PDF (Stanford; USENIX ATC 2014)",
+  "sha256": "5a5c679b6a7c88007faeff8c3eef19a77e9e5caa8bd7390922584fe8ecf0ce1f",
+  "bytes": 567533,
+  "downloaded_at": "2026-08-21T17:26:14.640262+00:00"
+}

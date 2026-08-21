@@ -1,0 +1,11 @@
+{
+  "title": "End-to-End Arguments in System Design",
+  "path": "papers/end-to-end-args-1984.pdf",
+  "authors": "Saltzer, Reed, Clark",
+  "source": "User-supplied exact URL",
+  "source_url": "https://web.mit.edu/Saltzer/www/publications/endtoend/endtoend.pdf",
+  "license": "Author-hosted PDF (MIT; ACM TOCS 1984, open access by author permission)",
+  "sha256": "3204a1a562d9d3b72ba112f20caddfd34991d6e1e39939ace6a3e7c016519768",
+  "bytes": 37816,
+  "downloaded_at": "2026-08-21T17:27:14.493917+00:00"
+}

@@ -1,0 +1,14 @@
+{
+  "title": "High Performance Computing Tutorials (draft)",
+  "path": "books/art-of-hpc/vol4-hpc-tutorials.pdf",
+  "authors": "Victor Eijkhout",
+  "year": "2023–2026",
+  "source": "Open courseware / open textbook set",
+  "source_url": "https://github.com/VictorEijkhout/TheArtofHPC_pdfs",
+  "file_url": "https://raw.githubusercontent.com/VictorEijkhout/TheArtofHPC_pdfs/main/vol4/EijkhoutHPCtutorials.pdf",
+  "license": "CC BY 4.0 (per repository README)",
+  "sha256": "0d17393670667fc6b23e8bde67a7dd9405036073dccc09fe4b6ac7ad02307e2d",
+  "bytes": 4190110,
+  "version": "build 2026-01-29",
+  "downloaded_at": "2026-08-21T17:15:37.690206+00:00"
+}

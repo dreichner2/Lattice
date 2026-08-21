@@ -1,0 +1,11 @@
+{
+  "title": "On Computable Numbers, with an Application to the Entscheidungsproblem",
+  "path": "papers/turing-1936.pdf",
+  "authors": "Alan M. Turing",
+  "source": "User-supplied exact URL",
+  "source_url": "https://www.cs.virginia.edu/~robins/Turing_Paper_1936.pdf",
+  "license": "Public-domain-era scan (Proc. London Math. Soc. 1936, mirror)",
+  "sha256": "a126650c315e998ba96ea8248a60bde0afe60fec3e810acfc2b6c70d3b0e9f36",
+  "bytes": 2198146,
+  "downloaded_at": "2026-08-21T17:26:54.362210+00:00"
+}

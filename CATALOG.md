@@ -1,6 +1,6 @@
 # CS Library Catalog
 
-> **47 logical works · 72 verified artifacts · 0 exact duplicates**
+> **83 logical works · 112 verified artifacts · 0 exact duplicates**
 > Last reorganized and fully verified: 2026-08-21
 
 This is the authoritative shelf index. Every title links directly to the local
@@ -123,6 +123,54 @@ metadata under `metadata/` and a checksum in `manifests/library.sha256`.
 |---|---|---:|---|---|---|
 | <!-- work: acm-code --> [ACM Code of Ethics and Professional Conduct](papers/acm-code-of-ethics.pdf) | Association for Computing Machinery | 2018 | `papers/acm-code-of-ethics.pdf` | [source](https://www.acm.org/code-of-ethics) | 🔵 Official free |
 
+
+## Open Textbooks & Reference
+
+| Book | Author(s) | Edition | Local | Source | Access |
+|---|---|---:|---|---|---|
+| <!-- work: books-book-of-proof-3e-pdf --> [Book of Proof, 3rd Edition](books/book-of-proof-3e.pdf) | Richard Hammack | 2018 | `books/book-of-proof-3e.pdf` | — | 🟢 Open license |
+| <!-- work: books-computational-complexity-arora-barak-pdf --> [Computational Complexity: A Modern Approach (draft)](books/computational-complexity-arora-barak.pdf) | Sanjeev Arora and Boaz Barak | 2007 | `books/computational-complexity-arora-barak.pdf` | — | 🔵 Official free |
+| <!-- work: books-computer-networks-6e-pdf --> [Computer Networks: A Systems Approach, Version 6.1](books/computer-networks-6e.pdf) | Larry Peterson and Bruce Davie | 2019 | `books/computer-networks-6e.pdf` | — | 🟢 Open license |
+| <!-- work: books-linear-algebra-done-right-4e-pdf --> [Linear Algebra Done Right, 4th Edition (open access)](books/linear-algebra-done-right-4e.pdf) | Sheldon Axler | 2024 | `books/linear-algebra-done-right-4e.pdf` | — | 🟢 Open license |
+| <!-- work: books-little-book-of-semaphores-pdf --> [The Little Book of Semaphores, 2nd Edition (2016 build)](books/little-book-of-semaphores.pdf) | Allen B. Downey | 2016 | `books/little-book-of-semaphores.pdf` | — | 🟢 Open license |
+| <!-- work: books-mackay-information-theory-pdf --> [Information Theory, Inference, and Learning Algorithms](books/mackay-information-theory.pdf) | David J. C. MacKay | 2003 | `books/mackay-information-theory.pdf` | — | 🔵 Official free |
+| <!-- work: books-readings-db-systems-5e-pdf --> [Readings in Database Systems, 5th Edition](books/readings-db-systems-5e.pdf) | Peter Bailis, Joseph M. Hellerstein, and Michael Stonebraker (eds.) | 2015 | `books/readings-db-systems-5e.pdf` | — | 🟢 Open license |
+| <!-- work: books-riscv-spec-unprivileged-pdf --> [The RISC-V Instruction Set Manual, Volume I: Unprivileged Architecture](books/riscv-spec-unprivileged.pdf) | RISC-V International (editors: Andrew Waterman, Krste Asanović, et al.) | 2026 | `books/riscv-spec-unprivileged.pdf` | — | 🟢 Open license |
+| <!-- work: books-theory-of-computation-maheshwari-pdf --> [Theory of Computation](books/theory-of-computation-maheshwari.pdf) | Anil Maheshwari and Michiel Smid | 2024 | `books/theory-of-computation-maheshwari.pdf` | — | 🟢 Open license |
+
+| <!-- work: art-of-hpc --> [The Art of HPC (Vols. 1–4, current builds)](books/art-of-hpc/) | Victor Eijkhout | 2023–2026 builds | `books/art-of-hpc/` | [source](https://github.com/VictorEijkhout/TheArtofHPC_pdfs) | 🟢 Open license |
+
+## Research Papers
+
+| Paper | Author(s) | Year | Local | Source | Access |
+|---|---|---:|---|---|---|
+| <!-- work: papers-alexnet-neurips12-pdf --> [ImageNet Classification with Deep Convolutional Neural Networks (AlexNet)](papers/alexnet-neurips12.pdf) | Krizhevsky, Sutskever, Hinton | Not recorded | `papers/alexnet-neurips12.pdf` | — | ⚪ Source terms |
+| <!-- work: papers-alphazero-pdf --> [Mastering Chess and Shogi by Self-Play with a General Reinforcement Learning Algorithm](papers/alphazero.pdf) | David Silver, Thomas Hubert, Julian Schrittwieser, Ioannis Antonoglou, Matthew Lai, Arthur Guez, Marc Lanctot, Laurent Sifre, Dharshan Kumaran, Thore Graepel, Timothy Lillicrap, Karen Simonyan, Demis Hassabis | 2017 | `papers/alphazero.pdf` | — | 🔵 Official free |
+| <!-- work: papers-bert-pdf --> [BERT: Pre-training of Deep Bidirectional Transformers for Language Understanding](papers/bert.pdf) | Jacob Devlin, Ming-Wei Chang, Kenton Lee, Kristina Toutanova | 2018 | `papers/bert.pdf` | — | 🔵 Official free |
+| <!-- work: papers-bigtable-osdi06-pdf --> [Bigtable: A Distributed Storage System for Structured Data](papers/bigtable-osdi06.pdf) | Chang et al. | Not recorded | `papers/bigtable-osdi06.pdf` | — | 🔵 Official free |
+| <!-- work: papers-bitcoin-whitepaper-pdf --> [Bitcoin: A Peer-to-Peer Electronic Cash System](papers/bitcoin-whitepaper.pdf) | Satoshi Nakamoto | Not recorded | `papers/bitcoin-whitepaper.pdf` | — | ⚪ Source terms |
+| <!-- work: papers-borg-eurosys15-pdf --> [Large-Scale Cluster Management at Google with Borg](papers/borg-eurosys15.pdf) | Burns, Grant, Oppenheimer, Brewer | Not recorded | `papers/borg-eurosys15.pdf` | — | ⚪ Source terms |
+| <!-- work: papers-chord-sigcomm01-pdf --> [A Scalable Peer-to-peer Lookup Service for Internet Applications (Chord)](papers/chord-sigcomm01.pdf) | Stoica et al. | Not recorded | `papers/chord-sigcomm01.pdf` | — | 🔵 Official free |
+| <!-- work: papers-ddpm-pdf --> [Denoising Diffusion Probabilistic Models](papers/ddpm.pdf) | Jonathan Ho, Ajay Jain, Pieter Abbeel | 2020 | `papers/ddpm.pdf` | — | 🔵 Official free |
+| <!-- work: papers-deep-residual-learning-pdf --> [Deep Residual Learning for Image Recognition](papers/deep-residual-learning.pdf) | Kaiming He, Xiangyu Zhang, Shaoqing Ren, Jian Sun | 2015 | `papers/deep-residual-learning.pdf` | — | 🔵 Official free |
+| <!-- work: papers-dijkstra-ewd267-pdf --> [Notes on Structured Programming (EWD267)](papers/dijkstra-ewd267.pdf) | Edsger W. Dijkstra | Not recorded | `papers/dijkstra-ewd267.pdf` | — | ⚪ Source terms |
+| <!-- work: papers-dynamo-sosp07-pdf --> [Dynamo: Amazon's Highly Available Key-value Store](papers/dynamo-sosp07.pdf) | DeCandia et al. | Not recorded | `papers/dynamo-sosp07.pdf` | — | 🔵 Official free |
+| <!-- work: papers-end-to-end-args-1984-pdf --> [End-to-End Arguments in System Design](papers/end-to-end-args-1984.pdf) | Saltzer, Reed, Clark | Not recorded | `papers/end-to-end-args-1984.pdf` | — | 🔵 Official free |
+| <!-- work: papers-gan-pdf --> [Generative Adversarial Networks](papers/gan.pdf) | Ian J. Goodfellow, Jean Pouget-Abadie, Mehdi Mirza, Bing Xu, David Warde-Farley, Sherjil Ozair, Aaron Courville, Yoshua Bengio | 2014 | `papers/gan.pdf` | — | 🔵 Official free |
+| <!-- work: papers-gfs-sosp2003-pdf --> [The Google File System](papers/gfs-sosp2003.pdf) | Ghemawat, Gobioff, Leung | Not recorded | `papers/gfs-sosp2003.pdf` | — | 🔵 Official free |
+| <!-- work: papers-kafka-netdb11-pdf --> [Kafka: a Distributed Messaging System for Log Processing](papers/kafka-netdb11.pdf) | Kreps, Narkhede, Rao | Not recorded | `papers/kafka-netdb11.pdf` | — | ⚪ Source terms |
+| <!-- work: papers-lamport-time-clocks-1978-pdf --> [Time, Clocks, and the Ordering of Events in a Distributed System](papers/lamport-time-clocks-1978.pdf) | Leslie Lamport | Not recorded | `papers/lamport-time-clocks-1978.pdf` | — | 🔵 Official free |
+| <!-- work: papers-mapreduce-osdi04-pdf --> [MapReduce: Simplified Data Processing on Large Clusters](papers/mapreduce-osdi04.pdf) | Dean, Ghemawat | Not recorded | `papers/mapreduce-osdi04.pdf` | — | 🔵 Official free |
+| <!-- work: papers-paxos-simple-pdf --> [Paxos Made Simple](papers/paxos-simple.pdf) | Leslie Lamport | Not recorded | `papers/paxos-simple.pdf` | — | 🔵 Official free |
+| <!-- work: papers-raft-atc14-pdf --> [In Search of an Understandable Consensus Algorithm (Raft)](papers/raft-atc14.pdf) | Ongaro, Ousterhout | Not recorded | `papers/raft-atc14.pdf` | — | 🔵 Official free |
+| <!-- work: papers-shannon-1948-pdf --> [A Mathematical Theory of Communication](papers/shannon-1948.pdf) | Claude E. Shannon | Not recorded | `papers/shannon-1948.pdf` | — | ⚪ Source terms |
+| <!-- work: papers-spanner-osdi2012-pdf --> [Spanner: Google's Globally-Distributed Database](papers/spanner-osdi2012.pdf) | Corbett et al. | Not recorded | `papers/spanner-osdi2012.pdf` | — | 🔵 Official free |
+| <!-- work: papers-spark-rdd-nsdi12-pdf --> [Resilient Distributed Datasets: A Fault-Tolerant Abstraction for In-Memory Cluster Computing](papers/spark-rdd-nsdi12.pdf) | Zaharia et al. | Not recorded | `papers/spark-rdd-nsdi12.pdf` | — | 🔵 Official free |
+| <!-- work: papers-turing-1936-pdf --> [On Computable Numbers, with an Application to the Entscheidungsproblem](papers/turing-1936.pdf) | Alan M. Turing | Not recorded | `papers/turing-1936.pdf` | — | ⚪ Source terms |
+| <!-- work: papers-vae-pdf --> [Auto-Encoding Variational Bayes](papers/vae.pdf) | Diederik P Kingma, Max Welling | 2013 | `papers/vae.pdf` | — | 🔵 Official free |
+| <!-- work: papers-word2vec-pdf --> [Efficient Estimation of Word Representations in Vector Space](papers/word2vec.pdf) | Tomas Mikolov, Kai Chen, Greg Corrado, Jeffrey Dean | 2013 | `papers/word2vec.pdf` | — | 🔵 Official free |
+| <!-- work: papers-zookeeper-atc10-pdf --> [ZooKeeper: Wait-free Coordination for Internet-scale Systems](papers/zookeeper-atc10.pdf) | Hunt et al. | Not recorded | `papers/zookeeper-atc10.pdf` | — | ⚪ Source terms |
+
 ## Collection file index
 
 The two collection rows above contain more than one artifact. Every file is
@@ -168,3 +216,345 @@ linked here so the catalog remains the only navigation page you need.
 - **Canonical integrity:** run `python3 scripts/fetch.py verify`, then
   `python3 scripts/fetch.py audit`. Regenerate the canonical manifest only after
   an intentional shelf change with `python3 scripts/fetch.py manifest`.
+
+<!-- work: book:redbook -->
+### [Readings in Database Systems, 5th Edition](books/readings-db-systems-5e.pdf)
+
+- Type: book
+- Authors: Peter Bailis, Joseph M. Hellerstein, and Michael Stonebraker (eds.)
+- Local path: `books/readings-db-systems-5e.pdf`
+- Source: [official page](http://www.redbook.io/)
+- License: CC BY-NC-SA 4.0
+
+<!-- work: book:networks-book -->
+### [Computer Networks: A Systems Approach, Version 6.1](books/computer-networks-6e.pdf)
+
+- Type: book
+- Authors: Larry Peterson and Bruce Davie
+- Local path: `books/computer-networks-6e.pdf`
+- Source: [official page](https://github.com/systemsapproach/book)
+- License: CC BY 4.0
+
+<!-- work: book:semaphores -->
+### [The Little Book of Semaphores, 2nd Edition (2016 build)](books/little-book-of-semaphores.pdf)
+
+- Type: book
+- Authors: Allen B. Downey
+- Local path: `books/little-book-of-semaphores.pdf`
+- Source: [official page](https://greenteapress.com/semaphores/)
+- License: CC BY-NC-SA 4.0
+
+<!-- work: book:theory-of-computation -->
+### [Theory of Computation](books/theory-of-computation-maheshwari.pdf)
+
+- Type: book
+- Authors: Anil Maheshwari and Michiel Smid
+- Local path: `books/theory-of-computation-maheshwari.pdf`
+- Source: [official page](https://cglab.ca/~michiel/TheoryOfComputation/)
+- License: CC BY-SA 4.0
+
+<!-- work: book:arora-barak -->
+### [Computational Complexity: A Modern Approach (draft)](books/computational-complexity-arora-barak.pdf)
+
+- Type: book
+- Authors: Sanjeev Arora and Boaz Barak
+- Local path: `books/computational-complexity-arora-barak.pdf`
+- Source: [official page](https://theory.cs.princeton.edu/complexity/)
+- License: Author-provided free draft from the book's official site
+
+<!-- work: book:mackay-itila -->
+### [Information Theory, Inference, and Learning Algorithms](books/mackay-information-theory.pdf)
+
+- Type: book
+- Authors: David J. C. MacKay
+- Local path: `books/mackay-information-theory.pdf`
+- Source: [official page](https://www.inference.org.uk/mackay/itila/)
+- License: Author-provided free PDF from the book's official site (Cambridge University Press print)
+
+<!-- work: book:ladr-4e -->
+### [Linear Algebra Done Right, 4th Edition (open access)](books/linear-algebra-done-right-4e.pdf)
+
+- Type: book
+- Authors: Sheldon Axler
+- Local path: `books/linear-algebra-done-right-4e.pdf`
+- Source: [official page](https://linear.axler.net/)
+- License: CC BY-NC 4.0 (Springer open-access edition)
+
+<!-- work: book:book-of-proof -->
+### [Book of Proof, 3rd Edition](books/book-of-proof-3e.pdf)
+
+- Type: book
+- Authors: Richard Hammack
+- Local path: `books/book-of-proof-3e.pdf`
+- Source: [official page](https://richardhammack.github.io/BookOfProof/)
+- License: CC BY-NC-ND 4.0
+
+<!-- work: book:nand2tetris-projects -->
+### [Nand2Tetris — Official Software Suite (projects 1–12)](books/nand2tetris-projects.zip)
+
+- Type: course software suite
+- Authors: Noam Nisan and Shimon Schocken
+- Local path: `books/nand2tetris-projects.zip`
+- Source: [official page](https://www.nand2tetris.org/)
+- License: GPL v2 or later (official projects software; supplied freely for use with the Nand2Tetris courses)
+
+<!-- work: book:riscv-spec -->
+### [The RISC-V Instruction Set Manual, Volume I: Unprivileged Architecture](books/riscv-spec-unprivileged.pdf)
+
+- Type: book
+- Authors: RISC-V International (editors: Andrew Waterman, Krste Asanović, et al.)
+- Local path: `books/riscv-spec-unprivileged.pdf`
+- Source: [official page](https://github.com/riscv/riscv-isa-manual/releases/tag/riscv-isa-release-b3967cd-2026-08-20)
+- License: CC BY 4.0
+
+<!-- work: set:art-of-hpc -->
+### [The Art of HPC (Vols. 1–4, current PDF builds)](books/art-of-hpc)
+
+- Type: set
+- Authors: Victor Eijkhout
+- Local path: `books/art-of-hpc`
+- Source: [official page](https://github.com/VictorEijkhout/TheArtofHPC_pdfs)
+- License: CC BY 4.0 (per repository README)
+
+<!-- work: arxiv:1512.03385v1 -->
+### [Deep Residual Learning for Image Recognition](papers/deep-residual-learning.pdf)
+
+- Type: paper
+- Authors: Kaiming He, Xiangyu Zhang, Shaoqing Ren, Jian Sun
+- Local path: `papers/deep-residual-learning.pdf`
+- Source: [official page](https://arxiv.org/abs/1512.03385v1)
+- License: See the license field on the arXiv record
+
+<!-- work: arxiv:1301.3781v3 -->
+### [Efficient Estimation of Word Representations in Vector Space](papers/word2vec.pdf)
+
+- Type: paper
+- Authors: Tomas Mikolov, Kai Chen, Greg Corrado, Jeffrey Dean
+- Local path: `papers/word2vec.pdf`
+- Source: [official page](https://arxiv.org/abs/1301.3781v3)
+- License: See the license field on the arXiv record
+
+<!-- work: arxiv:1810.04805v2 -->
+### [BERT: Pre-training of Deep Bidirectional Transformers for Language Understanding](papers/bert.pdf)
+
+- Type: paper
+- Authors: Jacob Devlin, Ming-Wei Chang, Kenton Lee, Kristina Toutanova
+- Local path: `papers/bert.pdf`
+- Source: [official page](https://arxiv.org/abs/1810.04805v2)
+- License: See the license field on the arXiv record
+
+<!-- work: arxiv:2006.11239v2 -->
+### [Denoising Diffusion Probabilistic Models](papers/ddpm.pdf)
+
+- Type: paper
+- Authors: Jonathan Ho, Ajay Jain, Pieter Abbeel
+- Local path: `papers/ddpm.pdf`
+- Source: [official page](https://arxiv.org/abs/2006.11239v2)
+- License: See the license field on the arXiv record
+
+<!-- work: arxiv:1712.01815v1 -->
+### [Mastering Chess and Shogi by Self-Play with a General Reinforcement Learning Algorithm](papers/alphazero.pdf)
+
+- Type: paper
+- Authors: David Silver, Thomas Hubert, Julian Schrittwieser, Ioannis Antonoglou, Matthew Lai, Arthur Guez, Marc Lanctot, Laurent Sifre, Dharshan Kumaran, Thore Graepel, Timothy Lillicrap, Karen Simonyan, Demis Hassabis
+- Local path: `papers/alphazero.pdf`
+- Source: [official page](https://arxiv.org/abs/1712.01815v1)
+- License: See the license field on the arXiv record
+
+<!-- work: arxiv:1312.6114v11 -->
+### [Auto-Encoding Variational Bayes](papers/vae.pdf)
+
+- Type: paper
+- Authors: Diederik P Kingma, Max Welling
+- Local path: `papers/vae.pdf`
+- Source: [official page](https://arxiv.org/abs/1312.6114v11)
+- License: See the license field on the arXiv record
+
+<!-- work: arxiv:1406.2661v1 -->
+### [Generative Adversarial Networks](papers/gan.pdf)
+
+- Type: paper
+- Authors: Ian J. Goodfellow, Jean Pouget-Abadie, Mehdi Mirza, Bing Xu, David Warde-Farley, Sherjil Ozair, Aaron Courville, Yoshua Bengio
+- Local path: `papers/gan.pdf`
+- Source: [official page](https://arxiv.org/abs/1406.2661v1)
+- License: See the license field on the arXiv record
+
+<!-- work: arxiv:1706.03762v7 -->
+### [Attention Is All You Need](papers/attention.pdf)
+
+- Type: paper
+- Authors: Ashish Vaswani, Noam Shazeer, Niki Parmar, Jakob Uszkoreit, Llion Jones, Aidan N. Gomez, Lukasz Kaiser, Illia Polosukhin
+- Local path: `papers/attention.pdf`
+- Source: [official page](https://arxiv.org/abs/1706.03762v7)
+- License: See the license field on the arXiv record
+
+<!-- work: url:108ced8f084131ae6241b2c43c0b8f8bee01a8427c2527cbc204c87f1fdfce33 -->
+### [The Google File System](papers/gfs-sosp2003.pdf)
+
+- Type: paper
+- Authors: Ghemawat, Gobioff, Leung
+- Local path: `papers/gfs-sosp2003.pdf`
+- Source: [official page](https://static.googleusercontent.com/media/research.google.com/en//archive/gfs-sosp2003.pdf)
+- License: Publisher PDF (SOSP 2003, author-hosted copy)
+
+<!-- work: url:ae84cc48ff0005c5a79e095039e54e91dce5c116f65746e1593e819d21830ce9 -->
+### [MapReduce: Simplified Data Processing on Large Clusters](papers/mapreduce-osdi04.pdf)
+
+- Type: paper
+- Authors: Dean, Ghemawat
+- Local path: `papers/mapreduce-osdi04.pdf`
+- Source: [official page](https://static.googleusercontent.com/media/research.google.com/en//archive/mapreduce-osdi04.pdf)
+- License: Publisher PDF (OSDI 2004, author-hosted copy)
+
+<!-- work: url:9126cf3b930fd7be2de6248f82565c9b970482eb063bdc30be8c1b29c86b2167 -->
+### [Bigtable: A Distributed Storage System for Structured Data](papers/bigtable-osdi06.pdf)
+
+- Type: paper
+- Authors: Chang et al.
+- Local path: `papers/bigtable-osdi06.pdf`
+- Source: [official page](https://static.googleusercontent.com/media/research.google.com/en//archive/bigtable-osdi06.pdf)
+- License: Publisher PDF (OSDI 2006, author-hosted copy)
+
+<!-- work: url:8cf30f4b379da5873dc9f7d82595d5cdc402083091cfff0e7beb00fd84473ea5 -->
+### [Spanner: Google's Globally-Distributed Database](papers/spanner-osdi2012.pdf)
+
+- Type: paper
+- Authors: Corbett et al.
+- Local path: `papers/spanner-osdi2012.pdf`
+- Source: [official page](https://static.googleusercontent.com/media/research.google.com/en//archive/spanner-osdi2012.pdf)
+- License: Publisher PDF (OSDI 2012, author-hosted copy)
+
+<!-- work: url:5a5c679b6a7c88007faeff8c3eef19a77e9e5caa8bd7390922584fe8ecf0ce1f -->
+### [In Search of an Understandable Consensus Algorithm (Raft)](papers/raft-atc14.pdf)
+
+- Type: paper
+- Authors: Ongaro, Ousterhout
+- Local path: `papers/raft-atc14.pdf`
+- Source: [official page](https://raft.github.io/raft.pdf)
+- License: Author-hosted PDF (Stanford; USENIX ATC 2014)
+
+<!-- work: url:743d56888f7b698cf4d0a86a4538793bbbf3c94c8e21d5c27dc34369d56102a0 -->
+### [ZooKeeper: Wait-free Coordination for Internet-scale Systems](papers/zookeeper-atc10.pdf)
+
+- Type: paper
+- Authors: Hunt et al.
+- Local path: `papers/zookeeper-atc10.pdf`
+- Source: [official page](https://www.usenix.org/legacy/event/atc10/tech/full_papers/Hunt.pdf)
+- License: Publisher PDF (USENIX ATC 2010, open proceedings)
+
+<!-- work: url:4abdeba2503eb20a5d7ed84aa8e7680bcbe3088541712626315deae0b07c2821 -->
+### [Kafka: a Distributed Messaging System for Log Processing](papers/kafka-netdb11.pdf)
+
+- Type: paper
+- Authors: Kreps, Narkhede, Rao
+- Local path: `papers/kafka-netdb11.pdf`
+- Source: [official page](https://notes.stephenholiday.com/Kafka.pdf)
+- License: Author-mirror PDF (NetDB'11 paper)
+
+<!-- work: url:64bf8651757c0696b5fc75cdcbed117f82e0f70396744b537c53c5530d4938a2 -->
+### [Resilient Distributed Datasets: A Fault-Tolerant Abstraction for In-Memory Cluster Computing](papers/spark-rdd-nsdi12.pdf)
+
+- Type: paper
+- Authors: Zaharia et al.
+- Local path: `papers/spark-rdd-nsdi12.pdf`
+- Source: [official page](https://people.csail.mit.edu/matei/papers/2012/nsdi_spark.pdf)
+- License: Publisher PDF (NSDI 2012, author-hosted copy)
+
+<!-- work: url:5cacd624cd7bfd37e3d22e04d8c2e347a49579d2927dbb06f40a89c0bcd40bd4 -->
+### [Dynamo: Amazon's Highly Available Key-value Store](papers/dynamo-sosp07.pdf)
+
+- Type: paper
+- Authors: DeCandia et al.
+- Local path: `papers/dynamo-sosp07.pdf`
+- Source: [official page](https://www.allthingsdistributed.com/files/amazon-dynamo-sosp2007.pdf)
+- License: Author-hosted PDF (SOSP 2007)
+
+<!-- work: url:9f5fbdd2a28d5a15b29dd92ecb37f17c242c622faa94f793f7b8bcf36be9efac -->
+### [Large-Scale Cluster Management at Google with Borg](papers/borg-eurosys15.pdf)
+
+- Type: paper
+- Authors: Burns, Grant, Oppenheimer, Brewer
+- Local path: `papers/borg-eurosys15.pdf`
+- Source: [official page](https://static.googleusercontent.com/media/research.google.com/en//pubs/archive/44843.pdf)
+- License: Publisher PDF (EuroSys 2015, Google Research archive)
+
+<!-- work: url:90137160c57217953d5f61857e64ca58e85f06e1b13b4f475c918b1b582b9771 -->
+### [ImageNet Classification with Deep Convolutional Neural Networks (AlexNet)](papers/alexnet-neurips12.pdf)
+
+- Type: paper
+- Authors: Krizhevsky, Sutskever, Hinton
+- Local path: `papers/alexnet-neurips12.pdf`
+- Source: [official page](https://proceedings.neurips.cc/paper/2012/file/c399862d3b9d6b76c8436e924a68c45b-Paper.pdf)
+- License: Publisher PDF (NeurIPS 2012 open proceedings)
+
+<!-- work: url:a126650c315e998ba96ea8248a60bde0afe60fec3e810acfc2b6c70d3b0e9f36 -->
+### [On Computable Numbers, with an Application to the Entscheidungsproblem](papers/turing-1936.pdf)
+
+- Type: paper
+- Authors: Alan M. Turing
+- Local path: `papers/turing-1936.pdf`
+- Source: [official page](https://www.cs.virginia.edu/~robins/Turing_Paper_1936.pdf)
+- License: Public-domain-era scan (Proc. London Math. Soc. 1936, mirror)
+
+<!-- work: url:6e4e3411984f3edf99dbfe8b941cb5e8a321379ff0cae6ae5c1f592ad8882ca8 -->
+### [A Mathematical Theory of Communication](papers/shannon-1948.pdf)
+
+- Type: paper
+- Authors: Claude E. Shannon
+- Local path: `papers/shannon-1948.pdf`
+- Source: [official page](https://people.math.harvard.edu/~ctm/home/text/others/shannon/entropy/entropy.pdf)
+- License: Public-domain classic (Bell System Tech. J. 1948, Harvard mirror)
+
+<!-- work: url:c83b5141257730d6fd20097ef17ebd02a02dfcb1809bad5873b7739659bb3f2b -->
+### [Paxos Made Simple](papers/paxos-simple.pdf)
+
+- Type: paper
+- Authors: Leslie Lamport
+- Local path: `papers/paxos-simple.pdf`
+- Source: [official page](https://lamport.azurewebsites.net/pubs/paxos-simple.pdf)
+- License: Author-hosted PDF (lamport.azurewebsites.net)
+
+<!-- work: url:c55e7cab4230aa3d7126748a149b2db6f0d7a67296d5eccfdd50a210299a96b2 -->
+### [Time, Clocks, and the Ordering of Events in a Distributed System](papers/lamport-time-clocks-1978.pdf)
+
+- Type: paper
+- Authors: Leslie Lamport
+- Local path: `papers/lamport-time-clocks-1978.pdf`
+- Source: [official page](https://lamport.azurewebsites.net/pubs/time-clocks.pdf)
+- License: Author-hosted PDF (CACM 1978; open access by author permission)
+
+<!-- work: url:cca4ae7873ac128b7b9034b2c3fbf32f7d84541a88b5e70d0c7c1ce1d6381fe8 -->
+### [A Scalable Peer-to-peer Lookup Service for Internet Applications (Chord)](papers/chord-sigcomm01.pdf)
+
+- Type: paper
+- Authors: Stoica et al.
+- Local path: `papers/chord-sigcomm01.pdf`
+- Source: [official page](https://pdos.csail.mit.edu/papers/chord:sigcomm01/chord_sigcomm.pdf)
+- License: Publisher PDF (SIGCOMM 2001, author-hosted copy at MIT PDOS)
+
+<!-- work: url:b1674191a88ec5cdd733e4240a81803105dc412d6c6708d53ab94fc248f4f553 -->
+### [Bitcoin: A Peer-to-Peer Electronic Cash System](papers/bitcoin-whitepaper.pdf)
+
+- Type: paper
+- Authors: Satoshi Nakamoto
+- Local path: `papers/bitcoin-whitepaper.pdf`
+- Source: [official page](https://bitcoin.org/bitcoin.pdf)
+- License: Author-released manuscript (bitcoin.org)
+
+<!-- work: url:d2cd5b61fd5cf392e92a3f99a411aed4cf9442bcca68d4e3d4b019bc0816c4c2 -->
+### [Notes on Structured Programming (EWD267)](papers/dijkstra-ewd267.pdf)
+
+- Type: paper
+- Authors: Edsger W. Dijkstra
+- Local path: `papers/dijkstra-ewd267.pdf`
+- Source: [official page](https://www.cs.utexas.edu/~EWD/ewd02xx/EWD267.PDF)
+- License: Author archive, University of Texas at Austin (EWD collection)
+
+<!-- work: url:3204a1a562d9d3b72ba112f20caddfd34991d6e1e39939ace6a3e7c016519768 -->
+### [End-to-End Arguments in System Design](papers/end-to-end-args-1984.pdf)
+
+- Type: paper
+- Authors: Saltzer, Reed, Clark
+- Local path: `papers/end-to-end-args-1984.pdf`
+- Source: [official page](https://web.mit.edu/Saltzer/www/publications/endtoend/endtoend.pdf)
+- License: Author-hosted PDF (MIT; ACM TOCS 1984, open access by author permission)

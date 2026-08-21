@@ -1,0 +1,11 @@
+{
+  "title": "ZooKeeper: Wait-free Coordination for Internet-scale Systems",
+  "path": "papers/zookeeper-atc10.pdf",
+  "authors": "Hunt et al.",
+  "source": "User-supplied exact URL",
+  "source_url": "https://www.usenix.org/legacy/event/atc10/tech/full_papers/Hunt.pdf",
+  "license": "Publisher PDF (USENIX ATC 2010, open proceedings)",
+  "sha256": "743d56888f7b698cf4d0a86a4538793bbbf3c94c8e21d5c27dc34369d56102a0",
+  "bytes": 2368431,
+  "downloaded_at": "2026-08-21T17:26:15.099773+00:00"
+}

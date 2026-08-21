@@ -1,0 +1,14 @@
+{
+  "title": "Parallel Programming in MPI, OpenMP, and PETSc (draft)",
+  "path": "books/art-of-hpc/vol2-parallel-programming.pdf",
+  "authors": "Victor Eijkhout",
+  "year": "2023–2026",
+  "source": "Open courseware / open textbook set",
+  "source_url": "https://github.com/VictorEijkhout/TheArtofHPC_pdfs",
+  "file_url": "https://raw.githubusercontent.com/VictorEijkhout/TheArtofHPC_pdfs/main/vol2/EijkhoutParallelProgramming.pdf",
+  "license": "CC BY 4.0 (per repository README)",
+  "sha256": "1d6617e696a03f2d4b73b2c423783fac3139d55200542b02f2751b51dd9ab46a",
+  "bytes": 34521366,
+  "version": "build 2026-01-29",
+  "downloaded_at": "2026-08-21T17:15:35.317317+00:00"
+}

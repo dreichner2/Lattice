@@ -1,0 +1,17 @@
+{
+  "title": "Nand2Tetris — Official Software Suite (projects 1–12)",
+  "path": "books/nand2tetris-projects.zip",
+  "authors": "Noam Nisan and Shimon Schocken",
+  "year": "2017",
+  "license": "GPL v2 or later (official projects software; supplied freely for use with the Nand2Tetris courses)",
+  "source": "Official nand2tetris.org download (Google Drive, interstitial-free direct link)",
+  "catalog_type": "course software suite",
+  "page_url": "https://www.nand2tetris.org/",
+  "download_url": "https://drive.google.com/uc?export=download&id=1stcWUSeAixCRHWOjc9sgBhq5voSLvun8",
+  "filename": "nand2tetris-projects.zip",
+  "expected": "zip",
+  "source_url": "https://www.nand2tetris.org/",
+  "sha256": "1b2d9096c711eb932edb9eb3b3573f4bd36ca5d9fd4d58ce9a083cef02b21364",
+  "bytes": 485625,
+  "downloaded_at": "2026-08-21T16:57:29.538900+00:00"
+}
