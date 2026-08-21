@@ -1,0 +1,94 @@
+name: Bootstrap cross-platform implementation
+
+on:
+  push:
+    branches:
+      - codex/cross-platform-library
+    paths:
+      - scripts/cross_platform_payload.b64
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+jobs:
+  install:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 10
+    steps:
+      - name: Check out implementation branch
+        uses: actions/checkout@v4
+        with:
+          ref: codex/cross-platform-library
+          fetch-depth: 0
+
+      - name: Install reviewed source payload
+        run: |
+          python3 - <<'PY'
+          import base64
+          import io
+          import tarfile
+          from pathlib import Path, PurePosixPath
+
+          root = Path.cwd().resolve()
+          payload = base64.b64decode(Path('scripts/cross_platform_payload.b64').read_text().strip())
+          with tarfile.open(fileobj=io.BytesIO(payload), mode='r:gz') as archive:
+              members = []
+              for member in archive.getmembers():
+                  path = PurePosixPath(member.name)
+                  if path.is_absolute() or '..' in path.parts:
+                      raise SystemExit(f'Unsafe payload path: {member.name}')
+                  members.append(member)
+              archive.extractall(root, members=members, filter='data')
+          PY
+          python3 scripts/apply_cross_platform_patch.py
+          rm -f scripts/cross_platform_payload.b64 .github/workflows/bootstrap-cross-platform.yml
+
+      - name: Validate generated source
+        run: |
+          python3 -m py_compile scripts/cross_platform_server.py scripts/apply_cross_platform_patch.py windows/server_bootstrap.py
+          node --check native/SharedReaderState.js
+          node --check windows/reader/pdf-reader.js
+          node --test tests/test_reader_state.mjs
+          bash -n scripts/build-macos-app.sh
+
+      - name: Commit implementation
+        run: |
+          python3 - <<'PY'
+          from pathlib import Path
+          paths = [
+              '.gitignore',
+              'README.md',
+              'SECURITY.md',
+              'CONTRIBUTING.md',
+              'open-library.command',
+              'docs/ARCHITECTURE.md',
+              '.github/workflows/apply-cross-platform-patch.yml',
+              '.github/workflows/native-macos.yml',
+              '.github/workflows/quality.yml',
+              '.github/workflows/windows-app.yml',
+              '.github/workflows/bootstrap-cross-platform.yml',
+              'scripts/cross_platform_payload.b64',
+              'scripts/apply_cross_platform_patch.py',
+              'scripts/build-macos-app.sh',
+              'scripts/cross_platform_server.py',
+              'native/CSLibraryApp.swift',
+              'native/ImmersiveReaderCoordinator.swift',
+              'native/Info.plist',
+              'native/LibraryIdentity.swift',
+              'native/NativePDFReaderController.swift',
+              'native/NativePDFReaderState.swift',
+              'native/ReaderDataStore.swift',
+              'native/SharedReaderState.js',
+              'tests/test_cross_platform_server.py',
+              'tests/test_reader_state.mjs',
+          ]
+          paths.extend(str(path) for path in Path('windows').rglob('*') if path.is_file())
+          Path('.stage-paths').write_bytes(b'\0'.join(path.encode() for path in paths) + b'\0')
+          PY
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          xargs -0 git add -- < .stage-paths
+          rm -f .stage-paths
+          git commit -m "feat: build cross-platform CS Library readers"
+          git push origin HEAD:codex/cross-platform-library
