@@ -140,7 +140,6 @@ extension NativePDFReaderController {
 
         let thumbnails = PDFThumbnailView(frame: .zero)
         thumbnails.translatesAutoresizingMaskIntoConstraints = false
-        thumbnails.layoutMode = .vertical
         thumbnails.thumbnailSize = NSSize(width: 126, height: 166)
         thumbnails.backgroundColor = .clear
         thumbnails.allowsDragging = false
