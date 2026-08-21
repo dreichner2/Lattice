@@ -1,0 +1,15 @@
+{
+  "title": "Information Theory, Inference, and Learning Algorithms",
+  "path": "books/mackay-information-theory.pdf",
+  "authors": "David J. C. MacKay",
+  "year": "2003",
+  "license": "Author-provided free PDF from the book's official site (Cambridge University Press print)",
+  "source": "Author's official book site (inference.org.uk)",
+  "page_url": "https://www.inference.org.uk/mackay/itila/",
+  "download_url": "https://www.inference.org.uk/itprnn/book.pdf",
+  "filename": "mackay-information-theory.pdf",
+  "source_url": "https://www.inference.org.uk/mackay/itila/",
+  "sha256": "868adc5f0ef6630366b122d88d691acfbe8339978b4ec3f38fca5e231f135791",
+  "bytes": 11675219,
+  "downloaded_at": "2026-08-21T16:57:22.783237+00:00"
+}

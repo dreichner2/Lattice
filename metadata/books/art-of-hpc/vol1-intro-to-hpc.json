@@ -1,0 +1,14 @@
+{
+  "title": "Introduction to High Performance Computing",
+  "path": "books/art-of-hpc/vol1-intro-to-hpc.pdf",
+  "authors": "Victor Eijkhout",
+  "year": "2023–2026",
+  "source": "Open courseware / open textbook set",
+  "source_url": "https://github.com/VictorEijkhout/TheArtofHPC_pdfs",
+  "file_url": "https://raw.githubusercontent.com/VictorEijkhout/TheArtofHPC_pdfs/main/vol1/EijkhoutIntroToHPC.pdf",
+  "license": "CC BY 4.0 (per repository README)",
+  "sha256": "df3797463664718bb500ca052e71e3a3fb98aa582c977a983deb46db60bd6ef2",
+  "bytes": 44879531,
+  "version": "build 2026-01-29",
+  "downloaded_at": "2026-08-21T17:15:34.082527+00:00"
+}

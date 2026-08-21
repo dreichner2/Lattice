@@ -1,0 +1,11 @@
+{
+  "title": "Kafka: a Distributed Messaging System for Log Processing",
+  "path": "papers/kafka-netdb11.pdf",
+  "authors": "Kreps, Narkhede, Rao",
+  "source": "User-supplied exact URL",
+  "source_url": "https://notes.stephenholiday.com/Kafka.pdf",
+  "license": "Author-mirror PDF (NetDB'11 paper)",
+  "sha256": "4abdeba2503eb20a5d7ed84aa8e7680bcbe3088541712626315deae0b07c2821",
+  "bytes": 2253344,
+  "downloaded_at": "2026-08-21T17:26:30.277034+00:00"
+}

@@ -1,0 +1,14 @@
+{
+  "title": "Programming Projects with C, PETSc, and Trilinos",
+  "path": "books/art-of-hpc/vol3-programming-projects.pdf",
+  "authors": "Victor Eijkhout",
+  "year": "2023–2026",
+  "source": "Open courseware / open textbook set",
+  "source_url": "https://github.com/VictorEijkhout/TheArtofHPC_pdfs",
+  "file_url": "https://raw.githubusercontent.com/VictorEijkhout/TheArtofHPC_pdfs/main/vol3/EijkhoutProgrammingProjects-book.pdf",
+  "license": "CC BY 4.0 (per repository README)",
+  "sha256": "ed322cbf22b8de6b893edddaa6aad60545b770cd267903d7c5a21a327f05aa0e",
+  "bytes": 604478,
+  "version": "build 2023-08-16",
+  "downloaded_at": "2026-08-21T17:15:36.609657+00:00"
+}

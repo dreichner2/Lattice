@@ -256,20 +256,42 @@ milestones are ray/shape intersections, BVH acceleration, materials, direct
 lighting, Monte Carlo integration, importance sampling, and image-quality
 tests.
 
+## Video lectures (free, link-first)
+
+Full courses watched online rather than shelved as files. Every URL verified
+serving on 2026-08-21.
+
+| Course | Fits stage | Access |
+| --- | --- | --- |
+| [MIT OCW 6.006 — Introduction to Algorithms (Spring 2020)](https://ocw.mit.edu/courses/6-006-introduction-to-algorithms-spring-2020/) | 3 | OCW, CC BY-NC-SA |
+| [CMU 15-445 — Database Systems (Fall 2024)](https://15445.courses.cs.cmu.edu/fall2024/) | 4 | Public course site + YouTube lectures |
+| [MIT 6.824 — Distributed Systems](https://pdos.csail.mit.edu/6.824/) | 4 | Public course site (PDOS) |
+| [Berkeley CS61C — Great Ideas in Computer Architecture](https://cs61c.org/) | 4 | Public course site |
+| [Nand2Tetris — From Nand to Tetris](https://www.nand2tetris.org/) | 5 | Open courseware; project software GPL-2.0+ (shelved) |
+| [SICP 6.001 (Spring 2005)](https://ocw.mit.edu/courses/6-001-structure-and-interpretation-of-computer-programs-spring-2005/) | 5 | OCW, CC BY-NC-SA |
+| [Karpathy — Neural Networks: Zero to Hero](https://karpathy.ai/zero-to-hero.html) | 8 | YouTube + MIT-licensed code |
+
+Pair each course with the shelved text when one exists: 6.006 with its shelved
+[lecture notes](papers/mit-6006/) and CLRS, 15-445 as the database
+lecture track (no free primary text yet), 6.824 with
+[Distributed Systems](books/distributed-systems-4e.pdf), Nand2Tetris with its
+shelved Nand2Tetris project suite, SICP with the free
+[online edition](books/sicp.pdf), Zero to Hero with the papers shelf
+(ResNet, attention, DDPM, VAE, GAN all shelved).
+
 ## Known shelf gaps
 
 The catalog is broad, but it is not literally all of computer science. These
 areas still need a dedicated primary text or course before the shelf can claim
 balanced undergraduate-plus depth:
 
-- databases and transaction processing;
-- computer networking beyond RFC 791;
-- automata, computability, and complexity theory;
-- computer architecture and digital logic;
-- parallel/GPU computing;
+- automata and computability theory (complexity is now covered by the shelved
+  Arora–Barak draft; Sipser remains purchase-only);
 - human-computer interaction;
 - testing, programming-language security, and modern cryptography as dedicated
-  subjects.
+  subjects;
+- a free primary database text (the CMU 15-445 video track above carries the
+  lecture material meanwhile).
 
 Treat this as an honest boundary, not a defect to hide. The
 [catalog](CATALOG.md) lists what is physically present; a recommendation is not

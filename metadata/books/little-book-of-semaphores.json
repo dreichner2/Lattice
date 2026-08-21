@@ -1,0 +1,15 @@
+{
+  "title": "The Little Book of Semaphores, 2nd Edition (2016 build)",
+  "path": "books/little-book-of-semaphores.pdf",
+  "authors": "Allen B. Downey",
+  "year": "2016",
+  "license": "CC BY-NC-SA 4.0",
+  "source": "Green Tea Press (author's official site)",
+  "page_url": "https://greenteapress.com/semaphores/",
+  "download_url": "http://greenteapress.com/semaphores/LittleBookOfSemaphores.pdf",
+  "filename": "little-book-of-semaphores.pdf",
+  "source_url": "https://greenteapress.com/semaphores/",
+  "sha256": "a2423e5f4f1713def91809acf6897303455b8a601c8b63e99c280158325ef3b0",
+  "bytes": 1153090,
+  "downloaded_at": "2026-08-21T16:57:07.913646+00:00"
+}

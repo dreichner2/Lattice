@@ -1,0 +1,11 @@
+{
+  "title": "A Scalable Peer-to-peer Lookup Service for Internet Applications (Chord)",
+  "path": "papers/chord-sigcomm01.pdf",
+  "authors": "Stoica et al.",
+  "source": "User-supplied exact URL",
+  "source_url": "https://pdos.csail.mit.edu/papers/chord:sigcomm01/chord_sigcomm.pdf",
+  "license": "Publisher PDF (SIGCOMM 2001, author-hosted copy at MIT PDOS)",
+  "sha256": "cca4ae7873ac128b7b9034b2c3fbf32f7d84541a88b5e70d0c7c1ce1d6381fe8",
+  "bytes": 194676,
+  "downloaded_at": "2026-08-21T17:26:56.798209+00:00"
+}

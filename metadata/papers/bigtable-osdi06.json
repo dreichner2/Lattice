@@ -1,0 +1,11 @@
+{
+  "title": "Bigtable: A Distributed Storage System for Structured Data",
+  "path": "papers/bigtable-osdi06.pdf",
+  "authors": "Chang et al.",
+  "source": "User-supplied exact URL",
+  "source_url": "https://static.googleusercontent.com/media/research.google.com/en//archive/bigtable-osdi06.pdf",
+  "license": "Publisher PDF (OSDI 2006, author-hosted copy)",
+  "sha256": "9126cf3b930fd7be2de6248f82565c9b970482eb063bdc30be8c1b29c86b2167",
+  "bytes": 221214,
+  "downloaded_at": "2026-08-21T17:26:14.019238+00:00"
+}

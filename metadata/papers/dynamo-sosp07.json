@@ -1,0 +1,11 @@
+{
+  "title": "Dynamo: Amazon's Highly Available Key-value Store",
+  "path": "papers/dynamo-sosp07.pdf",
+  "authors": "DeCandia et al.",
+  "source": "User-supplied exact URL",
+  "source_url": "https://www.allthingsdistributed.com/files/amazon-dynamo-sosp2007.pdf",
+  "license": "Author-hosted PDF (SOSP 2007)",
+  "sha256": "5cacd624cd7bfd37e3d22e04d8c2e347a49579d2927dbb06f40a89c0bcd40bd4",
+  "bytes": 900468,
+  "downloaded_at": "2026-08-21T17:26:31.349598+00:00"
+}

@@ -1,0 +1,14 @@
+{
+  "title": "Introduction to Scientific Programming",
+  "path": "books/art-of-hpc/vol3-scientific-programming.pdf",
+  "authors": "Victor Eijkhout",
+  "year": "2023–2026",
+  "source": "Open courseware / open textbook set",
+  "source_url": "https://github.com/VictorEijkhout/TheArtofHPC_pdfs",
+  "file_url": "https://raw.githubusercontent.com/VictorEijkhout/TheArtofHPC_pdfs/main/vol3/EijkhoutIntroSciProgramming-book.pdf",
+  "license": "CC BY 4.0 (per repository README)",
+  "sha256": "127dd709087946abd54e2363bc4051f4fd2d423bb4aed5bc0b7b511fbd36fa84",
+  "bytes": 9867242,
+  "version": "build 2026-01-09",
+  "downloaded_at": "2026-08-21T17:15:36.062052+00:00"
+}

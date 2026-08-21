@@ -1,0 +1,11 @@
+{
+  "title": "A Mathematical Theory of Communication",
+  "path": "papers/shannon-1948.pdf",
+  "authors": "Claude E. Shannon",
+  "source": "User-supplied exact URL",
+  "source_url": "https://people.math.harvard.edu/~ctm/home/text/others/shannon/entropy/entropy.pdf",
+  "license": "Public-domain classic (Bell System Tech. J. 1948, Harvard mirror)",
+  "sha256": "6e4e3411984f3edf99dbfe8b941cb5e8a321379ff0cae6ae5c1f592ad8882ca8",
+  "bytes": 366296,
+  "downloaded_at": "2026-08-21T17:26:55.025495+00:00"
+}

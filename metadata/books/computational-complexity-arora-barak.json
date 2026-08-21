@@ -1,0 +1,15 @@
+{
+  "title": "Computational Complexity: A Modern Approach (draft)",
+  "path": "books/computational-complexity-arora-barak.pdf",
+  "authors": "Sanjeev Arora and Boaz Barak",
+  "year": "2007",
+  "license": "Author-provided free draft from the book's official site",
+  "source": "Princeton University book site (authors' official)",
+  "page_url": "https://theory.cs.princeton.edu/complexity/",
+  "download_url": "https://theory.cs.princeton.edu/complexity/book.pdf",
+  "filename": "computational-complexity-arora-barak.pdf",
+  "source_url": "https://theory.cs.princeton.edu/complexity/",
+  "sha256": "da0881782a35bde6a0779a2eb1a8d480f39fbddf70bbb92824d1dc5550a033b2",
+  "bytes": 4572986,
+  "downloaded_at": "2026-08-21T16:57:11.460339+00:00"
+}

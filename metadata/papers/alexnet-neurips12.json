@@ -1,0 +1,11 @@
+{
+  "title": "ImageNet Classification with Deep Convolutional Neural Networks (AlexNet)",
+  "path": "papers/alexnet-neurips12.pdf",
+  "authors": "Krizhevsky, Sutskever, Hinton",
+  "source": "User-supplied exact URL",
+  "source_url": "https://proceedings.neurips.cc/paper/2012/file/c399862d3b9d6b76c8436e924a68c45b-Paper.pdf",
+  "license": "Publisher PDF (NeurIPS 2012 open proceedings)",
+  "sha256": "90137160c57217953d5f61857e64ca58e85f06e1b13b4f475c918b1b582b9771",
+  "bytes": 1418820,
+  "downloaded_at": "2026-08-21T17:26:32.534569+00:00"
+}

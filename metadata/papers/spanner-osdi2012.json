@@ -1,0 +1,11 @@
+{
+  "title": "Spanner: Google's Globally-Distributed Database",
+  "path": "papers/spanner-osdi2012.pdf",
+  "authors": "Corbett et al.",
+  "source": "User-supplied exact URL",
+  "source_url": "https://static.googleusercontent.com/media/research.google.com/en//archive/spanner-osdi2012.pdf",
+  "license": "Publisher PDF (OSDI 2012, author-hosted copy)",
+  "sha256": "8cf30f4b379da5873dc9f7d82595d5cdc402083091cfff0e7beb00fd84473ea5",
+  "bytes": 446673,
+  "downloaded_at": "2026-08-21T17:26:14.395643+00:00"
+}

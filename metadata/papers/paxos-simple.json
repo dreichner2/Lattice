@@ -1,0 +1,11 @@
+{
+  "title": "Paxos Made Simple",
+  "path": "papers/paxos-simple.pdf",
+  "authors": "Leslie Lamport",
+  "source": "User-supplied exact URL",
+  "source_url": "https://lamport.azurewebsites.net/pubs/paxos-simple.pdf",
+  "license": "Author-hosted PDF (lamport.azurewebsites.net)",
+  "sha256": "c83b5141257730d6fd20097ef17ebd02a02dfcb1809bad5873b7739659bb3f2b",
+  "bytes": 95019,
+  "downloaded_at": "2026-08-21T17:26:55.652237+00:00"
+}

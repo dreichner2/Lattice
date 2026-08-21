@@ -1,0 +1,15 @@
+{
+  "title": "Theory of Computation",
+  "path": "books/theory-of-computation-maheshwari.pdf",
+  "authors": "Anil Maheshwari and Michiel Smid",
+  "year": "2024",
+  "license": "CC BY-SA 4.0",
+  "source": "Authors' official page at Carleton University",
+  "page_url": "https://cglab.ca/~michiel/TheoryOfComputation/",
+  "download_url": "https://cglab.ca/~michiel/TheoryOfComputation/TheoryOfComputation.pdf",
+  "filename": "theory-of-computation-maheshwari.pdf",
+  "source_url": "https://cglab.ca/~michiel/TheoryOfComputation/",
+  "sha256": "8ed1b72576b86207963db7e4eb465c1c8646995256bfd8cfbf57f6e1853d2fb4",
+  "bytes": 1031331,
+  "downloaded_at": "2026-08-21T16:57:09.762065+00:00"
+}

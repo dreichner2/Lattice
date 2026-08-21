@@ -215,6 +215,11 @@ def build_library(root: Path = REPO_ROOT) -> dict[str, Any]:
             continue
         if "<!-- work:" not in raw_line:
             continue
+        # fetch.py appends detailed Markdown records whose marker is on its own
+        # line. They are not curated shelf rows; their readable payloads are
+        # discovered below and shown under New arrivals until manually shelved.
+        if not raw_line.lstrip().startswith("|"):
+            continue
         if not current_subject:
             raise ValueError(f"Catalog work appears outside a shelf: {raw_line}")
 

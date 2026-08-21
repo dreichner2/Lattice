@@ -1,0 +1,15 @@
+{
+  "title": "Computer Networks: A Systems Approach, Version 6.1",
+  "path": "books/computer-networks-6e.pdf",
+  "authors": "Larry Peterson and Bruce Davie",
+  "year": "2019",
+  "license": "CC BY 4.0",
+  "source": "Authors' official GitHub repository (systemsapproach/book), release v6.1",
+  "page_url": "https://github.com/systemsapproach/book",
+  "download_url": "https://github.com/systemsapproach/book/releases/download/v6.1/book.pdf",
+  "filename": "computer-networks-6e.pdf",
+  "source_url": "https://github.com/systemsapproach/book",
+  "sha256": "e4ddb12a63f9ecebcc3504a0c3e8d9d5d4b89f1ffa600011f15efef5766ff90f",
+  "bytes": 22254526,
+  "downloaded_at": "2026-08-21T16:57:05.570948+00:00"
+}

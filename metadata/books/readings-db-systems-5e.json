@@ -1,0 +1,15 @@
+{
+  "title": "Readings in Database Systems, 5th Edition",
+  "path": "books/readings-db-systems-5e.pdf",
+  "authors": "Peter Bailis, Joseph M. Hellerstein, and Michael Stonebraker (eds.)",
+  "year": "2015",
+  "license": "CC BY-NC-SA 4.0",
+  "source": "Authors' official book site (redbook.io)",
+  "page_url": "http://www.redbook.io/",
+  "download_url": "http://www.redbook.io/pdf/redbook-5th-edition.pdf",
+  "filename": "readings-db-systems-5e.pdf",
+  "source_url": "http://www.redbook.io/",
+  "sha256": "300b71b68649f79c4200acd740ba5c042efa5e69366e7a852f4b7eada4768497",
+  "bytes": 378664,
+  "downloaded_at": "2026-08-21T16:57:02.337445+00:00"
+}

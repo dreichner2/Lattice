@@ -1,0 +1,30 @@
+{
+  "title": "Mastering Chess and Shogi by Self-Play with a General Reinforcement Learning Algorithm",
+  "path": "papers/alphazero.pdf",
+  "id": "1712.01815v1",
+  "authors": [
+    "David Silver",
+    "Thomas Hubert",
+    "Julian Schrittwieser",
+    "Ioannis Antonoglou",
+    "Matthew Lai",
+    "Arthur Guez",
+    "Marc Lanctot",
+    "Laurent Sifre",
+    "Dharshan Kumaran",
+    "Thore Graepel",
+    "Timothy Lillicrap",
+    "Karen Simonyan",
+    "Demis Hassabis"
+  ],
+  "published": "2017-12-05T18:45:38Z",
+  "summary": "The game of chess is the most widely-studied domain in the history of artificial intelligence. The strongest programs are based on a combination of sophisticated search techniques, domain-specific adaptations, and handcrafted evaluation functions that have been refined by human experts over several decades. In contrast, the AlphaGo Zero program recently achieved superhuman performance in the game of Go, by tabula rasa reinforcement learning from games of self-play. In this paper, we generalise this approach into a single AlphaZero algorithm that can achieve, tabula rasa, superhuman performance in many challenging domains. Starting from random play, and given no domain knowledge except the game rules, AlphaZero achieved within 24 hours a superhuman level of play in the games of chess and shogi (Japanese chess) as well as Go, and convincingly defeated a world-champion program in each case.",
+  "abstract_url": "https://arxiv.org/abs/1712.01815v1",
+  "pdf_url": "https://arxiv.org/pdf/1712.01815v1",
+  "source": "arXiv",
+  "source_url": "https://arxiv.org/abs/1712.01815v1",
+  "license": "See the license field on the arXiv record",
+  "sha256": "26c43408551c22f4fdc98e47f9b4592ab2161fac1ba5df27c897f46d8b6cec7f",
+  "bytes": 636527,
+  "downloaded_at": "2026-08-21T17:25:27.603273+00:00"
+}

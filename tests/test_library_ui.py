@@ -78,22 +78,23 @@ class CatalogTests(unittest.TestCase):
         cls.library = library_ui.build_library(ROOT)
 
     def test_catalog_shape(self) -> None:
-        self.assertEqual(self.library["stats"]["works"], 47)
+        self.assertEqual(self.library["stats"]["works"], 83)
         if not (ROOT / "books").is_dir():
             self.assertEqual(self.library["stats"]["artifacts"], 0)
+            self.assertEqual(self.library["stats"]["indexedArtifacts"], 112)
             self.assertFalse(self.library["stats"]["allPresent"])
             return
-        self.assertEqual(self.library["stats"]["artifacts"], 72)
-        self.assertEqual(self.library["stats"]["present"], 72)
-        self.assertEqual(self.library["stats"]["subjects"], 9)
+        self.assertEqual(self.library["stats"]["artifacts"], 112)
+        self.assertEqual(self.library["stats"]["present"], 112)
+        self.assertEqual(self.library["stats"]["subjects"], 11)
         self.assertTrue(self.library["stats"]["allPresent"])
         self.assertEqual(
             self.library["stats"]["materialCounts"],
             {
-                "book": 39,
+                "book": 53,
                 "lecture": 20,
                 "course-volume": 7,
-                "paper": 2,
+                "paper": 28,
                 "specification": 2,
                 "standard": 2,
             },
@@ -164,6 +165,46 @@ class CatalogTests(unittest.TestCase):
         self.assertEqual(library["materials"][0]["title"], "A New AI Book 2e")
         self.assertFalse(library["works"][0]["cataloged"])
 
+    def test_fetch_catalog_detail_block_becomes_new_arrival(self) -> None:
+        with tempfile.TemporaryDirectory() as temporary:
+            root = Path(temporary)
+            (root / "books").mkdir()
+            (root / "metadata" / "books").mkdir(parents=True)
+            (root / "manifests").mkdir()
+            (root / "books" / "new-book.pdf").write_bytes(b"%PDF-1.1\n%%EOF\n")
+            (root / "metadata" / "books" / "new-book.json").write_text(
+                json.dumps(
+                    {
+                        "title": "New Book",
+                        "path": "books/new-book.pdf",
+                        "authors": "Test Author",
+                    }
+                ),
+                encoding="utf-8",
+            )
+            (root / "CATALOG.md").write_text(
+                "\n".join(
+                    (
+                        "# Fixture catalog",
+                        "",
+                        "## Collection notes",
+                        "",
+                        "<!-- work: book:new-book -->",
+                        "### [New Book](books/new-book.pdf)",
+                        "",
+                        "- Type: book",
+                        "- Authors: Test Author",
+                        "- Local path: `books/new-book.pdf`",
+                    )
+                ),
+                encoding="utf-8",
+            )
+            library = library_ui.build_library(root)
+        self.assertEqual(library["stats"]["works"], 1)
+        self.assertEqual(library["stats"]["newArrivals"], 1)
+        self.assertEqual(library["works"][0]["title"], "New Book")
+        self.assertFalse(library["works"][0]["cataloged"])
+
     def test_study_guide_links_resolve_to_local_materials(self) -> None:
         if not (ROOT / "books").is_dir():
             self.skipTest("local book payloads are intentionally not committed")
@@ -205,7 +246,7 @@ class ServerTests(unittest.TestCase):
             self.assertEqual(response.headers["X-Frame-Options"], "DENY")
         with urllib.request.urlopen(self.base + "/api/library", timeout=3) as response:
             payload = json.loads(response.read())
-            self.assertEqual(payload["stats"]["works"], 47)
+            self.assertEqual(payload["stats"]["works"], 83)
             self.assertTrue(payload["actionToken"])
 
     def test_pdf_range_request(self) -> None:

@@ -1,0 +1,11 @@
+{
+  "title": "Bitcoin: A Peer-to-Peer Electronic Cash System",
+  "path": "papers/bitcoin-whitepaper.pdf",
+  "authors": "Satoshi Nakamoto",
+  "source": "User-supplied exact URL",
+  "source_url": "https://bitcoin.org/bitcoin.pdf",
+  "license": "Author-released manuscript (bitcoin.org)",
+  "sha256": "b1674191a88ec5cdd733e4240a81803105dc412d6c6708d53ab94fc248f4f553",
+  "bytes": 184292,
+  "downloaded_at": "2026-08-21T17:27:12.871745+00:00"
+}

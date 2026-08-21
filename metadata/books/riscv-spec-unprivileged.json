@@ -1,0 +1,15 @@
+{
+  "title": "The RISC-V Instruction Set Manual, Volume I: Unprivileged Architecture",
+  "path": "books/riscv-spec-unprivileged.pdf",
+  "authors": "RISC-V International (editors: Andrew Waterman, Krste Asanović, et al.)",
+  "year": "2026",
+  "license": "CC BY 4.0",
+  "source": "Official riscv/riscv-isa-manual GitHub release riscv-isa-release-b3967cd-2026-08-20",
+  "page_url": "https://github.com/riscv/riscv-isa-manual/releases/tag/riscv-isa-release-b3967cd-2026-08-20",
+  "download_url": "https://github.com/riscv/riscv-isa-manual/releases/download/riscv-isa-release-b3967cd-2026-08-20/riscv-spec.pdf",
+  "filename": "riscv-spec-unprivileged.pdf",
+  "source_url": "https://github.com/riscv/riscv-isa-manual/releases/tag/riscv-isa-release-b3967cd-2026-08-20",
+  "sha256": "73cf3446667a7a059e187c533528158738e30068d39d413ac692333141857505",
+  "bytes": 5541919,
+  "downloaded_at": "2026-08-21T16:57:31.096585+00:00"
+}
