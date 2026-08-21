@@ -1,8 +1,8 @@
 # CS Library Architecture
 
-CS Library is a local-first macOS reading and study system. The repository keeps
+CS Library is a local-first macOS and Windows reading and study system. The repository keeps
 source code, catalog metadata, provenance records, and integrity manifests in
-Git. Book and paper payloads remain on the user's Mac.
+Git. Book and paper payloads remain on the selected local computers.
 
 ## System boundaries
 
@@ -31,7 +31,7 @@ Git. Book and paper payloads remain on the user's Mac.
 │  ├─ serves bundled or repository UI resources                             │
 │  ├─ serves byte-ranged PDF/TXT payloads                                   │
 │  ├─ parses and securely serves EPUB resources                             │
-│  └─ exposes token-protected Finder/open actions                           │
+│  └─ exposes token-protected platform file actions                         │
 └───────────────────────────────┬───────────────────────────────────────────┘
                                 │ read-only indexing
 ┌───────────────────────────────▼───────────────────────────────────────────┐
@@ -122,6 +122,24 @@ The app bundle contains the shared UI, local Python service, and native reader
 scripts. Books remain external in the selected library folder. Python 3 is still
 a runtime dependency for the local service.
 
+## Windows host
+
+`windows/CSLibrary.Windows` is a .NET 8 WPF shell around WebView2. The packaged
+app starts a PyInstaller-built `CSLibraryServer.exe`, verifies readiness through
+the same protocol/library identity contract, and navigates only to the loopback
+service. External HTTP links open in the system browser.
+
+The Windows service subclasses the shared Python server to add Windows-safe
+open/reveal actions and a WAL-backed mirror of `cs-library:*` web-reader state.
+State rows are scoped by library identity and stored under the current user's
+local application-data directory. This database is deliberately outside the
+Syncthing folder so two machines never concurrently synchronize live SQLite
+WAL files.
+
+The Windows CI build publishes a self-contained x64 WPF app, the bundled Python
+service, the metadata/UI skeleton, and empty `books/` and `papers/` directories
+as a portable ZIP. Copyrighted reading payloads are never part of the artifact.
+
 ## Change rules
 
 When changing a boundary, update its tests and documentation:
@@ -130,4 +148,5 @@ When changing a boundary, update its tests and documentation:
 - Python protocol: update `test_server_contract.py` and protocol version;
 - EPUB behavior: update the Node tests;
 - AppKit/PDFKit: ensure the macOS Actions build passes;
+- WPF/WebView2 or Windows service: ensure the Windows Actions build passes;
 - security boundary: update `SECURITY.md`.

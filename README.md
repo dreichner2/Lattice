@@ -8,13 +8,13 @@
 </p>
 
 <p align="center">
-  A local-first macOS library, immersive PDF/EPUB reader, searchable notebook,
+  A local-first macOS and Windows library, immersive PDF/EPUB reader, searchable notebook,
   and structured computer-science study system.
 </p>
 
 ---
 
-CS Library keeps the collection on your Mac, tracks where every item came from,
+CS Library keeps the collection on your computers, tracks where every item came from,
 and turns PDFs, EPUBs, papers, specifications, and course notes into one reading
 workspace. The native app is the primary experience; the browser interface is a
 portable fallback built from the same shelf UI.
@@ -100,6 +100,31 @@ The app creates daily local backups and supports complete JSON export/import plu
 human-readable Markdown export. Nothing is uploaded, and no telemetry or cloud
 synchronization is present.
 
+## Windows app
+
+The Windows package provides the same shelf, search, study documents, EPUB
+reader, and PDF access in a native WPF/WebView2 window. It includes its own
+loopback-only server, so the packaged app does not require Python or .NET to be
+installed on your cousin's computer.
+
+Download the `CS-Library-Windows-win-x64` artifact from a successful **Windows
+desktop app** workflow, extract it, and run `CS Library.exe`. On first launch,
+select the synchronized library folder. The app remembers that selection and
+can switch folders later from its toolbar.
+
+To build it on Windows:
+
+```powershell
+.\windows\build-windows.ps1
+```
+
+Windows web-reader progress and preferences are mirrored to a private SQLite
+database under `%LOCALAPPDATA%\CS Library`. This database is local to that PC;
+Syncthing should synchronize `books/`, `papers/`, catalog metadata, and the app
+source—not a live SQLite database.
+
+See [Windows build, install, and data boundaries](windows/README.md).
+
 See [Reader data, backup, and recovery](docs/READER_DATA.md).
 
 ## Adding material
@@ -163,7 +188,7 @@ projects and exit criteria.
 Run these from the repository root:
 
 ```bash
-# See what is physically present on this Mac
+# See what is physically present on this computer
 python3 scripts/fetch.py list
 
 # Validate format, byte count, metadata path, and SHA-256
@@ -198,12 +223,13 @@ structurally checked during verification.
 Portable checks:
 
 ```bash
-python3 -m py_compile scripts/library_ui.py
+python3 -m py_compile scripts/library_ui.py scripts/cross_platform_server.py windows/server_bootstrap.py
 python3 -m unittest discover -s tests -p 'test_*.py' -v
 node --check ui/app.js
 node --check native/ImmersiveEPUB.js
 node --check native/LibraryWorkspace.js
-node --test tests/test_immersive_epub.mjs tests/test_library_workspace.mjs
+node --check native/SharedReaderState.js
+node --test tests/test_immersive_epub.mjs tests/test_library_workspace.mjs tests/test_reader_state.mjs
 bash -n scripts/build-macos-app.sh
 ```
 
@@ -241,9 +267,12 @@ cs-library/
 │   ├── ReaderBridge.swift
 │   ├── NativePDFReader*.swift
 │   ├── ImmersiveEPUB.js
-│   └── LibraryWorkspace.js
+│   ├── LibraryWorkspace.js
+│   └── SharedReaderState.js
+├── windows/                   # WPF/WebView2 host and portable package builder
 ├── scripts/
 │   ├── library_ui.py
+│   ├── cross_platform_server.py
 │   ├── build-macos-app.sh
 │   ├── fetch.py
 │   └── build_readable_books.py
