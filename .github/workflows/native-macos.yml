@@ -5,6 +5,10 @@ on:
     paths:
       - "native/**"
       - "scripts/build-macos-app.sh"
+      - "scripts/cross_platform_server.py"
+      - "scripts/library_ui.py"
+      - "tests/**"
+      - "ui/**"
       - ".github/workflows/native-macos.yml"
   workflow_dispatch:
 
@@ -14,7 +18,7 @@ permissions:
 jobs:
   build:
     runs-on: macos-15
-    timeout-minutes: 10
+    timeout-minutes: 15
     steps:
       - name: Check out repository
         uses: actions/checkout@v4
@@ -22,15 +26,22 @@ jobs:
       - name: Check reader JavaScript
         run: |
           node --check native/ImmersiveEPUB.js
+          node --check native/SharedReaderState.js
           node --check ui/app.js
 
-      - name: Test native reader JavaScript
-        run: node --test tests/test_immersive_epub.mjs
+      - name: Test reader JavaScript
+        run: |
+          node --test tests/test_immersive_epub.mjs
+          node --test tests/test_reader_state.mjs
 
-      - name: Build CS Library.app
+      - name: Test cross-platform local server
+        run: python3 tests/test_cross_platform_server.py
+
+      - name: Build CS Library.app atomically
         run: ./scripts/build-macos-app.sh
 
       - name: Verify app bundle
         run: |
           test -x "CS Library.app/Contents/MacOS/CS Library"
           /usr/bin/codesign --verify --deep --strict "CS Library.app"
+          /usr/libexec/PlistBuddy -c "Print :CFBundleShortVersionString" "CS Library.app/Contents/Info.plist"
