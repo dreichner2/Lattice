@@ -91,7 +91,14 @@ jobs:
               'tests/test_cross_platform_server.py',
               'tests/test_reader_state.mjs',
           ]
-          paths.extend(str(path) for path in Path('windows').rglob('*') if path.is_file())
+          excluded_parts = {'__pycache__', 'node_modules', 'bin', 'obj', 'vendor'}
+          paths.extend(
+              str(path)
+              for path in Path('windows').rglob('*')
+              if path.is_file()
+              and not any(part in excluded_parts for part in path.parts)
+              and path.suffix != '.pyc'
+          )
           Path('.stage-paths').write_bytes(b'\0'.join(path.encode() for path in paths) + b'\0')
           PY
           git config user.name "github-actions[bot]"
