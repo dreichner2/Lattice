@@ -5,7 +5,7 @@ These rules keep the shelf clean after the current reorganization.
 ## 1. One logical work, one catalog row
 
 A logical work may contain several artifacts—MIT 6.006 has 20 lecture PDFs and
-Software Foundations has seven source archives—but it appears once in
+Software Foundations has seven readable EPUB volumes—but it appears once in
 `CATALOG.md`. Alternate packaging is kept only when it adds genuinely different
 value. A sample chapter is not retained beside the complete work, and source
 chapters are not retained beside a verified complete compilation.

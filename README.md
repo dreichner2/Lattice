@@ -21,7 +21,23 @@
 | 🧾 **[Read the library rules](LIBRARY_RULES.md)** | Understand naming, deduplication, metadata, and remote-storage policy. |
 | 🔎 **[Inspect provenance](notes/provenance/)** | Review import history, source gates, licenses, and acquisition caveats. |
 
-## Open the virtual library
+## Open the Mac app
+
+Double-click **`CS Library.app`** in this folder. It is a native macOS window
+that runs the exact same library interface without opening a normal browser.
+The app starts the private local library service when needed and shuts down the
+copy it owns when you quit.
+
+Rebuild the app after changing its native wrapper:
+
+```bash
+./scripts/build-macos-app.sh
+```
+
+The generated app stays local and is intentionally ignored by Git. Its native
+source, icon, build script, and the shared web interface are versioned.
+
+## Browser option
 
 Double-click **`open-library.command`** in Finder. It starts the private local
 catalog and opens it in your browser. Keep the small Terminal window open while
@@ -40,18 +56,23 @@ The interface provides:
   papers, two specifications, and two professional/technical standards;
 - subject shelves plus favorites, currently-reading, and finished views;
 - a responsive grid/list layout and light/dark themes;
-- direct in-browser reading for PDFs and text;
+- an in-app EPUB reader with chapter navigation, searchable contents, bookmarks,
+  resume position, typography controls, page tones, and next/previous controls;
+- embedded PDF/text reading plus explicit **Open on Mac** and **Finder** actions;
+- a study guide whose book and course links open the matching local material
+  directly, plus the catalog, provenance notes, rules, and integrity manifest
+  rendered inside a polished library reading desk instead of raw browser pages;
+- live filesystem updates: added PDFs/EPUBs/texts appear immediately as cleanly
+  titled **New arrivals**, and removed files disappear without a reload;
 - one-click opening in the default Mac app or revealing a file in Finder;
-- expandable access to all 20 MIT 6.006 lectures and all seven Software
-  Foundations archives;
-- a library desk for the study guide, provenance/cleanup notes, rules, raw
-  catalog, and SHA-256 integrity manifest;
-- reading status and recent activity stored only in this browser.
+- expandable access to all 20 MIT 6.006 lectures and all seven readable
+  Software Foundations volumes;
+- reading status and recent activity stored only in the local interface.
 
 The server binds only to `127.0.0.1`. It has no upload feature, does not expose
-a network-facing listener, and only permits file actions for paths represented
-by the catalog metadata. The books remain exactly where they are under
-`books/` and `papers/`.
+a network-facing listener, and only permits file actions for readable files
+currently present beneath `books/` or `papers/`. The books remain exactly where
+they are; live discovery indexes them without moving or renaming their bytes.
 
 ## Start here
 
@@ -62,7 +83,7 @@ Choose one lane and begin building things immediately:
 - **General CS:** `books/think-python-2e.pdf` →
   `books/openstax-intro-cs.pdf` → `books/sicp.pdf` → algorithms and systems.
 - **Already programming:** start with `books/clrs-4e.pdf`,
-  `books/ostep.pdf`, and `books/crafting-interpreters.zip`, while filling math
+  `books/ostep.pdf`, and `books/crafting-interpreters.epub`, while filling math
   gaps from `books/concrete-math-2e.pdf`.
 
 The [study guide](STUDY_GUIDE.md) turns those starting points into a full
@@ -103,7 +124,6 @@ python3 scripts/fetch.py sets
 # Examples
 python3 scripts/fetch.py book think-java
 python3 scripts/fetch.py book mit-6006
-python3 scripts/fetch.py book software-foundations
 python3 scripts/fetch.py download 1706.03762
 python3 scripts/fetch.py rfc 9110
 
@@ -130,9 +150,13 @@ cs-library/
 ├── metadata/                  # one tracked JSON record per local artifact
 ├── manifests/                 # stable SHA-256 inventories
 ├── notes/provenance/          # acquisition and license history
+├── native/                    # macOS WKWebView wrapper, plist, and app icon
 ├── scripts/fetch.py           # fetch, list, verify, audit, manifest
+├── scripts/build_readable_books.py # reproducible source-to-EPUB conversion
+├── scripts/build-macos-app.sh # builds the double-clickable native app
 ├── scripts/library_ui.py      # loopback-only virtual-library server
 ├── ui/                        # local bookshelf interface
+├── CS Library.app/            # generated local Mac app; ignored by Git
 ├── open-library.command       # double-click Mac launcher
 ├── books/                     # local payloads; ignored by Git
 └── papers/                    # local payloads; ignored by Git
@@ -148,7 +172,7 @@ contain reading material—not bookkeeping clutter.
 This shelf mixes open works, author-authorized personal copies, and legacy
 imports whose redistribution history was not preserved. GitHub therefore
 stores the catalog, metadata, checksums, provenance, and fetch tooling, while
-the 1.8 GB of book and paper payloads remains local. This avoids accidentally
+the book and paper payloads remain local. This avoids accidentally
 republishing copyrighted material and keeps the repository fast to clone.
 
 The remote is still enough to answer: *What belongs on the shelf? Which exact
@@ -172,6 +196,9 @@ OpenStax has granted applicable permission. Other works have their own terms;
 - 0 filenames outside the short kebab-case convention
 - OSTEP chapter copies and the Crafting Interpreters sample removed after their
   complete retained editions were verified
+- Ten web/source bundles replaced by searchable EPUB editions after structural
+  and visual validation; original hashes and conversion boundaries are recorded
+  under `notes/provenance/`
 - Canonical inventory: `manifests/library.sha256`
 
 The personalized *Distributed Systems, 4e* and *Computer Vision: Algorithms and

@@ -1,18 +1,28 @@
 {
-  "title": "Software Engineering at Google — Complete Official HTML Source",
-  "path": "books/software-engineering-google.zip",
-  "authors": "Titus Winters, Tom Manshreck, and Hyrum Wright (curators)",
+  "title": "Software Engineering at Google",
+  "path": "books/software-engineering-google.epub",
+  "authors": "Titus Winters, Tom Manshreck, and Hyrum Wright",
   "year": "2020",
-  "license": "Book subdirectory CC BY-NC-ND 4.0; other repository content may differ",
+  "license": "Book text CC BY-NC-ND 4.0",
   "source": "Official Abseil site source, commit e9e24835",
-  "catalog_type": "complete web-book source archive",
+  "catalog_type": "searchable EPUB 3 readable edition",
   "page_url": "https://abseil.io/resources/swe-book",
-  "download_url": "https://codeload.github.com/abseil/abseil.github.io/zip/e9e24835cb889fe25251cb9ec6d51b79233e358d",
-  "filename": "software-engineering-google.zip",
-  "expected": "zip",
-  "included_path": "abseil.github.io-e9e24835cb889fe25251cb9ec6d51b79233e358d/resources/swe-book/",
   "source_url": "https://abseil.io/resources/swe-book",
-  "sha256": "431223875c546d821193c9c4eb79ac6102de5e26bb91291bf15a424687157c9a",
-  "bytes": 19748712,
-  "downloaded_at": "2026-08-21T04:48:56.714415+00:00"
+  "sha256": "65779b35401ec9bb47e51a7b81a291bbf4ef168fe78ab2ca9694596c5def76e5",
+  "bytes": 4426069,
+  "converted_at": "2026-08-21T06:34:16Z",
+  "conversion": {
+    "format": "EPUB 3",
+    "tool": "Pandoc 3.10.2 with scripts/build_readable_books.py",
+    "scope": "Complete official book text, figures, copyright page, and author biographies; repository and website machinery excluded",
+    "validation": "EPUB package, XML, spine, images, links, anchors, duplicate IDs, and forbidden source-file extensions"
+  },
+  "source_archive": {
+    "filename": "software-engineering-google.zip",
+    "download_url": "https://codeload.github.com/abseil/abseil.github.io/zip/e9e24835cb889fe25251cb9ec6d51b79233e358d",
+    "included_path": "abseil.github.io-e9e24835cb889fe25251cb9ec6d51b79233e358d/resources/swe-book/",
+    "sha256": "431223875c546d821193c9c4eb79ac6102de5e26bb91291bf15a424687157c9a",
+    "bytes": 19748712,
+    "downloaded_at": "2026-08-21T04:48:56.714415+00:00"
+  }
 }

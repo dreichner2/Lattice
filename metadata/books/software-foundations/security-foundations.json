@@ -1,14 +1,26 @@
 {
   "title": "Security Foundations",
-  "path": "books/software-foundations/security-foundations.tgz",
+  "path": "books/software-foundations/security-foundations.epub",
   "authors": "Benjamin C. Pierce, Arthur Azevedo de Amorim, Chris Casinghino, Marco Gaboardi, Michael Greenberg, Cătălin Hrițcu, Vilhelm Sjöberg, Brent Yorgey, Andrew W. Appel, Arthur Charguéraud, and contributors",
   "year": "2026",
-  "source": "Open courseware / open textbook set",
-  "source_url": "https://softwarefoundations.cis.upenn.edu/",
-  "file_url": "https://softwarefoundations.cis.upenn.edu/secf-current/secf.tgz",
-  "license": "Official free electronic textbook sources; author-of-record copyright; no broad redistribution license stated on the release pages",
-  "sha256": "15d5b786ff8916fd1191b95d7d8bf6458d79acd95bafd52d2415e8d3a225dbdb",
-  "bytes": 5311240,
   "version": "1.0 (2026-01-07; Rocq 9.0.0 or later)",
-  "downloaded_at": "2026-08-21T04:50:52.142454+00:00"
+  "license": "MIT License (notice preserved inside the EPUB)",
+  "source": "Software Foundations official current release",
+  "source_url": "https://softwarefoundations.cis.upenn.edu/secf-current/",
+  "file_url": "https://softwarefoundations.cis.upenn.edu/secf-current/secf.tgz",
+  "catalog_type": "searchable EPUB 3 course volume",
+  "sha256": "2e9aa772d6922a956d97aefac6ddaf1a7b92f18d7cbb0b0b66f0ea142763b29b",
+  "bytes": 257224,
+  "converted_at": "2026-08-21T06:34:16Z",
+  "conversion": {
+    "format": "EPUB 3",
+    "tool": "Pandoc 3.10.2 with scripts/build_readable_books.py",
+    "scope": "Published textbook prose and readable code/proof listings; raw Rocq sources and build/site machinery excluded; bundled MIT notice appended"
+  },
+  "source_archive": {
+    "filename": "security-foundations.tgz",
+    "sha256": "15d5b786ff8916fd1191b95d7d8bf6458d79acd95bafd52d2415e8d3a225dbdb",
+    "bytes": 5311240,
+    "downloaded_at": "2026-08-21T04:50:52.142454+00:00"
+  }
 }

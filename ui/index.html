@@ -60,16 +60,17 @@
         </div>
 
         <div class="sidebar-footer">
-          <div class="document-links">
-            <a href="/document/STUDY_GUIDE.md" target="_blank">Study guide <span>↗</span></a>
-            <a href="/document/CATALOG.md" target="_blank">Raw catalog <span>↗</span></a>
-            <a href="/document/notes/provenance/library-cleanup-2026-08-20.md" target="_blank">Source & cleanup notes <span>↗</span></a>
-            <a href="/document/manifests/library.sha256" target="_blank">Integrity manifest <span>↗</span></a>
-            <a href="/document/LIBRARY_RULES.md" target="_blank">Library rules <span>↗</span></a>
+          <div class="document-links" aria-label="Library desk">
+            <button type="button" data-document="STUDY_GUIDE.md" data-title="Study guide">Study guide <span>Read</span></button>
+            <button type="button" data-document="CATALOG.md" data-title="Library catalog">Library catalog <span>Read</span></button>
+            <button type="button" data-document="notes/provenance/library-cleanup-2026-08-20.md" data-title="Source & cleanup notes">Source & cleanup <span>Read</span></button>
+            <button type="button" data-document="notes/provenance/readable-editions-2026-08-21.md" data-title="Readable edition notes">Readable editions <span>Read</span></button>
+            <button type="button" data-document="manifests/library.sha256" data-title="Integrity manifest">Integrity manifest <span>View</span></button>
+            <button type="button" data-document="LIBRARY_RULES.md" data-title="Library rules">Library rules <span>Read</span></button>
           </div>
-          <div class="local-badge">
-            <span class="status-dot" aria-hidden="true"></span>
-            <div><strong>Local & private</strong><small>Files stay on this Mac</small></div>
+          <div class="local-badge" id="localBadge">
+            <span class="status-dot" id="sidebarStatusDot" aria-hidden="true"></span>
+            <div><strong>Live local shelf</strong><small id="sidebarStatusText">Connecting to your files…</small></div>
           </div>
         </div>
       </aside>
@@ -85,6 +86,10 @@
             <kbd>/</kbd>
           </label>
           <div class="topbar-actions">
+            <div class="sync-pill" id="syncPill" role="status" aria-live="polite">
+              <span class="sync-dot" aria-hidden="true"></span>
+              <span id="syncText">Connecting…</span>
+            </div>
             <button class="icon-button" id="themeButton" type="button" aria-label="Switch color theme">◒</button>
             <button class="avatar" type="button" aria-label="Personal local library">DL</button>
           </div>
@@ -95,7 +100,7 @@
             <div class="hero-copy">
               <p class="eyebrow"><span></span> Your private reading room</p>
               <h1 id="pageTitle">Your computer science library</h1>
-              <p class="hero-description">Every book, paper, specification, and course file—organized into a shelf you can actually use.</p>
+              <p class="hero-description">Every book, paper, specification, and course file—organized into a shelf you can actually use, and kept in sync with this Mac.</p>
               <div class="hero-actions">
                 <button class="button button-primary" id="randomButton" type="button">Surprise me <span aria-hidden="true">↗</span></button>
                 <button class="button button-quiet" id="focusSearchButton" type="button">Find a book</button>
@@ -103,7 +108,7 @@
             </div>
             <div class="hero-stats" aria-label="Library statistics">
               <div class="stat"><strong id="workStat">—</strong><span>works</span></div>
-              <div class="stat"><strong id="artifactStat">—</strong><span>files</span></div>
+              <div class="stat"><strong id="artifactStat">—</strong><span>files on Mac</span></div>
               <div class="stat"><strong id="sizeStat">—</strong><span>local shelf</span></div>
               <div class="stat integrity-stat"><strong id="integrityStat">—</strong><span>available</span></div>
             </div>
@@ -164,6 +169,105 @@
       </div>
       <div class="drawer-body" id="drawerBody"></div>
     </aside>
+
+    <div class="reader-shell" id="readerShell" aria-hidden="true">
+      <button class="reader-backdrop" id="readerBackdrop" type="button" aria-label="Close reader"></button>
+      <section class="reader-panel" role="dialog" aria-modal="true" aria-labelledby="readerTitle">
+        <header class="reader-toolbar">
+          <div class="reader-leading">
+            <button class="reader-back-button" id="readerBackButton" type="button"><span aria-hidden="true">←</span> Shelf</button>
+            <button class="reader-tool-button" id="readerTocButton" type="button" aria-expanded="false" hidden><span aria-hidden="true">☷</span> Contents</button>
+          </div>
+          <div class="reader-heading">
+            <p id="readerKicker">Reading in CS Library</p>
+            <h2 id="readerTitle">Reader</h2>
+          </div>
+          <div class="reader-actions">
+            <button class="reader-tool-button reader-focus-button" id="readerFocusButton" type="button" aria-label="Focus on the page" aria-pressed="false" title="Focus on the page" hidden>⛶</button>
+            <button class="reader-tool-button reader-bookmark-button" id="readerBookmarkButton" type="button" aria-label="Bookmark this position" title="Bookmark this position" hidden>☆</button>
+            <button class="reader-tool-button reader-type-button" id="readerSettingsButton" type="button" aria-expanded="false" aria-label="Reading appearance" hidden>Aa</button>
+            <button class="reader-action" id="readerMacButton" type="button" hidden>Open on Mac</button>
+            <button class="reader-action" id="readerFinderButton" type="button" hidden>Finder</button>
+            <button class="reader-close" id="readerCloseButton" type="button" aria-label="Close reader">×</button>
+          </div>
+        </header>
+        <div class="reader-stage" id="readerStage">
+          <div class="reader-loading" id="readerLoading"><span></span><p>Preparing your reading desk…</p></div>
+          <iframe class="pdf-reader" id="pdfReader" title="PDF reader" hidden></iframe>
+          <article class="document-reader" id="documentReader" hidden></article>
+          <div class="epub-reader" id="epubReader" hidden>
+            <button class="epub-panel-scrim" id="epubPanelScrim" type="button" aria-label="Close reader panels"></button>
+            <aside class="epub-toc-panel" id="epubTocPanel" aria-label="Book contents">
+              <header class="epub-panel-header">
+                <div><span>Navigate</span><strong>Contents</strong></div>
+                <button class="epub-panel-close" id="epubTocClose" type="button" aria-label="Close contents">×</button>
+              </header>
+              <label class="epub-toc-search" for="epubTocSearch">
+                <span aria-hidden="true">⌕</span>
+                <input id="epubTocSearch" type="search" autocomplete="off" placeholder="Find a chapter…">
+              </label>
+              <section class="epub-bookmarks" id="epubBookmarks" hidden>
+                <p>Bookmarks</p>
+                <div id="epubBookmarkList"></div>
+              </section>
+              <nav class="epub-toc-list" id="epubTocList" aria-label="Chapters"></nav>
+            </aside>
+
+            <main class="epub-reading-room">
+              <div class="epub-frame-wrap" id="epubFrameWrap">
+                <iframe class="epub-frame" id="epubFrame" title="EPUB reader" sandbox="allow-same-origin"></iframe>
+              </div>
+              <footer class="epub-footer">
+                <button class="epub-page-button" id="epubPrevious" type="button"><span aria-hidden="true">←</span><span><small>Previous</small><strong id="epubPreviousLabel">Beginning</strong></span></button>
+                <div class="epub-location" aria-live="polite">
+                  <strong id="epubChapterLabel">Opening book…</strong>
+                  <span id="epubProgressLabel">0%</span>
+                  <div class="epub-progress-track"><span id="epubProgressBar"></span></div>
+                </div>
+                <button class="epub-page-button epub-page-next" id="epubNext" type="button"><span><small>Next</small><strong id="epubNextLabel">Next section</strong></span><span aria-hidden="true">→</span></button>
+              </footer>
+            </main>
+            <button class="epub-focus-exit" id="epubFocusExit" type="button" aria-label="Show reader controls" title="Show reader controls (Escape)" hidden>⛶</button>
+
+            <aside class="epub-settings-panel" id="epubSettingsPanel" aria-label="Reading appearance">
+              <header class="epub-panel-header">
+                <div><span>Make it yours</span><strong>Reading appearance</strong></div>
+                <button class="epub-panel-close" id="epubSettingsClose" type="button" aria-label="Close reading appearance">×</button>
+              </header>
+              <div class="epub-setting-group">
+                <span class="epub-setting-label">Typeface</span>
+                <div class="epub-segmented" id="epubFontOptions">
+                  <button type="button" data-epub-font="serif">Literary</button>
+                  <button type="button" data-epub-font="sans">Modern</button>
+                  <button type="button" data-epub-font="mono">Code</button>
+                </div>
+              </div>
+              <div class="epub-setting-group">
+                <label class="epub-setting-label" for="epubFontSize">Text size <output id="epubFontSizeValue">19 px</output></label>
+                <input class="epub-range" id="epubFontSize" type="range" min="14" max="28" step="1" value="19">
+              </div>
+              <div class="epub-setting-group">
+                <label class="epub-setting-label" for="epubLineHeight">Line spacing <output id="epubLineHeightValue">1.7</output></label>
+                <input class="epub-range" id="epubLineHeight" type="range" min="1.3" max="2.1" step="0.1" value="1.7">
+              </div>
+              <div class="epub-setting-group">
+                <label class="epub-setting-label" for="epubPageWidth">Page width <output id="epubPageWidthValue">760 px</output></label>
+                <input class="epub-range" id="epubPageWidth" type="range" min="560" max="980" step="20" value="760">
+              </div>
+              <div class="epub-setting-group">
+                <span class="epub-setting-label">Page tone</span>
+                <div class="epub-tone-options" id="epubToneOptions">
+                  <button type="button" data-epub-tone="paper"><span></span>Paper</button>
+                  <button type="button" data-epub-tone="sepia"><span></span>Sepia</button>
+                  <button type="button" data-epub-tone="night"><span></span>Night</button>
+                </div>
+              </div>
+              <button class="epub-reset-button" id="epubResetSettings" type="button">Reset reading appearance</button>
+            </aside>
+          </div>
+        </div>
+      </section>
+    </div>
 
     <div class="toast-region" id="toastRegion" aria-live="polite"></div>
     <script src="/app.js" defer></script>

@@ -12,3 +12,5 @@ __pycache__/
 
 # Local UI/runtime state never belongs in the repository.
 /.library-cache/
+/work/
+/CS Library.app/

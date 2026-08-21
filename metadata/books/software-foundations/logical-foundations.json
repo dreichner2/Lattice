@@ -1,14 +1,26 @@
 {
   "title": "Logical Foundations",
-  "path": "books/software-foundations/logical-foundations.tgz",
+  "path": "books/software-foundations/logical-foundations.epub",
   "authors": "Benjamin C. Pierce, Arthur Azevedo de Amorim, Chris Casinghino, Marco Gaboardi, Michael Greenberg, Cătălin Hrițcu, Vilhelm Sjöberg, Brent Yorgey, Andrew W. Appel, Arthur Charguéraud, and contributors",
   "year": "2026",
-  "source": "Open courseware / open textbook set",
-  "source_url": "https://softwarefoundations.cis.upenn.edu/",
-  "file_url": "https://softwarefoundations.cis.upenn.edu/lf-current/lf.tgz",
-  "license": "Official free electronic textbook sources; author-of-record copyright; no broad redistribution license stated on the release pages",
-  "sha256": "6a0f672c01ef3b831217d3e91260dd141907d10d491ba5b4289d2d3f8a57ba24",
-  "bytes": 5756531,
   "version": "7.1 (2026-08-16; Rocq 9.0.0 or later)",
-  "downloaded_at": "2026-08-21T04:50:52.122802+00:00"
+  "license": "MIT License (notice preserved inside the EPUB)",
+  "source": "Software Foundations official current release",
+  "source_url": "https://softwarefoundations.cis.upenn.edu/lf-current/",
+  "file_url": "https://softwarefoundations.cis.upenn.edu/lf-current/lf.tgz",
+  "catalog_type": "searchable EPUB 3 course volume",
+  "sha256": "9699de648fe44430328626928998b9f69420770b6e136e69c8849118d59ae534",
+  "bytes": 526165,
+  "converted_at": "2026-08-21T06:34:16Z",
+  "conversion": {
+    "format": "EPUB 3",
+    "tool": "Pandoc 3.10.2 with scripts/build_readable_books.py",
+    "scope": "Published textbook prose and readable code/proof listings; raw Rocq sources and build/site machinery excluded; bundled MIT notice appended"
+  },
+  "source_archive": {
+    "filename": "logical-foundations.tgz",
+    "sha256": "6a0f672c01ef3b831217d3e91260dd141907d10d491ba5b4289d2d3f8a57ba24",
+    "bytes": 5756531,
+    "downloaded_at": "2026-08-21T04:50:52.122802+00:00"
+  }
 }

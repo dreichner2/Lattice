@@ -1,14 +1,23 @@
 {
   "title": "Programming Pearls",
-  "path": "books/programming-pearls-2e.epub",
+  "path": "books/programming-pearls-2e.pdf",
   "authors": "Jon Bentley",
   "year": "1999",
   "edition": "2nd",
   "license": "Not recorded in the legacy collection; verify before redistribution",
   "source": "Imported from the legacy cs-books collection",
   "original_filename": "Programming Pearls - Jon Bentley.epub",
-  "quality_note": "OCR-generated EPUB; embedded metadata warns that recognition and reading order may be imperfect",
-  "sha256": "40683de8c2817348c3d62d3ce9ac958066400ad447f5b6db64c2ad86bc8844e7",
-  "bytes": 45358347,
-  "imported_at": "2026-08-20T13:59:23Z"
+  "quality_note": "Calibre-generated 472-page PDF from an OCR EPUB; representative text, diagram, and code pages rendered cleanly, while some code plates remain image-only pages",
+  "sha256": "203ec584a35661a94bd7c94468808d17cea6a024d83f2c64adcfdae81a9e6bd5",
+  "bytes": 10126967,
+  "imported_at": "2026-08-20T13:59:23Z",
+  "converted_at": "2026-08-21T05:44:18Z",
+  "conversion": {
+    "format": "PDF 1.4",
+    "tool": "Calibre 8.4.0",
+    "source_path": "books/programming-pearls-2e.epub",
+    "source_sha256": "40683de8c2817348c3d62d3ce9ac958066400ad447f5b6db64c2ad86bc8844e7",
+    "source_bytes": 45358347,
+    "source_recovery": "/Users/danny/.Trash/programming-pearls-2e.epub until Trash is emptied"
+  }
 }

@@ -1,14 +1,26 @@
 {
   "title": "QuickChick: Property-Based Testing in Rocq",
-  "path": "books/software-foundations/quickchick.tgz",
+  "path": "books/software-foundations/quickchick.epub",
   "authors": "Benjamin C. Pierce, Arthur Azevedo de Amorim, Chris Casinghino, Marco Gaboardi, Michael Greenberg, Cătălin Hrițcu, Vilhelm Sjöberg, Brent Yorgey, Andrew W. Appel, Arthur Charguéraud, and contributors",
   "year": "2026",
-  "source": "Open courseware / open textbook set",
-  "source_url": "https://softwarefoundations.cis.upenn.edu/",
-  "file_url": "https://softwarefoundations.cis.upenn.edu/qc-current/qc.tgz",
-  "license": "Official free electronic textbook sources; author-of-record copyright; no broad redistribution license stated on the release pages",
-  "sha256": "6c632e62a68413e9760643c6d42ac58a5989e2d236d67cdddc099b38c06ee126",
-  "bytes": 5181232,
   "version": "2.0 (2026-01-07; Rocq 9.0.0 or later)",
-  "downloaded_at": "2026-08-21T04:50:52.132648+00:00"
+  "license": "MIT License (notice preserved inside the EPUB)",
+  "source": "Software Foundations official current release",
+  "source_url": "https://softwarefoundations.cis.upenn.edu/qc-current/",
+  "file_url": "https://softwarefoundations.cis.upenn.edu/qc-current/qc.tgz",
+  "catalog_type": "searchable EPUB 3 course volume",
+  "sha256": "95c47897af0c7624da38102e82d6d7d0749f77d61e78a589cb3f1bceca6bf5a3",
+  "bytes": 248370,
+  "converted_at": "2026-08-21T06:34:16Z",
+  "conversion": {
+    "format": "EPUB 3",
+    "tool": "Pandoc 3.10.2 with scripts/build_readable_books.py",
+    "scope": "Published textbook prose and readable code/proof listings; raw Rocq sources and build/site machinery excluded; bundled MIT notice appended"
+  },
+  "source_archive": {
+    "filename": "quickchick.tgz",
+    "sha256": "6c632e62a68413e9760643c6d42ac58a5989e2d236d67cdddc099b38c06ee126",
+    "bytes": 5181232,
+    "downloaded_at": "2026-08-21T04:50:52.132648+00:00"
+  }
 }

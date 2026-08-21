@@ -1,18 +1,28 @@
 {
-  "title": "Physically Based Rendering, 4th Edition — Official Website Source",
-  "path": "books/pbrt-4e.zip",
+  "title": "Physically Based Rendering, 4th Edition",
+  "path": "books/pbrt-4e.epub",
   "authors": "Matt Pharr, Wenzel Jakob, and Greg Humphreys",
   "year": "2023",
-  "license": "Book text CC BY-NC-ND 4.0; software/source components vary",
+  "license": "Fourth-edition online book CC BY-NC-ND 4.0",
   "source": "Authors' official website repository, commit b56160a8",
-  "catalog_type": "complete web-book source archive",
+  "catalog_type": "searchable EPUB 3 readable edition",
   "page_url": "https://www.pbr-book.org/4ed/",
-  "download_url": "https://codeload.github.com/mmp/pbr-book-website/zip/b56160a8e4ac0cc8bdd051e8181aa6692b127151",
-  "filename": "pbrt-4e.zip",
-  "expected": "zip",
-  "included_path": "pbr-book-website-b56160a8e4ac0cc8bdd051e8181aa6692b127151/4ed/",
   "source_url": "https://www.pbr-book.org/4ed/",
-  "sha256": "e6a4e11c90c0ef05367bb9b78db42a9adad1570c6ae2ea01a3398dc98652c785",
-  "bytes": 1072892349,
-  "downloaded_at": "2026-08-21T04:50:05.709958+00:00"
+  "sha256": "a45010c509c6f7798d8a49ade66439fcf352c2272b06764ff10f1cdd93a5f051",
+  "bytes": 139284612,
+  "converted_at": "2026-08-21T06:34:16Z",
+  "conversion": {
+    "format": "EPUB 3",
+    "tool": "Pandoc 3.10.2 with scripts/build_readable_books.py",
+    "scope": "All 166 linked fourth-edition reading pages with figures, code listings, equations, and nested navigation; source repository, third-edition mirror, viewer payloads, and website machinery excluded",
+    "validation": "EPUB package, XML, spine, images, links, anchors, SVG glyph targets, light/dark equation colors, duplicate IDs, and forbidden source-file extensions"
+  },
+  "source_archive": {
+    "filename": "pbrt-4e.zip",
+    "download_url": "https://codeload.github.com/mmp/pbr-book-website/zip/b56160a8e4ac0cc8bdd051e8181aa6692b127151",
+    "included_path": "pbr-book-website-b56160a8e4ac0cc8bdd051e8181aa6692b127151/4ed/",
+    "sha256": "e6a4e11c90c0ef05367bb9b78db42a9adad1570c6ae2ea01a3398dc98652c785",
+    "bytes": 1072892349,
+    "downloaded_at": "2026-08-21T04:50:05.709958+00:00"
+  }
 }

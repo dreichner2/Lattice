@@ -10,11 +10,11 @@ project at each stage until the ideas are usable without the book open.
 
 Start here if Java is the language you want to build with:
 
-1. `books/think-java-2e.pdf` — work every exercise and write small programs.
+1. [Think Java 2e](books/think-java-2e.pdf) — work every exercise and write small programs.
 2. Build a command-line application with files, tests, errors, and collections.
-3. Use `papers/mit-6006/` while implementing each data structure in Java.
-4. Read `books/jls-26.pdf` only when you need exact language semantics.
-5. Read `books/jvms-26.pdf` after you can write normal Java comfortably; pair
+3. Use the [MIT 6.006 lecture notes](papers/mit-6006/) while implementing each data structure in Java.
+4. Read the [Java Language Specification](books/jls-26.pdf) only when you need exact language semantics.
+5. Read the [Java Virtual Machine Specification](books/jvms-26.pdf) after you can write normal Java comfortably; pair
    it with a bytecode-disassembly or tiny-JVM project.
 6. Continue into OSTEP, compilers, databases, and distributed systems.
 
@@ -24,11 +24,11 @@ language standard front to back.
 
 ### General route
 
-1. `books/think-python-2e.pdf`
-2. `books/openstax-intro-cs.pdf`
-3. `books/sicp.pdf`
-4. `papers/mit-6006/`
-5. `books/ostep.pdf`
+1. [Think Python 2e](books/think-python-2e.pdf)
+2. [Introduction to Computer Science](books/openstax-intro-cs.pdf)
+3. [Structure and Interpretation of Computer Programs](books/sicp.pdf)
+4. [MIT 6.006 lecture notes](papers/mit-6006/)
+5. [Operating Systems: Three Easy Pieces](books/ostep.pdf)
 
 Use this route when the language matters less than building broad foundations
 quickly.
@@ -43,16 +43,16 @@ from rereading another introductory syntax book.
 
 | Stage | Primary material | Build before moving on |
 |---:|---|---|
-| 1 | Think Java 2e **or** Think Python 2e | A tested CLI application that persists data |
-| 2 | SICP | An interpreter for a small expression language |
-| 3 | Concrete Mathematics + MIT 6.006 | A data-structure/algorithm library with benchmarks |
-| 4 | CLRS | Correct implementations plus written complexity arguments |
-| 5 | OSTEP | A shell, allocator, thread pool, and small file-system exercise |
-| 6 | Crafting Interpreters + PLAI | A language with parser, evaluator, closures, and errors |
-| 7 | Software Engineering at Google | A maintained team-style project with CI and design docs |
+| 1 | [Think Java 2e](books/think-java-2e.pdf) **or** [Think Python 2e](books/think-python-2e.pdf) | A tested CLI application that persists data |
+| 2 | [SICP](books/sicp.pdf) | An interpreter for a small expression language |
+| 3 | [Concrete Mathematics](books/concrete-math-2e.pdf) + [MIT 6.006](papers/mit-6006/) | A data-structure/algorithm library with benchmarks |
+| 4 | [CLRS](books/clrs-4e.pdf) | Correct implementations plus written complexity arguments |
+| 5 | [OSTEP](books/ostep.pdf) | A shell, allocator, thread pool, and small file-system exercise |
+| 6 | [Crafting Interpreters](books/crafting-interpreters.epub) + [PLAI](books/plai-3e.pdf) | A language with parser, evaluator, closures, and errors |
+| 7 | [Software Engineering at Google](books/software-engineering-google.epub) | A maintained team-style project with CI and design docs |
 | 8 | Statistics + calculus + linear algebra | A reproducible analysis notebook or numerical library |
-| 9 | ISL Python → deep learning/PML | An end-to-end model with honest evaluation |
-| 10 | Security Engineering + ACM Code | A threat model and security review of your own project |
+| 9 | [ISL with Python](books/isl-python.pdf) → deep learning/PML | An end-to-end model with honest evaluation |
+| 10 | [Security Engineering](books/security-engineering-3e.pdf) + [ACM Code](papers/acm-code-of-ethics.pdf) | A threat model and security review of your own project |
 
 ## Stage 1 — Programming fluency
 
@@ -62,14 +62,14 @@ widely deployed VM.
 
 Primary:
 
-- `books/think-java-2e.pdf`
-- or `books/think-python-2e.pdf`
+- [Think Java 2e](books/think-java-2e.pdf)
+- or [Think Python 2e](books/think-python-2e.pdf)
 
 References and second perspectives:
 
-- `books/openstax-intro-cs.pdf`
-- `books/c-programming-language-1e.pdf` once pointers and memory are relevant
-- `books/programming-pearls-2e.epub` for compact problem-solving essays
+- [Introduction to Computer Science](books/openstax-intro-cs.pdf)
+- [The C Programming Language](books/c-programming-language-1e.pdf) once pointers and memory are relevant
+- [Programming Pearls](books/programming-pearls-2e.pdf) for compact problem-solving essays
 
 Exit test:
 
@@ -84,12 +84,12 @@ supports search/tags/progress, and persists to SQLite or JSON.
 
 Primary:
 
-- `books/sicp.pdf`
-- `books/sicp-js.pdf` if JavaScript notation is more comfortable
+- [SICP](books/sicp.pdf)
+- [SICP JavaScript](books/sicp-js.pdf) if JavaScript notation is more comfortable
 
 Companion:
 
-- `books/plai-3e.pdf`
+- [Programming Languages: Application and Interpretation](books/plai-3e.pdf)
 
 Focus on recursion, higher-order procedures, state, environments, interpreters,
 and the difference between a language's surface syntax and its evaluation
@@ -102,11 +102,11 @@ closures, conditionals, lists, useful errors, and a REPL.
 
 Primary sequence:
 
-1. `books/concrete-math-2e.pdf` for proof habits, sums, recurrence relations,
+1. [Concrete Mathematics](books/concrete-math-2e.pdf) for proof habits, sums, recurrence relations,
    number theory, and combinatorics.
-2. `papers/mit-6006/lec-01.pdf` through `lec-20.pdf` for a guided algorithms
+2. [MIT 6.006 Lecture 1](papers/mit-6006/lec-01.pdf) through [Lecture 20](papers/mit-6006/lec-20.pdf) for a guided algorithms
    course.
-3. `books/clrs-4e.pdf` as the deeper reference and exercise bank.
+3. [Introduction to Algorithms](books/clrs-4e.pdf) as the deeper reference and exercise bank.
 
 Implement in Java if following the Java route:
 
@@ -125,15 +125,15 @@ benchmark that is not dominated by setup time.
 
 Primary:
 
-- `books/ostep.pdf`
-- `books/distributed-systems-4e.pdf` after the single-machine foundations
+- [Operating Systems: Three Easy Pieces](books/ostep.pdf)
+- [Distributed Systems](books/distributed-systems-4e.pdf) after the single-machine foundations
 
 Supporting material:
 
-- `books/art-of-unix-programming.pdf`
-- `books/c-programming-language-1e.pdf`
-- `books/security-engineering-3e.pdf`
-- `papers/rfc-791.txt`
+- [The Art of Unix Programming](books/art-of-unix-programming.pdf)
+- [The C Programming Language](books/c-programming-language-1e.pdf)
+- [Security Engineering](books/security-engineering-3e.pdf)
+- [RFC 791](papers/rfc-791.txt)
 
 Build:
 
@@ -151,16 +151,16 @@ path a network packet takes through your program and OS.
 
 Recommended order:
 
-1. `books/crafting-interpreters.zip`
-2. `books/plai-3e.pdf`
-3. `books/dragon-book-2e.pdf`
-4. `books/software-foundations/`
-5. `books/specifying-systems.pdf`
+1. [Crafting Interpreters](books/crafting-interpreters.epub)
+2. [Programming Languages: Application and Interpretation](books/plai-3e.pdf)
+3. [Compilers: Principles, Techniques, and Tools](books/dragon-book-2e.pdf)
+4. [Software Foundations](books/software-foundations/)
+5. [Specifying Systems](books/specifying-systems.pdf)
 
 Java-specific references:
 
-- `books/jls-26.pdf`
-- `books/jvms-26.pdf`
+- [Java Language Specification](books/jls-26.pdf)
+- [Java Virtual Machine Specification](books/jvms-26.pdf)
 
 Build one substantial language tool: a tree-walk interpreter, bytecode VM,
 compiler to WebAssembly/native code, static type checker, or program analyzer.
@@ -175,12 +175,12 @@ testing a property and proving it.
 
 Use these as competing perspectives, not scripture:
 
-- `books/software-engineering-google.zip`
-- `books/design-patterns.pdf`
-- `books/refactoring-1e.pdf`
-- `books/pragmatic-programmer-1e.pdf`
-- `books/clean-code.pdf`
-- `books/mythical-man-month.epub`
+- [Software Engineering at Google](books/software-engineering-google.epub)
+- [Design Patterns](books/design-patterns.pdf)
+- [Refactoring](books/refactoring-1e.pdf)
+- [The Pragmatic Programmer](books/pragmatic-programmer-1e.pdf)
+- [Clean Code](books/clean-code.pdf)
+- [The Mythical Man-Month](books/mythical-man-month.epub)
 
 Build and maintain a project long enough to encounter migrations, dependency
 upgrades, failing tests, operational logs, performance regressions, and a
@@ -194,13 +194,13 @@ property that affects correctness, operability, security, or team throughput.
 
 Suggested order:
 
-1. `books/introduction-probability-2e.pdf`
-2. `books/openintro-statistics-4e.pdf`
-3. `books/openstax-calculus-1.pdf`
-4. `books/openstax-calculus-2.pdf`
-5. `books/openstax-calculus-3.pdf` as needed for multivariable/vector topics
-6. `books/math-for-ml.pdf`
-7. `books/convex-optimization.pdf`
+1. [Introduction to Probability](books/introduction-probability-2e.pdf)
+2. [OpenIntro Statistics](books/openintro-statistics-4e.pdf)
+3. [Calculus Volume 1](books/openstax-calculus-1.pdf)
+4. [Calculus Volume 2](books/openstax-calculus-2.pdf)
+5. [Calculus Volume 3](books/openstax-calculus-3.pdf) as needed for multivariable/vector topics
+6. [Mathematics for Machine Learning](books/math-for-ml.pdf)
+7. [Convex Optimization](books/convex-optimization.pdf)
 
 Do exercises with pencil and code. Numerically verify derivatives, gradients,
 matrix identities, probability simulations, estimators, and optimization
@@ -216,40 +216,40 @@ Recommended branches:
 
 ### Broad AI
 
-- `books/aima-4e.pdf`
+- [Artificial Intelligence: A Modern Approach](books/aima-4e.pdf)
 - search, planning, uncertainty, decision making, and multi-agent systems
 
 ### Statistical machine learning
 
-- `books/isl-python.pdf`
-- `books/pml-intro.pdf`
-- `books/reinforcement-learning-2e.pdf`
+- [An Introduction to Statistical Learning with Applications in Python](books/isl-python.pdf)
+- [Probabilistic Machine Learning: An Introduction](books/pml-intro.pdf)
+- [Reinforcement Learning](books/reinforcement-learning-2e.pdf)
 
 ### Deep learning and language
 
-- `books/understanding-deep-learning.pdf`
-- `books/slp-3e-draft.pdf`
-- `papers/attention-is-all-you-need.pdf`
+- [Understanding Deep Learning](books/understanding-deep-learning.pdf)
+- [Speech and Language Processing](books/slp-3e-draft.pdf)
+- [Attention Is All You Need](papers/attention-is-all-you-need.pdf)
 
 ### Responsible ML
 
-- `books/fairness-ml.pdf`
-- `papers/acm-code-of-ethics.pdf`
+- [Fairness and Machine Learning](books/fairness-ml.pdf)
+- [ACM Code of Ethics](papers/acm-code-of-ethics.pdf)
 
 ### Computer vision
 
-- `books/computer-vision-2e.pdf`
+- [Computer Vision: Algorithms and Applications](books/computer-vision-2e.pdf)
 
 Build at least one project where the hard part is evaluation rather than model
 training. Preserve a clean train/validation/test boundary, compare against a
 simple baseline, inspect failures, state uncertainty, and document foreseeable
-misuse. `papers/double-dqn-scheduling.pdf` is a useful case study linking RL
+misuse. [Double-DQN scheduling](papers/double-dqn-scheduling.pdf) is a useful case study linking RL
 back to systems, but it is not a substitute for the systems fundamentals.
 
 ## Stage 9 — Graphics and vision (optional specialization)
 
-- `books/pbrt-4e.zip`
-- `books/computer-vision-2e.pdf`
+- [Physically Based Rendering](books/pbrt-4e.epub)
+- [Computer Vision: Algorithms and Applications](books/computer-vision-2e.pdf)
 
 Implement a small path tracer before leaning on a large engine. The useful
 milestones are ray/shape intersections, BVH acceleration, materials, direct

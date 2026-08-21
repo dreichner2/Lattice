@@ -1,14 +1,26 @@
 {
   "title": "Programming Language Foundations",
-  "path": "books/software-foundations/programming-language-foundations.tgz",
+  "path": "books/software-foundations/programming-language-foundations.epub",
   "authors": "Benjamin C. Pierce, Arthur Azevedo de Amorim, Chris Casinghino, Marco Gaboardi, Michael Greenberg, Cătălin Hrițcu, Vilhelm Sjöberg, Brent Yorgey, Andrew W. Appel, Arthur Charguéraud, and contributors",
   "year": "2026",
-  "source": "Open courseware / open textbook set",
-  "source_url": "https://softwarefoundations.cis.upenn.edu/",
-  "file_url": "https://softwarefoundations.cis.upenn.edu/plf-current/plf.tgz",
-  "license": "Official free electronic textbook sources; author-of-record copyright; no broad redistribution license stated on the release pages",
-  "sha256": "6aba52a47d59e7348f06bda3c9005e189b718fae5486690edec5ec32abe07012",
-  "bytes": 6015764,
   "version": "7.0 (2026-01-07; Rocq 9.0.0 or later)",
-  "downloaded_at": "2026-08-21T04:50:52.126621+00:00"
+  "license": "MIT License (notice preserved inside the EPUB)",
+  "source": "Software Foundations official current release",
+  "source_url": "https://softwarefoundations.cis.upenn.edu/plf-current/",
+  "file_url": "https://softwarefoundations.cis.upenn.edu/plf-current/plf.tgz",
+  "catalog_type": "searchable EPUB 3 course volume",
+  "sha256": "01b1c6e4f0a6a9d785ed3c1964b62ec47fa5551bba24486ef70ef27149d203e1",
+  "bytes": 738683,
+  "converted_at": "2026-08-21T06:34:16Z",
+  "conversion": {
+    "format": "EPUB 3",
+    "tool": "Pandoc 3.10.2 with scripts/build_readable_books.py",
+    "scope": "Published textbook prose and readable code/proof listings; raw Rocq sources and build/site machinery excluded; bundled MIT notice appended"
+  },
+  "source_archive": {
+    "filename": "programming-language-foundations.tgz",
+    "sha256": "6aba52a47d59e7348f06bda3c9005e189b718fae5486690edec5ec32abe07012",
+    "bytes": 6015764,
+    "downloaded_at": "2026-08-21T04:50:52.126621+00:00"
+  }
 }

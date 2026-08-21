@@ -1,18 +1,28 @@
 {
-  "title": "Crafting Interpreters — Complete Web Book and Code Source",
-  "path": "books/crafting-interpreters.zip",
+  "title": "Crafting Interpreters",
+  "path": "books/crafting-interpreters.epub",
   "authors": "Robert Nystrom",
   "year": "2021",
-  "license": "Book/site CC BY-NC-ND 4.0; interpreter source code MIT",
-  "source": "Author's official GitHub repository, commit 4a840f70",
-  "catalog_type": "complete web-book source archive",
+  "license": "Book text and site CC BY-NC-ND 4.0",
+  "source": "Author's official website repository, commit 4a840f70",
+  "catalog_type": "searchable EPUB 3 readable edition",
   "page_url": "https://craftinginterpreters.com/",
-  "download_url": "https://codeload.github.com/munificent/craftinginterpreters/zip/4a840f70f69c6ddd17cfef4f6964f8e1bcd8c3d4",
-  "filename": "crafting-interpreters.zip",
-  "expected": "zip",
-  "included_path": "craftinginterpreters-4a840f70f69c6ddd17cfef4f6964f8e1bcd8c3d4/book/",
   "source_url": "https://craftinginterpreters.com/",
-  "sha256": "c4c8a07244f778c4946358ffad0c047adad9819d15524568a07d98c1a6d73af1",
-  "bytes": 10662749,
-  "downloaded_at": "2026-08-21T04:48:51.888744+00:00"
+  "sha256": "90864194c86585b12705f74bb3ad82038040be47aa55d0cfd0850d8df224b065",
+  "bytes": 6088923,
+  "converted_at": "2026-08-21T06:34:16Z",
+  "conversion": {
+    "format": "EPUB 3",
+    "tool": "Pandoc 3.10.2 with scripts/build_readable_books.py",
+    "scope": "Complete published book text and reading assets; repository source, build files, and website chrome excluded",
+    "validation": "EPUB package, XML, spine, images, links, anchors, duplicate IDs, and forbidden source-file extensions"
+  },
+  "source_archive": {
+    "filename": "crafting-interpreters.zip",
+    "download_url": "https://codeload.github.com/munificent/craftinginterpreters/zip/4a840f70f69c6ddd17cfef4f6964f8e1bcd8c3d4",
+    "included_path": "craftinginterpreters-4a840f70f69c6ddd17cfef4f6964f8e1bcd8c3d4/book/",
+    "sha256": "c4c8a07244f778c4946358ffad0c047adad9819d15524568a07d98c1a6d73af1",
+    "bytes": 10662749,
+    "downloaded_at": "2026-08-21T04:48:51.888744+00:00"
+  }
 }

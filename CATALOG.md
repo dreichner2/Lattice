@@ -1,10 +1,10 @@
 # CS Library Catalog
 
 > **47 logical works · 72 verified artifacts · 0 exact duplicates**
-> Last reorganized and fully verified: 2026-08-20
+> Last reorganized and fully verified: 2026-08-21
 
 This is the authoritative shelf index. Every title links directly to the local
-PDF, EPUB, archive, or course folder on this Mac. Official webpages live in a
+PDF, EPUB, text, or course folder on this Mac. Official webpages live in a
 separate `Source` column. Binary payloads are intentionally not published to
 GitHub—see [Library rules](LIBRARY_RULES.md)—but every payload has tracked
 metadata under `metadata/` and a checksum in `manifests/library.sha256`.
@@ -41,7 +41,7 @@ metadata under `metadata/` and a checksum in `manifests/library.sha256`.
 | <!-- work: think-python-2e --> [Think Python](books/think-python-2e.pdf) | Allen B. Downey | 2e | `books/think-python-2e.pdf` | [source](https://greenteapress.com/thinkpython2/thinkpython2.pdf) | 🟢 Open |
 | <!-- work: think-java-2e --> [Think Java](books/think-java-2e.pdf) | Downey, Mayfield | 2e | `books/think-java-2e.pdf` | [source](https://greenteapress.com/wp/think-java-2e/) | 🟢 Open |
 | <!-- work: c-programming-language --> [The C Programming Language](books/c-programming-language-1e.pdf) | Kernighan, Ritchie | 1e | `books/c-programming-language-1e.pdf` | — | 🟠 Local import |
-| <!-- work: programming-pearls --> [Programming Pearls](books/programming-pearls-2e.epub) | Jon Bentley | 2e | `books/programming-pearls-2e.epub` | — | 🟠 Local import |
+| <!-- work: programming-pearls --> [Programming Pearls](books/programming-pearls-2e.pdf) | Jon Bentley | 2e | `books/programming-pearls-2e.pdf` | — | 🟠 Local import |
 
 ## Algorithms & Data Structures
 
@@ -69,7 +69,7 @@ metadata under `metadata/` and a checksum in `manifests/library.sha256`.
 | <!-- work: refactoring --> [Refactoring](books/refactoring-1e.pdf) | Martin Fowler | 1e | `books/refactoring-1e.pdf` | — | 🟠 Local import |
 | <!-- work: pragmatic-programmer --> [The Pragmatic Programmer](books/pragmatic-programmer-1e.pdf) | Hunt, Thomas | 1e | `books/pragmatic-programmer-1e.pdf` | — | 🟠 Local import |
 | <!-- work: mythical-man-month --> [The Mythical Man-Month](books/mythical-man-month.epub) | Frederick P. Brooks Jr. | Not recorded | `books/mythical-man-month.epub` | — | 🟠 Local import |
-| <!-- work: software-engineering-google --> [Software Engineering at Google](books/software-engineering-google.zip) | Winters, Manshreck, Wright | 2020 | `books/software-engineering-google.zip` | [source](https://abseil.io/resources/swe-book) | 🟢 Open |
+| <!-- work: software-engineering-google --> [Software Engineering at Google](books/software-engineering-google.epub) | Winters, Manshreck, Wright | 2020 | `books/software-engineering-google.epub` | [source](https://abseil.io/resources/swe-book) | 🔵 Official free |
 
 ## Mathematics & Statistics
 
@@ -103,9 +103,9 @@ metadata under `metadata/` and a checksum in `manifests/library.sha256`.
 | Book | Author(s) | Edition | Local | Source | Access |
 |---|---|---:|---|---|---|
 | <!-- work: dragon-book --> [Compilers: Principles, Techniques, and Tools](books/dragon-book-2e.pdf) | Aho, Lam, Sethi, Ullman | 2e | `books/dragon-book-2e.pdf` | — | 🟠 Local import |
-| <!-- work: crafting-interpreters --> [Crafting Interpreters](books/crafting-interpreters.zip) | Robert Nystrom | 2021 | `books/crafting-interpreters.zip` | [source](https://craftinginterpreters.com/) | 🟢 Open/source |
+| <!-- work: crafting-interpreters --> [Crafting Interpreters](books/crafting-interpreters.epub) | Robert Nystrom | 2021 | `books/crafting-interpreters.epub` | [source](https://craftinginterpreters.com/) | 🔵 Official free |
 | <!-- work: plai --> [Programming Languages: Application and Interpretation](books/plai-3e.pdf) | Shriram Krishnamurthi | v3.2.5 | `books/plai-3e.pdf` | [source](https://www.plai.org/) | 🟢 Open |
-| <!-- work: software-foundations --> [Software Foundations](books/software-foundations/) | Pierce et al. | 7 current volumes | `books/software-foundations/` (7 TGZs) | [source](https://softwarefoundations.cis.upenn.edu/) | 🔵 Official free |
+| <!-- work: software-foundations --> [Software Foundations](books/software-foundations/) | Pierce et al. | 7 current volumes | `books/software-foundations/` (7 EPUBs) | [source](https://softwarefoundations.cis.upenn.edu/) | 🟢 Open |
 | <!-- work: jls --> [The Java Language Specification](books/jls-26.pdf) | Gosling et al. | Java SE 26 | `books/jls-26.pdf` | [source](https://docs.oracle.com/javase/specs/jls/se26/html/) | ⚪ Oracle terms |
 | <!-- work: jvms --> [The Java Virtual Machine Specification](books/jvms-26.pdf) | Lindholm et al. | Java SE 26 | `books/jvms-26.pdf` | [source](https://docs.oracle.com/javase/specs/jvms/se26/html/) | ⚪ Oracle terms |
 | <!-- work: specifying-systems --> [Specifying Systems](books/specifying-systems.pdf) | Leslie Lamport | 2002 | `books/specifying-systems.pdf` | [source](https://lamport.azurewebsites.net/tla/book.html) | 🔵 Personal use |
@@ -114,7 +114,7 @@ metadata under `metadata/` and a checksum in `manifests/library.sha256`.
 
 | Book | Author(s) | Edition | Local | Source | Access |
 |---|---|---:|---|---|---|
-| <!-- work: pbrt --> [Physically Based Rendering](books/pbrt-4e.zip) | Pharr, Jakob, Humphreys | 4e | `books/pbrt-4e.zip` | [source](https://www.pbr-book.org/4ed/) | 🟢 Open/source |
+| <!-- work: pbrt --> [Physically Based Rendering](books/pbrt-4e.epub) | Pharr, Jakob, Humphreys | 4e | `books/pbrt-4e.epub` | [source](https://www.pbr-book.org/4ed/) | 🔵 Official free |
 | <!-- work: computer-vision --> [Computer Vision: Algorithms and Applications](books/computer-vision-2e.pdf) | Richard Szeliski | 2e | `books/computer-vision-2e.pdf` | [source](https://szeliski.org/Book/) | 🔵 Personalized copy |
 
 ## Ethics & Professional Practice
@@ -143,25 +143,25 @@ linked here so the catalog remains the only navigation page you need.
 | [Lecture 09](papers/mit-6006/lec-09.pdf) | [Lecture 19](papers/mit-6006/lec-19.pdf) |
 | [Lecture 10](papers/mit-6006/lec-10.pdf) | [Lecture 20](papers/mit-6006/lec-20.pdf) |
 
-### Software Foundations — 7 volume archives
+### Software Foundations — 7 readable volumes
 
-| Volume | Local archive |
+| Volume | Local book |
 |---|---|
-| Logical Foundations | [Open archive](books/software-foundations/logical-foundations.tgz) |
-| Programming Language Foundations | [Open archive](books/software-foundations/programming-language-foundations.tgz) |
-| Verified Functional Algorithms | [Open archive](books/software-foundations/verified-functional-algorithms.tgz) |
-| QuickChick | [Open archive](books/software-foundations/quickchick.tgz) |
-| Verifiable C | [Open archive](books/software-foundations/verifiable-c.tgz) |
-| Separation Logic Foundations | [Open archive](books/software-foundations/separation-logic-foundations.tgz) |
-| Security Foundations | [Open archive](books/software-foundations/security-foundations.tgz) |
+| Logical Foundations | [Read EPUB](books/software-foundations/logical-foundations.epub) |
+| Programming Language Foundations | [Read EPUB](books/software-foundations/programming-language-foundations.epub) |
+| Verified Functional Algorithms | [Read EPUB](books/software-foundations/verified-functional-algorithms.epub) |
+| QuickChick | [Read EPUB](books/software-foundations/quickchick.epub) |
+| Verifiable C | [Read EPUB](books/software-foundations/verifiable-c.epub) |
+| Separation Logic Foundations | [Read EPUB](books/software-foundations/separation-logic-foundations.epub) |
+| Security Foundations | [Read EPUB](books/software-foundations/security-foundations.epub) |
 
 ## Collection notes
 
 - **Multi-artifact works:** MIT 6.006 contributes 20 lecture PDFs; Software
-  Foundations contributes seven source archives. Every other catalog row maps
+  Foundations contributes seven readable EPUB volumes. Every other catalog row maps
   to one artifact, for 47 works and 72 artifacts total.
 - **Deduplication:** the complete OSTEP PDF replaces 68 chapter-level copies;
-  the complete Crafting Interpreters archive replaces its sample chapter. The
+  the complete Crafting Interpreters EPUB replaces its sample and source bundle. The
   retained shelf has no repeated SHA-256 digest.
 - **Metadata:** every artifact has title, path, source/access notes, byte count,
   and SHA-256 under `metadata/`. Unknown legacy provenance stays unknown.
