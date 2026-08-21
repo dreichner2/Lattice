@@ -22,13 +22,31 @@ fi
 /bin/mkdir -p "$app_path/Contents/MacOS" "$app_path/Contents/Resources"
 /bin/cp "$native_root/Info.plist" "$app_path/Contents/Info.plist"
 
+for required_source in \
+  "$native_root/CSLibraryApp.swift" \
+  "$native_root/ImmersiveReaderCoordinator.swift" \
+  "$native_root/NativePDFReaderController.swift" \
+  "$native_root/NativePDFReaderUI.swift" \
+  "$native_root/NativePDFReaderState.swift" \
+  "$native_root/ImmersiveEPUB.js"; do
+  if [[ ! -f "$required_source" ]]; then
+    print -u2 "Missing native reader source: $required_source"
+    exit 1
+  fi
+done
+
 target_arch=$(/usr/bin/uname -m)
 /usr/bin/swiftc \
   -O \
   -target "${target_arch}-apple-macosx13.0" \
   -framework AppKit \
+  -framework PDFKit \
   -framework WebKit \
   "$native_root/CSLibraryApp.swift" \
+  "$native_root/ImmersiveReaderCoordinator.swift" \
+  "$native_root/NativePDFReaderController.swift" \
+  "$native_root/NativePDFReaderUI.swift" \
+  "$native_root/NativePDFReaderState.swift" \
   -o "$app_path/Contents/MacOS/CS Library"
 
 iconset="$build_root/AppIcon.iconset"

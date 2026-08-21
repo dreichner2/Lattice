@@ -1,0 +1,36 @@
+name: Native macOS app
+
+on:
+  pull_request:
+    paths:
+      - "native/**"
+      - "scripts/build-macos-app.sh"
+      - ".github/workflows/native-macos.yml"
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  build:
+    runs-on: macos-15
+    timeout-minutes: 10
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@v4
+
+      - name: Check reader JavaScript
+        run: |
+          node --check native/ImmersiveEPUB.js
+          node --check ui/app.js
+
+      - name: Test native reader JavaScript
+        run: node --test tests/test_immersive_epub.mjs
+
+      - name: Build CS Library.app
+        run: ./scripts/build-macos-app.sh
+
+      - name: Verify app bundle
+        run: |
+          test -x "CS Library.app/Contents/MacOS/CS Library"
+          /usr/bin/codesign --verify --deep --strict "CS Library.app"
