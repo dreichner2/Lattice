@@ -24,6 +24,22 @@
       const source = window.top.document.querySelector("#epubChapterLabel")?.textContent || document.title || "";
       window.top.postMessage({ type: "cs-library-reader-selection", text, source }, window.location.origin);
     });
+    document.addEventListener("keydown", event => {
+      if (["input", "textarea", "select"].includes(event.target?.tagName?.toLowerCase()) || event.target?.isContentEditable) return;
+      const topDocument = window.top.document;
+      if (event.metaKey && event.key.toLowerCase() === "f") {
+        event.preventDefault();
+        topDocument.querySelector("#readerTocButton:not([hidden])")?.click();
+        setTimeout(() => topDocument.querySelector("#epubTocSearch")?.focus(), 180);
+        return;
+      }
+      if (event.metaKey || event.ctrlKey || event.altKey) return;
+      const keyName = event.key.toLowerCase();
+      const selector = event.code === "Space"
+        ? (event.shiftKey ? "#epubPrevious" : "#epubNext")
+        : ({ f: "#readerFocusButton:not([hidden])", b: "#readerBookmarkButton:not([hidden])", t: "#readerTocButton:not([hidden])", a: "#readerSettingsButton:not([hidden])", n: "#nativeReaderNotesButton" })[keyName];
+      if (selector) { event.preventDefault(); topDocument.querySelector(selector)?.click(); }
+    }, true);
     return;
   }
 
