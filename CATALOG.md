@@ -1,6 +1,6 @@
 # CS Library Catalog
 
-> **83 logical works · 112 verified artifacts · 0 exact duplicates**
+> **93 logical works · 123 verified artifacts · 0 exact duplicates**
 > Last reorganized and fully verified: 2026-08-21
 
 This is the authoritative shelf index. Every title links directly to the local
@@ -558,3 +558,93 @@ linked here so the catalog remains the only navigation page you need.
 - Local path: `papers/end-to-end-args-1984.pdf`
 - Source: [official page](https://web.mit.edu/Saltzer/www/publications/endtoend/endtoend.pdf)
 - License: Author-hosted PDF (MIT; ACM TOCS 1984, open access by author permission)
+
+<!-- work: url:00295b82ff725c52a71351a0bb1ee1bdb1584e594a62395d3fb382aefd0f4d42 -->
+### [Algorithms](books/algorithms-erickson.pdf)
+
+- Type: book
+- Authors: Jeff Erickson
+- Local path: `books/algorithms-erickson.pdf`
+- Source: [official page](https://jeffe.cs.illinois.edu/teaching/algorithms/book/Algorithms-JeffE.pdf)
+- License: CC BY-NC-SA 4.0 (author's open textbook, verify in preface)
+
+<!-- work: url:b3129f44c4a26b534176bb0f83d85e1ed26a6cdf93ebebacb20104eab2d6bc00 -->
+### [Dive into Deep Learning](books/dive-into-deep-learning.pdf)
+
+- Type: book
+- Authors: Zhang, Lipton, Li, Smola
+- Local path: `books/dive-into-deep-learning.pdf`
+- Source: [official page](https://d2l.ai/d2l-en.pdf)
+- License: CC BY-NC-SA 4.0 (verify in front matter)
+
+<!-- work: url:5d633e4514799a123616c565beeaa498d9900f615969273b320a969fb0c336a0 -->
+### [Foundations of Databases](books/foundations-of-databases.pdf)
+
+- Type: book
+- Authors: Abiteboul, Hull, Vianu
+- Local path: `books/foundations-of-databases.pdf`
+- Source: [official page](http://webdam.inria.fr/Alice/pdfs/all.pdf)
+- License: Free web edition hosted by authors (webdam.inria.fr)
+
+<!-- work: url:89bfbed17259573dcdc1c1f0e14347030aa42902baba7e0a395fcd7493594aac -->
+### [Homotopy Type Theory](books/hott-online.pdf)
+
+- Type: book
+- Authors: Univalent Foundations Program
+- Local path: `books/hott-online.pdf`
+- Source: [official page](https://hott.github.io/book/hott-online-82-g578b85c.pdf)
+- License: CC BY-SA (HoTT Book official build, verify in colophon)
+
+<!-- work: url:fa522a14f9b1631232ff6b34bc092686803b71cc8154cbf31c7ac523a75108dc -->
+### [generatingfunctionology](books/generatingfunctionology.pdf)
+
+- Type: book
+- Authors: Herbert S. Wilf
+- Local path: `books/generatingfunctionology.pdf`
+- Source: [official page](https://www2.math.upenn.edu/~wilf/gfologyLinked2.pdf)
+- License: Freely distributed by author (A K Peters 2nd ed.)
+
+<!-- work: url:41baea09d066e0167ca0943968d44f7f07790be700440427f78c034910e5765d -->
+### [Dapper, a Large-Scale Distributed Systems Tracing Infrastructure](papers/dapper-google-tr.pdf)
+
+- Type: paper
+- Authors: Sigelman et al. (Google)
+- Local path: `papers/dapper-google-tr.pdf`
+- Source: [official page](https://static.googleusercontent.com/media/research.google.com/en//pubs/archive/36356.pdf)
+- License: Google Technical Report via Google Research archive
+
+<!-- work: url:cd514fbdf07b1f96f9b32304c4bff62e9c1f048626439c9dd2c881bc09549801 -->
+### [Zanzibar: Google's Consistent, Global Authorization System](papers/zanzibar-atc20.pdf)
+
+- Type: paper
+- Authors: Pang et al. (USENIX ATC 2020)
+- Local path: `papers/zanzibar-atc20.pdf`
+- Source: [official page](https://storage.googleapis.com/gweb-research2023-media/pubtools/5068.pdf)
+- License: Publisher PDF via Google Research archive
+
+<!-- work: url:389dfabdfa94bd21bb3ccebc5074a84c4faa0661c885ca3b3cbe70186f47a747 -->
+### [Hints for Computer System Design](papers/lampson-hints-sosp83.pdf)
+
+- Type: paper
+- Authors: Butler W. Lampson (SOSP 1983)
+- Local path: `papers/lampson-hints-sosp83.pdf`
+- Source: [official page](https://www.microsoft.com/en-us/research/wp-content/uploads/1983/10/Hints-for-Computer-System-Design-SOSP-version.pdf)
+- License: Author copy hosted by Microsoft Research
+
+<!-- work: url:0c550af6f81215e1b4909f4e8e99e44c7bb18967835c0dbd559191a65d01a275 -->
+### [Smashing the Stack for Fun and Profit](papers/smashing-stack-phrack49.pdf)
+
+- Type: paper
+- Authors: Aleph One (Phrack 49-14)
+- Local path: `papers/smashing-stack-phrack49.pdf`
+- Source: [official page](https://inst.eecs.berkeley.edu/~cs161/archive/fa08/papers/stack_smashing.pdf)
+- License: UC Berkeley CS161 course mirror of Phrack article
+
+<!-- work: url:40807dab08eb08477d6bd1ed22b91b4dcd6633550a4a62682ecbbd00c00d8b08 -->
+### [The Byzantine Generals Problem](papers/byzantine-generals-toplas82.pdf)
+
+- Type: paper
+- Authors: Lamport, Shostak, Pease (ACM TOPLAS 1982)
+- Local path: `papers/byzantine-generals-toplas82.pdf`
+- Source: [official page](https://lamport.azurewebsites.net/pubs/byz.pdf)
+- License: Author-hosted copy (Lamport publications site)

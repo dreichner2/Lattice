@@ -1,0 +1,11 @@
+{
+  "title": "Hints for Computer System Design",
+  "path": "papers/lampson-hints-sosp83.pdf",
+  "authors": "Butler W. Lampson (SOSP 1983)",
+  "source": "User-supplied exact URL",
+  "source_url": "https://www.microsoft.com/en-us/research/wp-content/uploads/1983/10/Hints-for-Computer-System-Design-SOSP-version.pdf",
+  "license": "Author copy hosted by Microsoft Research",
+  "sha256": "389dfabdfa94bd21bb3ccebc5074a84c4faa0661c885ca3b3cbe70186f47a747",
+  "bytes": 1734167,
+  "downloaded_at": "2026-08-21T18:53:22.986308+00:00"
+}
