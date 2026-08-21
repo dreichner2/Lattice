@@ -1,11 +1,15 @@
 import AppKit
 import Foundation
+import UniformTypeIdentifiers
 import WebKit
 
 final class AppDelegate: NSObject, NSApplicationDelegate, WKNavigationDelegate, WKUIDelegate {
     private let preferredPort = 8766
     private let candidatePorts = [8766, 8765] + Array(8767...8785)
+    private let savedRootKey = "CSLibraryRootPath"
+
     private var libraryRoot: URL!
+    private var expectedLibraryID = ""
     private var window: NSWindow!
     private var rootView: NSView!
     private var webView: WKWebView!
@@ -14,23 +18,33 @@ final class AppDelegate: NSObject, NSApplicationDelegate, WKNavigationDelegate, 
     private var healthSession: URLSession!
     private var readerKeyMonitor: Any?
     private var immersiveReader: ImmersiveReaderCoordinator!
+    private var readerStore: ReaderStore!
+    private var readerBridge: ReaderBridge!
+    private var currentServerURL: URL?
+    private var pendingOpenURLs: [URL] = []
 
     func applicationDidFinishLaunching(_ notification: Notification) {
         NSApp.setActivationPolicy(.regular)
         configureMenu()
 
-        guard let root = locateLibraryRoot() else {
-            showFatalError(
-                title: "CS Library could not find its shelf",
-                message: "Keep CS Library.app in the cs-library folder, beside scripts and books."
-            )
+        guard let root = locateLibraryRoot(interactively: true) else {
+            NSApp.terminate(nil)
             return
         }
-        libraryRoot = root
+        libraryRoot = LibraryIdentity.canonicalRoot(root)
+        expectedLibraryID = LibraryIdentity.libraryID(for: libraryRoot)
+        UserDefaults.standard.set(libraryRoot.path, forKey: savedRootKey)
+
+        do {
+            readerStore = try ReaderStore()
+        } catch {
+            showFatalError(title: "The reading database could not start", message: error.localizedDescription)
+            return
+        }
 
         let sessionConfiguration = URLSessionConfiguration.ephemeral
-        sessionConfiguration.timeoutIntervalForRequest = 0.45
-        sessionConfiguration.timeoutIntervalForResource = 0.75
+        sessionConfiguration.timeoutIntervalForRequest = 0.65
+        sessionConfiguration.timeoutIntervalForResource = 1.2
         healthSession = URLSession(configuration: sessionConfiguration)
 
         buildWindow()
@@ -38,45 +52,87 @@ final class AppDelegate: NSObject, NSApplicationDelegate, WKNavigationDelegate, 
         connectToLibrary()
     }
 
-    func applicationShouldTerminateAfterLastWindowClosed(_ sender: NSApplication) -> Bool {
-        true
-    }
+    func applicationShouldTerminateAfterLastWindowClosed(_ sender: NSApplication) -> Bool { true }
 
     func applicationWillTerminate(_ notification: Notification) {
+        readerBridge?.finishWebSession()
         immersiveReader?.closePDF(notifyWeb: false)
-        if let readerKeyMonitor {
-            NSEvent.removeMonitor(readerKeyMonitor)
-        }
+        if let readerKeyMonitor { NSEvent.removeMonitor(readerKeyMonitor) }
+        webView?.configuration.userContentController.removeScriptMessageHandler(forName: ReaderBridge.handlerName, contentWorld: .page)
         healthSession?.invalidateAndCancel()
-        if let process = serverProcess, process.isRunning {
-            process.terminate()
-        }
+        if let process = serverProcess, process.isRunning { process.terminate() }
         try? serverLog?.close()
+        try? readerStore?.createBackupIfNeeded(force: true)
     }
 
-    private func locateLibraryRoot() -> URL? {
-        let fileManager = FileManager.default
+    func application(_ application: NSApplication, open urls: [URL]) {
+        guard libraryRoot != nil else {
+            pendingOpenURLs.append(contentsOf: urls)
+            return
+        }
+        importFiles(urls)
+    }
+
+    // MARK: Library location
+
+    private func locateLibraryRoot(interactively: Bool) -> URL? {
+        let manager = FileManager.default
         let appParent = Bundle.main.bundleURL.deletingLastPathComponent()
         let configuredRoot = Bundle.main.object(forInfoDictionaryKey: "CSLibraryRoot") as? String
+        let savedRoot = UserDefaults.standard.string(forKey: savedRootKey)
         let candidates = [
+            savedRoot.map { URL(fileURLWithPath: $0, isDirectory: true) },
             appParent,
             appParent.deletingLastPathComponent(),
             configuredRoot.map { URL(fileURLWithPath: $0, isDirectory: true) }
         ].compactMap { $0 }
 
-        return candidates.first { candidate in
-            fileManager.fileExists(atPath: candidate.appendingPathComponent("scripts/library_ui.py").path)
-                && fileManager.fileExists(atPath: candidate.appendingPathComponent("ui/index.html").path)
+        if let match = candidates.first(where: isLibraryRoot) { return match }
+        guard interactively else { return nil }
+
+        let panel = NSOpenPanel()
+        panel.title = "Choose your CS Library folder"
+        panel.message = "Select the folder containing CATALOG.md, metadata, books, and papers."
+        panel.prompt = "Use Library"
+        panel.canChooseDirectories = true
+        panel.canChooseFiles = false
+        panel.allowsMultipleSelection = false
+        panel.directoryURL = manager.homeDirectoryForCurrentUser
+        guard panel.runModal() == .OK, let url = panel.url else { return nil }
+        guard isLibraryRoot(url) else {
+            showNonfatalError(
+                title: "That folder is not a CS Library",
+                message: "The selected folder must contain CATALOG.md and a metadata folder."
+            )
+            return locateLibraryRoot(interactively: true)
         }
+        return url
     }
+
+    private func isLibraryRoot(_ url: URL) -> Bool {
+        var isDirectory: ObjCBool = false
+        return FileManager.default.fileExists(atPath: url.appendingPathComponent("CATALOG.md").path)
+            && FileManager.default.fileExists(atPath: url.appendingPathComponent("metadata").path, isDirectory: &isDirectory)
+            && isDirectory.boolValue
+    }
+
+    // MARK: Window and bridge
 
     private func buildWindow() {
         let configuration = WKWebViewConfiguration()
         configuration.websiteDataStore = .default()
         configuration.preferences.isElementFullscreenEnabled = true
+        configuration.userContentController.addUserScript(ReaderBridge.bootstrapUserScript)
+        if let workspace = ReaderBridge.workspaceUserScript(libraryRoot: libraryRoot) {
+            configuration.userContentController.addUserScript(workspace)
+        }
         if let script = ImmersiveReaderCoordinator.epubUserScript(libraryRoot: libraryRoot) {
             configuration.userContentController.addUserScript(script)
         }
+
+        let bridge = ReaderBridge(store: readerStore)
+        readerBridge = bridge
+        configuration.userContentController.addScriptMessageHandler(bridge, contentWorld: .page, name: ReaderBridge.handlerName)
 
         webView = WKWebView(frame: .zero, configuration: configuration)
         webView.translatesAutoresizingMaskIntoConstraints = false
@@ -98,27 +154,29 @@ final class AppDelegate: NSObject, NSApplicationDelegate, WKNavigationDelegate, 
 
         window = NSWindow(
             contentRect: NSRect(x: 0, y: 0, width: 1380, height: 880),
-            styleMask: [.titled, .closable, .miniaturizable, .resizable],
+            styleMask: [.titled, .closable, .miniaturizable, .resizable, .fullSizeContentView],
             backing: .buffered,
             defer: false
         )
         window.title = "CS Library"
         window.titleVisibility = .hidden
         window.titlebarAppearsTransparent = true
-        window.minSize = NSSize(width: 1180, height: 640)
+        window.minSize = NSSize(width: 880, height: 600)
         window.contentView = rootView
         window.backgroundColor = NSColor.windowBackgroundColor
+        window.tabbingMode = .preferred
         window.setFrameAutosaveName("CSLibraryMainWindow")
-        if !window.setFrameUsingName("CSLibraryMainWindow") {
-            window.center()
-        }
+        if !window.setFrameUsingName("CSLibraryMainWindow") { window.center() }
 
         immersiveReader = ImmersiveReaderCoordinator(
             window: window,
             rootView: rootView,
             webView: webView,
-            libraryRoot: libraryRoot
+            libraryRoot: libraryRoot,
+            store: readerStore
         )
+        readerBridge.coordinator = immersiveReader
+        readerBridge.webView = webView
 
         window.makeKeyAndOrderFront(nil)
         NSApp.activate(ignoringOtherApps: true)
@@ -127,38 +185,28 @@ final class AppDelegate: NSObject, NSApplicationDelegate, WKNavigationDelegate, 
     private func installReaderKeyMonitor() {
         readerKeyMonitor = NSEvent.addLocalMonitorForEvents(matching: .keyDown) { [weak self] event in
             guard let self, self.window?.isKeyWindow == true else { return event }
-
-            if self.immersiveReader?.isPDFOpen == true {
-                return self.immersiveReader.handleKeyEvent(event)
-            }
-
-            guard event.modifierFlags.intersection([.command, .control, .option, .shift]).isEmpty else {
-                return event
-            }
-
-            let direction: Int
+            if self.immersiveReader?.isPDFOpen == true { return self.immersiveReader.handleKeyEvent(event) }
+            guard event.modifierFlags.intersection([.command, .control, .option, .shift]).isEmpty else { return event }
             switch event.keyCode {
             case 123:
-                direction = -1
+                self.webView?.evaluateJavaScript("window.csLibraryHandleNativeArrow?.(-1)")
+                return nil
             case 124:
-                direction = 1
+                self.webView?.evaluateJavaScript("window.csLibraryHandleNativeArrow?.(1)")
+                return nil
             default:
                 return event
             }
-
-            self.webView?.evaluateJavaScript("window.csLibraryHandleNativeArrow?.(\(direction))")
-            return event
         }
     }
+
+    // MARK: Server lifecycle
 
     private func connectToLibrary() {
         locateRunningLibrary { [weak self] url in
             guard let self else { return }
-            if let url {
-                self.loadLibrary(at: url)
-            } else {
-                self.startLibraryServer()
-            }
+            if let url { self.loadLibrary(at: url) }
+            else { self.startLibraryServer() }
         }
     }
 
@@ -169,48 +217,56 @@ final class AppDelegate: NSObject, NSApplicationDelegate, WKNavigationDelegate, 
 
         for port in candidatePorts {
             group.enter()
-            let url = URL(string: "http://127.0.0.1:\(port)/api/health")!
-            healthSession.dataTask(with: url) { data, response, _ in
+            let healthURL = URL(string: "http://127.0.0.1:\(port)/api/health")!
+            healthSession.dataTask(with: healthURL) { [expectedLibraryID] data, response, _ in
                 defer { group.leave() }
-                guard
-                    let http = response as? HTTPURLResponse,
-                    http.statusCode == 200,
-                    let data,
-                    let json = try? JSONSerialization.jsonObject(with: data) as? [String: Any],
-                    json["app"] as? String == "cs-library"
-                else { return }
-                lock.lock()
-                available.insert(port)
-                lock.unlock()
+                guard let http = response as? HTTPURLResponse,
+                      http.statusCode == 200,
+                      let data,
+                      let json = try? JSONSerialization.jsonObject(with: data) as? [String: Any],
+                      json["app"] as? String == "cs-library",
+                      json["protocolVersion"] as? Int == LibraryIdentity.protocolVersion,
+                      json["libraryId"] as? String == expectedLibraryID else { return }
+                lock.lock(); available.insert(port); lock.unlock()
             }.resume()
         }
 
-        group.notify(queue: .main) { [candidatePorts] in
-            let port = candidatePorts.first(where: { available.contains($0) })
-            completion(port.flatMap { URL(string: "http://127.0.0.1:\($0)/?app=1") })
+        group.notify(queue: .main) { [candidatePorts, expectedLibraryID] in
+            guard let port = candidatePorts.first(where: { available.contains($0) }) else {
+                completion(nil); return
+            }
+            completion(URL(string: "http://127.0.0.1:\(port)/?app=1&library=\(expectedLibraryID.prefix(12))"))
         }
     }
 
     private func startLibraryServer() {
-        let fileManager = FileManager.default
+        let manager = FileManager.default
         let pythonCandidates = [
             "/opt/homebrew/bin/python3",
+            "/opt/homebrew/opt/python@3.13/bin/python3",
             "/usr/local/bin/python3",
             "/usr/bin/python3"
         ]
-        guard let python = pythonCandidates.first(where: { fileManager.isExecutableFile(atPath: $0) }) else {
-            showFatalError(title: "Python 3 is required", message: "Install Python 3, then reopen CS Library.app.")
+        guard let python = pythonCandidates.first(where: manager.isExecutableFile(atPath:)) else {
+            showFatalError(
+                title: "Python 3 is required",
+                message: "Install Python 3 from python.org or Homebrew, then reopen CS Library. The books and reading database remain untouched."
+            )
             return
         }
 
+        guard let serverScript = bundledServerScript() else {
+            showFatalError(title: "The local library server is missing", message: "Rebuild CS Library.app from the repository.")
+            return
+        }
+        let uiRoot = bundledUIRoot() ?? libraryRoot.appendingPathComponent("ui", isDirectory: true)
+
         do {
-            let logDirectory = fileManager.urls(for: .libraryDirectory, in: .userDomainMask)[0]
+            let logDirectory = manager.urls(for: .libraryDirectory, in: .userDomainMask)[0]
                 .appendingPathComponent("Logs/CS Library", isDirectory: true)
-            try fileManager.createDirectory(at: logDirectory, withIntermediateDirectories: true)
+            try manager.createDirectory(at: logDirectory, withIntermediateDirectories: true)
             let logURL = logDirectory.appendingPathComponent("server.log")
-            if !fileManager.fileExists(atPath: logURL.path) {
-                fileManager.createFile(atPath: logURL.path, contents: nil)
-            }
+            if !manager.fileExists(atPath: logURL.path) { manager.createFile(atPath: logURL.path, contents: nil) }
             let log = try FileHandle(forWritingTo: logURL)
             try log.seekToEnd()
             serverLog = log
@@ -218,13 +274,25 @@ final class AppDelegate: NSObject, NSApplicationDelegate, WKNavigationDelegate, 
             let process = Process()
             process.executableURL = URL(fileURLWithPath: python)
             process.arguments = [
-                libraryRoot.appendingPathComponent("scripts/library_ui.py").path,
+                serverScript.path,
+                "--root", libraryRoot.path,
+                "--ui-root", uiRoot.path,
+                "--parent-pid", String(ProcessInfo.processInfo.processIdentifier),
                 "--port", String(preferredPort),
                 "--no-browser"
             ]
             process.currentDirectoryURL = libraryRoot
             process.standardOutput = log
             process.standardError = log
+            process.terminationHandler = { [weak self] process in
+                guard process.terminationStatus != 0 else { return }
+                DispatchQueue.main.async {
+                    self?.showNonfatalError(
+                        title: "The local library server stopped",
+                        message: "See ~/Library/Logs/CS Library/server.log for details."
+                    )
+                }
+            }
             try process.run()
             serverProcess = process
             waitForStartedServer(attempt: 0)
@@ -233,14 +301,20 @@ final class AppDelegate: NSObject, NSApplicationDelegate, WKNavigationDelegate, 
         }
     }
 
+    private func bundledServerScript() -> URL? {
+        Bundle.main.url(forResource: "library_ui", withExtension: "py", subdirectory: "server")
+            ?? (isLibraryRoot(libraryRoot) ? libraryRoot.appendingPathComponent("scripts/library_ui.py") : nil)
+    }
+
+    private func bundledUIRoot() -> URL? {
+        Bundle.main.resourceURL?.appendingPathComponent("ui", isDirectory: true)
+    }
+
     private func waitForStartedServer(attempt: Int) {
         locateRunningLibrary { [weak self] url in
             guard let self else { return }
-            if let url {
-                self.loadLibrary(at: url)
-                return
-            }
-            guard attempt < 24 else {
+            if let url { self.loadLibrary(at: url); return }
+            guard attempt < 32 else {
                 self.showFatalError(
                     title: "The local library did not become ready",
                     message: "See ~/Library/Logs/CS Library/server.log for details."
@@ -254,8 +328,16 @@ final class AppDelegate: NSObject, NSApplicationDelegate, WKNavigationDelegate, 
     }
 
     private func loadLibrary(at url: URL) {
-        webView.load(URLRequest(url: url, cachePolicy: .reloadIgnoringLocalCacheData, timeoutInterval: 10))
+        currentServerURL = url
+        webView.load(URLRequest(url: url, cachePolicy: .reloadIgnoringLocalCacheData, timeoutInterval: 12))
+        if !pendingOpenURLs.isEmpty {
+            let pending = pendingOpenURLs
+            pendingOpenURLs.removeAll()
+            importFiles(pending)
+        }
     }
+
+    // MARK: Web navigation
 
     private func isLocalLibraryURL(_ url: URL) -> Bool {
         guard let host = url.host?.lowercased() else { return false }
@@ -268,16 +350,8 @@ final class AppDelegate: NSObject, NSApplicationDelegate, WKNavigationDelegate, 
         decidePolicyFor navigationAction: WKNavigationAction,
         decisionHandler: @escaping (WKNavigationActionPolicy) -> Void
     ) {
-        guard let url = navigationAction.request.url else {
-            decisionHandler(.cancel)
-            return
-        }
-
-        if immersiveReader?.openPDFIfNeeded(for: url) == true {
-            decisionHandler(.cancel)
-            return
-        }
-
+        guard let url = navigationAction.request.url else { decisionHandler(.cancel); return }
+        if immersiveReader?.openPDFIfNeeded(for: url) == true { decisionHandler(.cancel); return }
         if isLocalLibraryURL(url) || url.scheme == "about" {
             decisionHandler(.allow)
         } else if navigationAction.navigationType == .linkActivated || navigationAction.targetFrame == nil {
@@ -295,68 +369,197 @@ final class AppDelegate: NSObject, NSApplicationDelegate, WKNavigationDelegate, 
         windowFeatures: WKWindowFeatures
     ) -> WKWebView? {
         guard navigationAction.targetFrame == nil, let url = navigationAction.request.url else { return nil }
-        if isLocalLibraryURL(url) {
-            webView.load(navigationAction.request)
-        } else {
-            NSWorkspace.shared.open(url)
-        }
+        if isLocalLibraryURL(url) { webView.load(navigationAction.request) }
+        else { NSWorkspace.shared.open(url) }
         return nil
     }
 
     func webView(_ webView: WKWebView, didFailProvisionalNavigation navigation: WKNavigation!, withError error: Error) {
-        showFatalError(title: "CS Library could not load", message: error.localizedDescription, terminate: false)
+        showNonfatalError(title: "CS Library could not load", message: error.localizedDescription)
     }
+
+    // MARK: File import/export and diagnostics
+
+    @objc private func chooseLibraryFolder(_ sender: Any?) {
+        guard let root = locateLibraryRoot(interactively: true) else { return }
+        let canonical = LibraryIdentity.canonicalRoot(root)
+        guard canonical != libraryRoot else { return }
+        UserDefaults.standard.set(canonical.path, forKey: savedRootKey)
+        let alert = NSAlert()
+        alert.messageText = "Library folder changed"
+        alert.informativeText = "Reopen CS Library to use \(canonical.path)."
+        alert.addButton(withTitle: "Quit and Reopen Later")
+        alert.runModal()
+        NSApp.terminate(nil)
+    }
+
+    @objc private func addBooks(_ sender: Any?) {
+        let panel = NSOpenPanel()
+        panel.title = "Add reading material"
+        panel.prompt = "Add to Library"
+        panel.allowsMultipleSelection = true
+        panel.canChooseFiles = true
+        panel.canChooseDirectories = false
+        panel.allowedContentTypes = [UTType.pdf, UTType.epub, UTType.plainText]
+        guard panel.runModal() == .OK else { return }
+        importFiles(panel.urls)
+    }
+
+    private func importFiles(_ urls: [URL]) {
+        let manager = FileManager.default
+        let destinationRoot = libraryRoot.appendingPathComponent("books", isDirectory: true)
+        try? manager.createDirectory(at: destinationRoot, withIntermediateDirectories: true)
+        var imported: [String] = []
+        var failures: [String] = []
+
+        for source in urls {
+            let ext = source.pathExtension.lowercased()
+            guard ["pdf", "epub", "txt"].contains(ext) else { failures.append(source.lastPathComponent); continue }
+            if LibraryIdentity.resolveLibraryFile(relativePath: relativePath(for: source), root: libraryRoot) != nil {
+                imported.append(source.lastPathComponent)
+                continue
+            }
+            let base = sanitizedFilename(source.deletingPathExtension().lastPathComponent)
+            var destination = destinationRoot.appendingPathComponent("\(base).\(ext)")
+            var counter = 2
+            while manager.fileExists(atPath: destination.path) {
+                destination = destinationRoot.appendingPathComponent("\(base)-\(counter).\(ext)")
+                counter += 1
+            }
+            do {
+                try manager.copyItem(at: source, to: destination)
+                imported.append(destination.lastPathComponent)
+            } catch {
+                failures.append("\(source.lastPathComponent): \(error.localizedDescription)")
+            }
+        }
+
+        let alert = NSAlert()
+        alert.messageText = imported.isEmpty ? "No files were added" : "Added \(imported.count) file\(imported.count == 1 ? "" : "s")"
+        alert.informativeText = failures.isEmpty
+            ? "New files will appear in New arrivals automatically."
+            : "Some files could not be added:\n\(failures.joined(separator: "\n"))"
+        alert.addButton(withTitle: "OK")
+        alert.runModal()
+    }
+
+    private func relativePath(for url: URL) -> String {
+        let root = LibraryIdentity.canonicalRoot(libraryRoot).path
+        let candidate = url.standardizedFileURL.resolvingSymlinksInPath().path
+        guard candidate.hasPrefix(root + "/") else { return "" }
+        return String(candidate.dropFirst(root.count + 1))
+    }
+
+    private func sanitizedFilename(_ value: String) -> String {
+        let folded = value.folding(options: [.diacriticInsensitive, .caseInsensitive], locale: .current).lowercased()
+        let components = folded.components(separatedBy: CharacterSet.alphanumerics.inverted).filter { !$0.isEmpty }
+        return String((components.joined(separator: "-").isEmpty ? "new-book" : components.joined(separator: "-")).prefix(70))
+    }
+
+    @objc private func openLibraryFolder(_ sender: Any?) { NSWorkspace.shared.open(libraryRoot) }
+    @objc private func openReaderDataFolder(_ sender: Any?) { NSWorkspace.shared.open(readerStore.dataDirectory) }
+
+    @objc private func exportReaderJSON(_ sender: Any?) { exportReaderData(extension: "json", format: "JSON") }
+    @objc private func exportReaderMarkdown(_ sender: Any?) { exportReaderData(extension: "md", format: "Markdown") }
+
+    private func exportReaderData(extension ext: String, format: String) {
+        let panel = NSSavePanel()
+        panel.nameFieldStringValue = "CS-Library-Reading-Data.\(ext)"
+        panel.allowedContentTypes = ext == "json" ? [.json] : [.plainText]
+        panel.prompt = "Export"
+        guard panel.runModal() == .OK, let url = panel.url else { return }
+        do {
+            if ext == "json" { try readerStore.exportJSON(to: url) }
+            else { try readerStore.exportMarkdown(to: url) }
+        } catch {
+            showNonfatalError(title: "\(format) export failed", message: error.localizedDescription)
+        }
+    }
+
+    @objc private func importReaderData(_ sender: Any?) {
+        let panel = NSOpenPanel()
+        panel.allowedContentTypes = [.json]
+        panel.allowsMultipleSelection = false
+        panel.prompt = "Import"
+        guard panel.runModal() == .OK, let url = panel.url else { return }
+
+        let confirmation = NSAlert()
+        confirmation.alertStyle = .warning
+        confirmation.messageText = "Import reading data?"
+        confirmation.informativeText = "The import will merge documents, progress, bookmarks, notes, highlights, and preferences. A backup is created first."
+        confirmation.addButton(withTitle: "Import")
+        confirmation.addButton(withTitle: "Cancel")
+        guard confirmation.runModal() == .alertFirstButtonReturn else { return }
+        do {
+            try readerStore.createBackupIfNeeded(force: true)
+            try readerStore.importJSON(from: url)
+        } catch {
+            showNonfatalError(title: "Reading data import failed", message: error.localizedDescription)
+        }
+    }
+
+    @objc private func showDiagnostics(_ sender: Any?) {
+        do {
+            let diagnostics = try readerStore.diagnostics()
+            let backupText = diagnostics.lastBackupAt.map {
+                ISO8601DateFormatter().string(from: Date(timeIntervalSince1970: $0))
+            } ?? "Never"
+            let alert = NSAlert()
+            alert.messageText = diagnostics.integrity == "ok" ? "CS Library is healthy" : "CS Library needs attention"
+            alert.informativeText = """
+            Library: \(libraryRoot.path)
+            Library ID: \(expectedLibraryID.prefix(16))…
+            Reader database: \(diagnostics.databasePath)
+            Database integrity: \(diagnostics.integrity)
+            Schema: \(diagnostics.schemaVersion)
+            Documents: \(diagnostics.documentCount)
+            Bookmarks: \(diagnostics.bookmarkCount)
+            Annotations: \(diagnostics.annotationCount)
+            Reading sessions: \(diagnostics.sessionCount)
+            Backups: \(diagnostics.backupCount) (latest: \(backupText))
+            Server: \(currentServerURL?.absoluteString ?? "Not connected")
+            """
+            alert.addButton(withTitle: "OK")
+            alert.addButton(withTitle: "Open Data Folder")
+            if alert.runModal() == .alertSecondButtonReturn { NSWorkspace.shared.open(readerStore.dataDirectory) }
+        } catch {
+            showNonfatalError(title: "Diagnostics failed", message: error.localizedDescription)
+        }
+    }
+
+    // MARK: Reader menu actions
 
     @objc private func reloadLibrary(_ sender: Any?) {
         immersiveReader?.closePDF(notifyWeb: false)
         webView?.reloadFromOrigin()
     }
 
-    @objc private func openLibraryFolder(_ sender: Any?) {
-        if let libraryRoot {
-            NSWorkspace.shared.open(libraryRoot)
-        }
-    }
-
     @objc private func readerPrevious(_ sender: Any?) {
-        if immersiveReader?.previousPage() != true {
-            webView.evaluateJavaScript("window.csLibraryHandleNativeArrow?.(-1)")
-        }
+        if immersiveReader?.previousPage() != true { webView.evaluateJavaScript("window.csLibraryHandleNativeArrow?.(-1)") }
     }
-
     @objc private func readerNext(_ sender: Any?) {
-        if immersiveReader?.nextPage() != true {
-            webView.evaluateJavaScript("window.csLibraryHandleNativeArrow?.(1)")
-        }
+        if immersiveReader?.nextPage() != true { webView.evaluateJavaScript("window.csLibraryHandleNativeArrow?.(1)") }
     }
-
     @objc private func readerFocus(_ sender: Any?) {
-        if immersiveReader?.toggleFocus() != true {
-            webView.evaluateJavaScript("document.querySelector('#readerFocusButton:not([hidden])')?.click()")
-        }
+        if immersiveReader?.toggleFocus() != true { webView.evaluateJavaScript("document.querySelector('#readerFocusButton:not([hidden])')?.click()") }
     }
-
     @objc private func readerSidebar(_ sender: Any?) {
-        if immersiveReader?.toggleSidebar() != true {
-            webView.evaluateJavaScript("document.querySelector('#readerTocButton:not([hidden])')?.click()")
-        }
+        if immersiveReader?.toggleSidebar() != true { webView.evaluateJavaScript("document.querySelector('#readerTocButton:not([hidden])')?.click()") }
     }
-
     @objc private func readerBookmark(_ sender: Any?) {
-        if immersiveReader?.toggleBookmark() != true {
-            webView.evaluateJavaScript("document.querySelector('#readerBookmarkButton:not([hidden])')?.click()")
-        }
+        if immersiveReader?.toggleBookmark() != true { webView.evaluateJavaScript("document.querySelector('#readerBookmarkButton:not([hidden])')?.click()") }
+    }
+    @objc private func readerHighlight(_ sender: Any?) {
+        if immersiveReader?.addHighlight() != true { webView.evaluateJavaScript("window.csLibraryHighlightSelection?.('yellow')") }
+    }
+    @objc private func readerFind(_ sender: Any?) {
+        if immersiveReader?.focusSearch() != true { webView.evaluateJavaScript("window.csLibraryFocusEpubSearch?.()") }
     }
 
-    @objc private func readerFind(_ sender: Any?) {
-        if immersiveReader?.focusSearch() != true {
-            webView.evaluateJavaScript("window.csLibraryFocusEpubSearch?.()")
-        }
-    }
+    // MARK: Menus and alerts
 
     private func configureMenu() {
         let mainMenu = NSMenu()
-
         let appItem = NSMenuItem()
         let appMenu = NSMenu()
         appMenu.addItem(withTitle: "About CS Library", action: #selector(NSApplication.orderFrontStandardAboutPanel(_:)), keyEquivalent: "")
@@ -369,58 +572,76 @@ final class AppDelegate: NSObject, NSApplicationDelegate, WKNavigationDelegate, 
 
         let fileItem = NSMenuItem()
         let fileMenu = NSMenu(title: "File")
-        let openFolderItem = fileMenu.addItem(withTitle: "Open Library Folder", action: #selector(openLibraryFolder(_:)), keyEquivalent: "o")
-        openFolderItem.target = self
+        addMenuItem(fileMenu, "Add Books…", #selector(addBooks(_:)), "o", [.command, .shift])
+        addMenuItem(fileMenu, "Choose Library Folder…", #selector(chooseLibraryFolder(_:)))
+        fileMenu.addItem(.separator())
+        addMenuItem(fileMenu, "Open Library Folder", #selector(openLibraryFolder(_:)), "o")
+        addMenuItem(fileMenu, "Open Reader Data Folder", #selector(openReaderDataFolder(_:)))
+        fileMenu.addItem(.separator())
+        addMenuItem(fileMenu, "Export Reading Data as JSON…", #selector(exportReaderJSON(_:)))
+        addMenuItem(fileMenu, "Export Reading Notebook as Markdown…", #selector(exportReaderMarkdown(_:)))
+        addMenuItem(fileMenu, "Import Reading Data…", #selector(importReaderData(_:)))
         fileItem.submenu = fileMenu
         mainMenu.addItem(fileItem)
 
         let readerItem = NSMenuItem()
         let readerMenu = NSMenu(title: "Reader")
-        let previous = readerMenu.addItem(withTitle: "Previous Page", action: #selector(readerPrevious(_:)), keyEquivalent: "[")
-        previous.keyEquivalentModifierMask = [.command]
-        previous.target = self
-        let next = readerMenu.addItem(withTitle: "Next Page", action: #selector(readerNext(_:)), keyEquivalent: "]")
-        next.keyEquivalentModifierMask = [.command]
-        next.target = self
+        addMenuItem(readerMenu, "Previous Page", #selector(readerPrevious(_:)), "[", [.command])
+        addMenuItem(readerMenu, "Next Page", #selector(readerNext(_:)), "]", [.command])
         readerMenu.addItem(.separator())
-        let find = readerMenu.addItem(withTitle: "Find in Book", action: #selector(readerFind(_:)), keyEquivalent: "f")
-        find.keyEquivalentModifierMask = [.command]
-        find.target = self
-        let bookmark = readerMenu.addItem(withTitle: "Bookmark Page", action: #selector(readerBookmark(_:)), keyEquivalent: "d")
-        bookmark.keyEquivalentModifierMask = [.command]
-        bookmark.target = self
-        let sidebar = readerMenu.addItem(withTitle: "Toggle Contents", action: #selector(readerSidebar(_:)), keyEquivalent: "s")
-        sidebar.keyEquivalentModifierMask = [.command, .shift]
-        sidebar.target = self
-        let focus = readerMenu.addItem(withTitle: "Toggle Focus Mode", action: #selector(readerFocus(_:)), keyEquivalent: "f")
-        focus.keyEquivalentModifierMask = [.command, .shift]
-        focus.target = self
+        addMenuItem(readerMenu, "Find in Book", #selector(readerFind(_:)), "f", [.command])
+        addMenuItem(readerMenu, "Bookmark Position", #selector(readerBookmark(_:)), "d", [.command])
+        addMenuItem(readerMenu, "Highlight Selection", #selector(readerHighlight(_:)), "h", [.command, .shift])
+        addMenuItem(readerMenu, "Toggle Contents", #selector(readerSidebar(_:)), "s", [.command, .shift])
+        addMenuItem(readerMenu, "Toggle Focus Mode", #selector(readerFocus(_:)), "f", [.command, .shift])
         readerItem.submenu = readerMenu
         mainMenu.addItem(readerItem)
 
         let viewItem = NSMenuItem()
         let viewMenu = NSMenu(title: "View")
-        let reloadItem = viewMenu.addItem(withTitle: "Reload Library", action: #selector(reloadLibrary(_:)), keyEquivalent: "r")
-        reloadItem.target = self
+        addMenuItem(viewMenu, "Reload Library", #selector(reloadLibrary(_:)), "r")
         viewMenu.addItem(.separator())
-        let fullScreenItem = viewMenu.addItem(withTitle: "Enter Full Screen", action: #selector(NSWindow.toggleFullScreen(_:)), keyEquivalent: "f")
-        fullScreenItem.keyEquivalentModifierMask = [.command, .control]
+        addMenuItem(viewMenu, "Enter Full Screen", #selector(NSWindow.toggleFullScreen(_:)), "f", [.command, .control])
         viewItem.submenu = viewMenu
         mainMenu.addItem(viewItem)
 
+        let helpItem = NSMenuItem()
+        let helpMenu = NSMenu(title: "Help")
+        addMenuItem(helpMenu, "Library Diagnostics…", #selector(showDiagnostics(_:)))
+        helpItem.submenu = helpMenu
+        mainMenu.addItem(helpItem)
         NSApp.mainMenu = mainMenu
     }
 
-    private func showFatalError(title: String, message: String, terminate: Bool = true) {
+    private func addMenuItem(
+        _ menu: NSMenu,
+        _ title: String,
+        _ action: Selector,
+        _ key: String = "",
+        _ modifiers: NSEvent.ModifierFlags = [.command]
+    ) {
+        let item = menu.addItem(withTitle: title, action: action, keyEquivalent: key)
+        item.target = self
+        item.keyEquivalentModifierMask = key.isEmpty ? [] : modifiers
+    }
+
+    private func showFatalError(title: String, message: String) {
         let alert = NSAlert()
         alert.alertStyle = .critical
         alert.messageText = title
         alert.informativeText = message
+        alert.addButton(withTitle: "Quit")
+        alert.runModal()
+        NSApp.terminate(nil)
+    }
+
+    private func showNonfatalError(title: String, message: String) {
+        let alert = NSAlert()
+        alert.alertStyle = .warning
+        alert.messageText = title
+        alert.informativeText = message
         alert.addButton(withTitle: "OK")
         alert.runModal()
-        if terminate {
-            NSApp.terminate(nil)
-        }
     }
 }
 

@@ -12,6 +12,8 @@ final class NativePDFReaderController: NSObject, NSTextViewDelegate {
     let libraryRoot: URL
     let fileURL: URL
     let title: String
+    let store: ReaderStore
+    let documentRecord: ReaderDocument
 
     var container: NSView?
     var pdfView: PDFView?
@@ -47,6 +49,7 @@ final class NativePDFReaderController: NSObject, NSTextViewDelegate {
     var scaleObserver: NSObjectProtocol?
     var findMatchObserver: NSObjectProtocol?
     var findEndObserver: NSObjectProtocol?
+    var durableAnnotations: [ReaderAnnotation] = []
 
     init(
         window: NSWindow,
@@ -54,7 +57,9 @@ final class NativePDFReaderController: NSObject, NSTextViewDelegate {
         webView: WKWebView,
         libraryRoot: URL,
         fileURL: URL,
-        title: String
+        title: String,
+        store: ReaderStore,
+        documentRecord: ReaderDocument
     ) {
         self.window = window
         self.rootView = rootView
@@ -62,6 +67,8 @@ final class NativePDFReaderController: NSObject, NSTextViewDelegate {
         self.libraryRoot = libraryRoot
         self.fileURL = fileURL
         self.title = title
+        self.store = store
+        self.documentRecord = documentRecord
         super.init()
     }
 
@@ -83,11 +90,48 @@ final class NativePDFReaderController: NSObject, NSTextViewDelegate {
         }
 
         self.document = document
-        stateIdentifier = stableIdentifier(for: fileURL)
-        bookmarks = UserDefaults.standard.array(forKey: stateKey("bookmarks")) as? [Int] ?? []
+        stateIdentifier = documentRecord.id
+        let storedBookmarks = (try? store.bookmarks(documentID: documentRecord.id)) ?? []
+        bookmarks = storedBookmarks.compactMap { pageIndex(from: $0.locator) }
+        var importedLegacyBookmarks = false
+        if bookmarks.isEmpty {
+            bookmarks = UserDefaults.standard.array(forKey: legacyStateKey("bookmarks")) as? [Int] ?? []
+            importedLegacyBookmarks = !bookmarks.isEmpty
+        }
         bookmarks = Array(Set(bookmarks.filter { $0 >= 0 && $0 < document.pageCount })).sorted()
-        pageNotes = UserDefaults.standard.dictionary(forKey: stateKey("notes")) as? [String: String] ?? [:]
-        sidebarVisible = UserDefaults.standard.object(forKey: stateKey("sidebar")) as? Bool ?? true
+        durableAnnotations = (try? store.annotations(documentID: documentRecord.id)) ?? []
+        pageNotes = Dictionary(uniqueKeysWithValues: durableAnnotations.filter { $0.color == "note" }.compactMap { annotation in
+            guard let page = pageIndex(from: annotation.locator) else { return nil }
+            return (String(page), annotation.note)
+        })
+        if pageNotes.isEmpty {
+            pageNotes = UserDefaults.standard.dictionary(forKey: legacyStateKey("notes")) as? [String: String] ?? [:]
+        }
+        if importedLegacyBookmarks {
+            for pageIndex in bookmarks {
+                try? store.saveBookmark(ReaderBookmark(
+                    id: "pdf-bookmark:\(documentRecord.id):\(pageIndex)",
+                    documentID: documentRecord.id,
+                    locator: pdfLocator(page: pageIndex),
+                    label: document.page(at: pageIndex)?.label ?? "Page \(pageIndex + 1)",
+                    createdAt: Date().timeIntervalSince1970
+                ))
+            }
+        }
+        if durableAnnotations.allSatisfy({ $0.color != "note" }) {
+            let now = Date().timeIntervalSince1970
+            for (page, note) in pageNotes {
+                guard let pageIndex = Int(page), !note.isEmpty else { continue }
+                let annotation = ReaderAnnotation(
+                    id: noteIdentifier(page: pageIndex), documentID: documentRecord.id,
+                    locator: pdfLocator(page: pageIndex), quote: "", note: note, color: "note",
+                    createdAt: now, updatedAt: now
+                )
+                try? store.saveAnnotation(annotation)
+                durableAnnotations.append(annotation)
+            }
+        }
+        sidebarVisible = (try? store.preference(key: stateKey("sidebar"))).flatMap(Bool.init) ?? true
 
         let container = NSView(frame: .zero)
         container.translatesAutoresizingMaskIntoConstraints = false
@@ -165,6 +209,8 @@ final class NativePDFReaderController: NSObject, NSTextViewDelegate {
 
         installObservers(for: reader)
         restoreState()
+        restoreHighlights()
+        indexPDFText()
         refreshToolbar()
         refreshBookmarks()
         loadCurrentPageNote()
@@ -282,11 +328,20 @@ final class NativePDFReaderController: NSObject, NSTextViewDelegate {
     func toggleBookmark() {
         guard let document, let page = pdfView?.currentPage else { return }
         let index = document.index(for: page)
+        let identifier = "pdf-bookmark:\(documentRecord.id):\(index)"
         if let existing = bookmarks.firstIndex(of: index) {
             bookmarks.remove(at: existing)
+            try? store.deleteBookmark(id: identifier)
         } else {
             bookmarks.append(index)
             bookmarks.sort()
+            try? store.saveBookmark(ReaderBookmark(
+                id: identifier,
+                documentID: documentRecord.id,
+                locator: pdfLocator(page: index),
+                label: page.label ?? "Page \(index + 1)",
+                createdAt: Date().timeIntervalSince1970
+            ))
         }
         refreshToolbar()
         refreshBookmarks()

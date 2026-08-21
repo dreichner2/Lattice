@@ -1,5 +1,5 @@
 <p align="center">
-  <img src="assets/library-banner.svg" alt="CS Library — a source-traceable shelf for serious computer science study" width="100%">
+  <img src="assets/library-banner.svg" alt="CS Library — a source-traceable shelf and native reading system for serious computer science study" width="100%">
 </p>
 
 <p align="center">
@@ -8,71 +8,126 @@
 </p>
 
 <p align="center">
-  A clean, local-first computer-science library with short filenames, recorded
-  provenance, reproducible checksums, and an actual study path.
+  A local-first macOS library, immersive PDF/EPUB reader, searchable notebook,
+  and structured computer-science study system.
 </p>
 
 ---
 
+CS Library keeps the collection on your Mac, tracks where every item came from,
+and turns PDFs, EPUBs, papers, specifications, and course notes into one reading
+workspace. The native app is the primary experience; the browser interface is a
+portable fallback built from the same shelf UI.
+
 | | Go here when you want to… |
 |---|---|
-| 📚 **[Browse the catalog](CATALOG.md)** | Open every local book or course file, grouped by subject, with provenance kept separate. |
-| 🧭 **[Follow the study guide](STUDY_GUIDE.md)** | Turn the shelf into an ordered curriculum, including a Java-first route. |
+| 📚 **[Browse the catalog](CATALOG.md)** | Inspect every local work, source, edition, access note, and file path. |
+| 🧭 **[Follow the study guide](STUDY_GUIDE.md)** | Work through a staged curriculum with projects and exit criteria. |
+| 🧠 **Use the native notebook** | Search notes, highlights, bookmarks, and indexed book content across the library. |
 | 🧾 **[Read the library rules](LIBRARY_RULES.md)** | Understand naming, deduplication, metadata, and remote-storage policy. |
-| 🔎 **[Inspect provenance](notes/provenance/)** | Review import history, source gates, licenses, and acquisition caveats. |
+| 🔎 **[Inspect provenance](notes/provenance/)** | Review import history, source gates, licenses, and conversion boundaries. |
 
-## Open the Mac app
+## Native Mac app
 
-Double-click **`CS Library.app`** in this folder. It is a native macOS window
-that runs the exact same library interface without opening a normal browser.
-The app starts the private local library service when needed and shuts down the
-copy it owns when you quit.
-
-Rebuild the app after changing its native wrapper:
+Build the application once from the repository:
 
 ```bash
 ./scripts/build-macos-app.sh
+open "CS Library.app"
 ```
 
-The generated app stays local and is intentionally ignored by Git. Its native
-source, icon, build script, and the shared web interface are versioned.
+The build is staged, signed, and verified before replacing an existing app. The
+bundle includes its shelf interface, EPUB enhancements, notebook workspace, and
+local Python service. Book payloads remain external in the selected library
+folder.
+
+On first launch, the app finds the repository automatically or asks you to
+choose a folder containing `CATALOG.md` and `metadata/`. That location is saved,
+so the app does not have to remain beside the repository. Python 3 is currently
+required to run the loopback library service.
+
+### Native PDF reading
+
+PDFs open in a PDFKit workspace with:
+
+- continuous, single-page, and two-page spread modes;
+- page labels, direct page entry, and thumbnails;
+- fit-page, zoom, and focus mode;
+- whole-document search with result navigation;
+- page bookmarks and page notes;
+- persistent yellow text highlights;
+- selected-text quotation capture;
+- background text indexing for full-library search;
+- exact resume position; and
+- active-time reading sessions.
+
+### EPUB reading
+
+EPUBs use the shared WebKit renderer plus a native-only enhancement layer:
+
+- chapter navigation and searchable contents;
+- native notebook search across EPUB chapter text after chapters are opened;
+- chapter/page progress and bookmarks;
+- durable quotations and notes stored in the native database;
+- serif, sans-serif, and code fonts;
+- text size, spacing, page width, paper, sepia, and night tones;
+- focus mode and resize-safe pagination; and
+- active-time reading sessions.
+
+### Unified notebook and search
+
+The native workspace combines reader-created data across every book:
+
+- notes and quotations;
+- PDF and EPUB highlights;
+- bookmarks;
+- active reading sessions; and
+- locally indexed content.
+
+Use **Command-Shift-N** for the notebook. Its search field queries notes and
+locally indexed PDF pages and EPUB chapters.
+
+## Reader data and privacy
+
+Progress, bookmarks, annotations, notes, preferences, and sessions are stored in
+a versioned SQLite database:
+
+```text
+~/Library/Application Support/CS Library/Library.sqlite
+```
+
+The app creates daily local backups and supports complete JSON export/import plus
+human-readable Markdown export. Nothing is uploaded, and no telemetry or cloud
+synchronization is present.
+
+See [Reader data, backup, and recovery](docs/READER_DATA.md).
+
+## Adding material
+
+Use **File → Add Books…** or open a PDF, EPUB, or TXT file with CS Library. The
+app copies it into `books/` with a collision-safe filename. It immediately
+appears as a **New arrival** without requiring a restart. Add catalog metadata
+later when you want the work fully classified and source-traced.
+
+The repository intentionally ignores `books/` and `papers/`; the public remote
+contains no copyrighted payloads.
 
 ## Browser option
 
-Double-click **`open-library.command`** in Finder. It starts the private local
-catalog and opens it in your browser. Keep the small Terminal window open while
-you use the library; press Control-C or close that window when you are done.
-
-You can also launch it from Terminal:
+Double-click `open-library.command`, or run:
 
 ```bash
 ./open-library.command
 ```
 
-The interface provides:
+The browser version provides the complete shelf, metadata search, live file
+updates, the EPUB reader, PDF/TXT access, favorites, reading status, and study
+documents. Native PDFKit, the durable SQLite notebook, native annotations, and
+global indexed search require the Mac app.
 
-- instant search across titles, authors, subjects, formats, and filenames;
-- first-class views for 39 books, 20 lecture PDFs, seven course volumes, two
-  papers, two specifications, and two professional/technical standards;
-- subject shelves plus favorites, currently-reading, and finished views;
-- a responsive grid/list layout and light/dark themes;
-- an in-app EPUB reader with chapter navigation, searchable contents, bookmarks,
-  resume position, typography controls, page tones, and next/previous controls;
-- embedded PDF/text reading plus explicit **Open on Mac** and **Finder** actions;
-- a study guide whose book and course links open the matching local material
-  directly, plus the catalog, provenance notes, rules, and integrity manifest
-  rendered inside a polished library reading desk instead of raw browser pages;
-- live filesystem updates: added PDFs/EPUBs/texts appear immediately as cleanly
-  titled **New arrivals**, and removed files disappear without a reload;
-- one-click opening in the default Mac app or revealing a file in Finder;
-- expandable access to all 20 MIT 6.006 lectures and all seven readable
-  Software Foundations volumes;
-- reading status and recent activity stored only in the local interface.
-
-The server binds only to `127.0.0.1`. It has no upload feature, does not expose
-a network-facing listener, and only permits file actions for readable files
-currently present beneath `books/` or `papers/`. The books remain exactly where
-they are; live discovery indexes them without moving or renaming their bytes.
+The service binds only to `127.0.0.1`. It validates the Host header, selected
+library identity, catalog allowlist, paths, origins, EPUB archive limits, and
+token-protected local file actions.
 
 ## Start here
 
@@ -82,12 +137,12 @@ Choose one lane and begin building things immediately:
   `papers/mit-6006/` → `books/jls-26.pdf` and `books/jvms-26.pdf` as references.
 - **General CS:** `books/think-python-2e.pdf` →
   `books/openstax-intro-cs.pdf` → `books/sicp.pdf` → algorithms and systems.
-- **Already programming:** start with `books/clrs-4e.pdf`,
-  `books/ostep.pdf`, and `books/crafting-interpreters.epub`, while filling math
-  gaps from `books/concrete-math-2e.pdf`.
+- **Already programming:** `books/clrs-4e.pdf` → `books/ostep.pdf` →
+  `books/crafting-interpreters.epub`, filling math gaps with
+  `books/concrete-math-2e.pdf`.
 
-The [study guide](STUDY_GUIDE.md) turns those starting points into a full
-sequence with projects and exit criteria.
+The [study guide](STUDY_GUIDE.md) expands those entry points into ten stages with
+projects and exit criteria.
 
 ## Shelf at a glance
 
@@ -103,7 +158,7 @@ sequence with projects and exit criteria.
 | Computer graphics & vision | 2 | PBRT 4e or Szeliski |
 | Ethics & professional practice | 1 | ACM Code of Ethics |
 
-## Everyday commands
+## Everyday shelf commands
 
 Run these from the repository root:
 
@@ -111,13 +166,13 @@ Run these from the repository root:
 # See what is physically present on this Mac
 python3 scripts/fetch.py list
 
-# Validate format, byte count, metadata path, and SHA-256 for every artifact
+# Validate format, byte count, metadata path, and SHA-256
 python3 scripts/fetch.py verify
 
-# Check metadata coverage, filename hygiene, manifest parity, and duplicates
+# Check metadata coverage, filenames, manifest parity, and duplicates
 python3 scripts/fetch.py audit
 
-# Browse curated, authorized downloads
+# Browse curated authorized downloads
 python3 scripts/fetch.py book
 python3 scripts/fetch.py sets
 
@@ -127,82 +182,111 @@ python3 scripts/fetch.py book mit-6006
 python3 scripts/fetch.py download 1706.03762
 python3 scripts/fetch.py rfc 9110
 
-# Run deterministic tests without touching the network
+# Deterministic fetch-tool tests
 python3 scripts/fetch.py self-test
 
-# Update only after an intentional shelf change
+# Update the manifest after an intentional shelf change
 python3 scripts/fetch.py manifest
 ```
 
-Downloads are streamed to a temporary file, validated before installation,
-hashed, and recorded under `metadata/`. ZIP, EPUB, and TGZ archives are opened
-and structurally tested during verification.
+Downloads are streamed into a temporary file, validated before installation,
+hashed, and recorded under `metadata/`. ZIP, EPUB, and TGZ archives are
+structurally checked during verification.
 
-## Clean layout
+## Development and tests
+
+Portable checks:
+
+```bash
+python3 -m py_compile scripts/library_ui.py
+python3 -m unittest discover -s tests -p 'test_*.py' -v
+node --check ui/app.js
+node --check native/ImmersiveEPUB.js
+node --check native/LibraryWorkspace.js
+node --test tests/test_immersive_epub.mjs tests/test_library_workspace.mjs
+bash -n scripts/build-macos-app.sh
+```
+
+The macOS workflow additionally:
+
+- compiles and exercises the SQLite reader store;
+- compiles the full AppKit/PDFKit application;
+- validates bundled resources and `Info.plist`;
+- verifies the ad-hoc code signature; and
+- publishes a downloadable app artifact for each pull request run.
+
+See [Architecture](ARCHITECTURE.md), [Security](SECURITY.md), and
+[Contributing](CONTRIBUTING.md).
+
+## Repository layout
 
 ```text
 cs-library/
-├── README.md                  # landing page
-├── CATALOG.md                 # authoritative, subject-grouped shelf
-├── STUDY_GUIDE.md             # learning order and project checkpoints
-├── LIBRARY_RULES.md           # naming, dedupe, provenance, remote policy
-├── assets/                    # GitHub-facing artwork
-├── metadata/                  # one tracked JSON record per local artifact
-├── manifests/                 # stable SHA-256 inventories
-├── notes/provenance/          # acquisition and license history
-├── native/                    # macOS WKWebView wrapper, plist, and app icon
-├── scripts/fetch.py           # fetch, list, verify, audit, manifest
-├── scripts/build_readable_books.py # reproducible source-to-EPUB conversion
-├── scripts/build-macos-app.sh # builds the double-clickable native app
-├── scripts/library_ui.py      # loopback-only virtual-library server
-├── ui/                        # local bookshelf interface
-├── CS Library.app/            # generated local Mac app; ignored by Git
-├── open-library.command       # double-click Mac launcher
-├── books/                     # local payloads; ignored by Git
-└── papers/                    # local payloads; ignored by Git
+├── README.md
+├── CATALOG.md
+├── STUDY_GUIDE.md
+├── LIBRARY_RULES.md
+├── ARCHITECTURE.md
+├── SECURITY.md
+├── CONTRIBUTING.md
+├── CHANGELOG.md
+├── docs/READER_DATA.md
+├── assets/
+├── metadata/
+├── manifests/
+├── notes/provenance/
+├── native/
+│   ├── CSLibraryApp.swift
+│   ├── ReaderStore.swift
+│   ├── ReaderBridge.swift
+│   ├── NativePDFReader*.swift
+│   ├── ImmersiveEPUB.js
+│   └── LibraryWorkspace.js
+├── scripts/
+│   ├── library_ui.py
+│   ├── build-macos-app.sh
+│   ├── fetch.py
+│   └── build_readable_books.py
+├── tests/
+├── ui/
+├── books/                     # local and ignored
+└── papers/                    # local and ignored
 ```
-
-Book filenames are lowercase kebab-case, descriptive, and capped at 48
-characters. Course material uses predictable sequence names such as
-`papers/mit-6006/lec-01.pdf`. Metadata lives separately so the reading folders
-contain reading material—not bookkeeping clutter.
 
 ## Why the remote is metadata-first
 
-This shelf mixes open works, author-authorized personal copies, and legacy
-imports whose redistribution history was not preserved. GitHub therefore
-stores the catalog, metadata, checksums, provenance, and fetch tooling, while
-the book and paper payloads remain local. This avoids accidentally
-republishing copyrighted material and keeps the repository fast to clone.
+This shelf mixes open works, publisher-authorized personal copies, and legacy
+imports whose redistribution history was not preserved. GitHub stores the
+catalog, metadata, checksums, provenance, and tooling, while reading payloads
+remain local. This keeps the remote lawful, fast to clone, and useful for
+answering:
 
-The remote is still enough to answer: *What belongs on the shelf? Which exact
-bytes did I verify? Where did an authorized copy come from? What is missing?*
-For freely downloadable entries, `scripts/fetch.py` can repopulate the local
-payload from the recorded official source.
+- What belongs on the shelf?
+- Which exact bytes were verified?
+- Where did an authorized copy come from?
+- Which works can be restored from an official source?
+- What is missing or newly added?
 
 ## Important access boundary
 
-OpenStax's current terms permit human reading but prohibit using its textbooks
-for LLM training or otherwise ingesting them into generative-AI offerings
-without permission. AI workflows must exclude `books/openstax-*` unless
-OpenStax has granted applicable permission. Other works have their own terms;
-“free to read” never automatically means “free to redistribute or train on.”
+“Free to read” does not automatically mean “free to redistribute, transform, or
+process with generative AI.” Each work retains its own terms. In particular,
+the current OpenStax terms permit human reading but restrict generative-AI
+training or ingestion without permission. Local intelligence features must
+honor the access metadata and exclude restricted works unless permission exists.
 
 ## Current integrity state
 
 - 47 logical works represented by 72 artifacts
-- 72/72 artifacts pass full format, size, metadata, and SHA-256 verification
+- 72/72 artifacts passed format, size, metadata, and SHA-256 verification on the
+  maintained local shelf
 - 0 byte-identical duplicate groups
 - 0 filenames outside the short kebab-case convention
-- OSTEP chapter copies and the Crafting Interpreters sample removed after their
+- OSTEP chapter copies and the Crafting Interpreters sample were removed after
   complete retained editions were verified
-- Ten web/source bundles replaced by searchable EPUB editions after structural
-  and visual validation; original hashes and conversion boundaries are recorded
-  under `notes/provenance/`
-- Canonical inventory: `manifests/library.sha256`
+- ten web/source bundles were converted into searchable EPUB editions with
+  conversion boundaries recorded under `notes/provenance/`
+- canonical inventory: `manifests/library.sha256`
 
-The personalized *Distributed Systems, 4e* and *Computer Vision: Algorithms and
-Applications, 2e* copies were added after the user completed their official
-forms. The user also supplied *Introduction to Probability, 2e*, whose official
-author-linked Drive viewer had blocked automated downloading. No access gate
-was bypassed by the library tooling.
+The repository currently does not declare a general software license. Book
+rights and source terms are tracked independently from the application source.

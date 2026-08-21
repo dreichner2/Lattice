@@ -1,53 +1,31 @@
-name: Apply and validate CS Library upgrade
+name: Native macOS app
 
 on:
   pull_request:
-    paths:
-      - ".github/upgrade/**"
-      - ".github/workflows/native-macos.yml"
+  push:
+    branches:
+      - main
+      - codex/native-epub-reader
+      - codex/best-in-class-library
   workflow_dispatch:
 
 permissions:
-  contents: write
+  contents: read
 
 jobs:
-  apply-and-validate:
+  build:
     runs-on: macos-15
     timeout-minutes: 25
     steps:
-      - name: Check out pull request branch
+      - name: Check out source
         uses: actions/checkout@v4
-        with:
-          ref: ${{ github.head_ref }}
-          fetch-depth: 0
-
-      - name: Detect upgrade payload
-        id: payload
-        shell: bash
-        run: |
-          if compgen -G '.github/upgrade/payload.b64.part*' > /dev/null; then
-            echo "present=true" >> "$GITHUB_OUTPUT"
-          else
-            echo "present=false" >> "$GITHUB_OUTPUT"
-          fi
-
-      - name: Apply upgrade payload
-        if: steps.payload.outputs.present == 'true'
-        shell: bash
-        run: |
-          cat .github/upgrade/payload.b64.part* | base64 --decode > /tmp/cs-library-upgrade.tar.gz
-          echo "cfaa2aec74d63f64024184f22dce2fb392eec18c3a39605bba14d98ffd763924  /tmp/cs-library-upgrade.tar.gz" | shasum -a 256 -c -
-          tar -tzf /tmp/cs-library-upgrade.tar.gz > /tmp/cs-library-upgrade-files.txt
-          tar -xzf /tmp/cs-library-upgrade.tar.gz -C .
 
       - name: Validate Python service
-        if: steps.payload.outputs.present == 'true'
         run: |
           python3 -m py_compile scripts/library_ui.py
           python3 -m unittest discover -s tests -p 'test_*.py' -v
 
       - name: Validate reader JavaScript
-        if: steps.payload.outputs.present == 'true'
         run: |
           node --check native/ImmersiveEPUB.js
           node --check native/LibraryWorkspace.js
@@ -55,7 +33,6 @@ jobs:
           node --test tests/test_immersive_epub.mjs tests/test_library_workspace.mjs
 
       - name: Validate durable reader store
-        if: steps.payload.outputs.present == 'true'
         run: |
           swiftc -O \
             -framework CryptoKit \
@@ -68,7 +45,6 @@ jobs:
           /tmp/reader-store-smoke
 
       - name: Build and verify CS Library.app
-        if: steps.payload.outputs.present == 'true'
         run: |
           ./scripts/build-macos-app.sh
           test -x "CS Library.app/Contents/MacOS/CS Library"
@@ -80,31 +56,13 @@ jobs:
           /usr/bin/codesign --verify --deep --strict "CS Library.app"
           /usr/bin/plutil -lint "CS Library.app/Contents/Info.plist"
 
-      - name: Commit validated upgrade
-        if: steps.payload.outputs.present == 'true'
-        shell: bash
-        env:
-          HEAD_BRANCH: ${{ github.head_ref }}
-        run: |
-          git config user.name "github-actions[bot]"
-          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
-          while IFS= read -r path; do
-            [[ -n "$path" ]] && git add -- "$path"
-          done < /tmp/cs-library-upgrade-files.txt
-          git rm -- .github/upgrade/payload.b64.part*
-          git diff --cached --check
-          git commit -m "feat: turn CS Library into a durable reading system"
-          git push origin "HEAD:${HEAD_BRANCH}"
-
-      - name: Package validated app
-        if: steps.payload.outputs.present == 'true'
+      - name: Package verified app
         run: /usr/bin/ditto -c -k --keepParent "CS Library.app" "CS-Library-macOS.zip"
 
-      - name: Upload validated app
-        if: steps.payload.outputs.present == 'true'
+      - name: Upload verified app
         uses: actions/upload-artifact@v4
         with:
-          name: CS-Library-macOS-upgrade
+          name: CS-Library-macOS-${{ github.sha }}
           path: CS-Library-macOS.zip
           if-no-files-found: error
           retention-days: 14

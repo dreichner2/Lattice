@@ -14,6 +14,7 @@ import base64
 import hashlib
 import json
 import mimetypes
+import os
 import posixpath
 import re
 import secrets
@@ -69,10 +70,21 @@ MATERIAL_LABELS = {
 }
 READABLE_SUFFIXES = frozenset({".epub", ".pdf", ".txt"})
 WATCH_INTERVAL_SECONDS = 0.65
+PROTOCOL_VERSION = 2
 EPUB_XML_LIMIT = 8 * 1024 * 1024
 EPUB_RESOURCE_LIMIT = 256 * 1024 * 1024
+EPUB_ENTRY_LIMIT = 20_000
+EPUB_TOTAL_LIMIT = 1024 * 1024 * 1024
+EPUB_COMPRESSION_RATIO_LIMIT = 200
+EPUB_ACTIVE_SUFFIXES = frozenset({".js", ".mjs", ".wasm"})
 EPUB_DOCUMENT_TYPES = frozenset({"application/xhtml+xml", "text/html"})
 EPUB_OPS_NAMESPACE = "http://www.idpf.org/2007/ops"
+
+
+def library_identity(root: Path) -> str:
+    """Return the same stable canonical-root identity used by the native app."""
+    canonical = root.expanduser().resolve()
+    return hashlib.sha256(f"cs-library:{canonical}".encode("utf-8")).hexdigest()
 
 
 def slugify(value: str) -> str:
@@ -513,15 +525,31 @@ def _epub_url(book_key: str, entry: str, fragment: str = "") -> str:
 
 def _epub_archive_entries(archive: zipfile.ZipFile) -> dict[str, zipfile.ZipInfo]:
     entries: dict[str, zipfile.ZipInfo] = {}
+    total_size = 0
     for info in archive.infolist():
         if info.is_dir():
             continue
+        if len(entries) >= EPUB_ENTRY_LIMIT:
+            raise ValueError("EPUB contains too many resources")
         try:
             normalized = normalize_epub_entry(info.filename)
         except ValueError:
-            continue
+            raise ValueError("EPUB contains an unsafe resource path") from None
         if normalized in entries:
             raise ValueError(f"EPUB contains a duplicate resource: {normalized}")
+        unix_mode = (info.external_attr >> 16) & 0o170000
+        if unix_mode == 0o120000:
+            raise ValueError(f"EPUB contains a symbolic link: {normalized}")
+        if info.flag_bits & 0x1:
+            raise ValueError(f"EPUB contains an encrypted resource: {normalized}")
+        if PurePosixPath(normalized).suffix.lower() in EPUB_ACTIVE_SUFFIXES:
+            raise ValueError(f"EPUB contains unsupported active content: {normalized}")
+        total_size += info.file_size
+        if total_size > EPUB_TOTAL_LIMIT:
+            raise ValueError("EPUB expands beyond the safe size limit")
+        ratio = info.file_size / max(info.compress_size, 1)
+        if info.file_size > EPUB_XML_LIMIT and ratio > EPUB_COMPRESSION_RATIO_LIMIT:
+            raise ValueError(f"EPUB resource has an unsafe compression ratio: {normalized}")
         entries[normalized] = info
     return entries
 
@@ -789,8 +817,23 @@ class LibraryHTTPServer(ThreadingHTTPServer):
     daemon_threads = True
     allow_reuse_address = True
 
-    def __init__(self, address: tuple[str, int], root: Path = REPO_ROOT):
+    def __init__(
+        self,
+        address: tuple[str, int],
+        root: Path = REPO_ROOT,
+        *,
+        ui_root: Path | None = None,
+        parent_pid: int | None = None,
+    ):
         self.root = root.resolve()
+        default_ui = self.root / "ui" if (self.root / "ui" / "index.html").is_file() else UI_ROOT
+        self.ui_root = (ui_root or default_ui).resolve()
+        if not (self.root / "CATALOG.md").is_file() or not (self.root / "metadata").is_dir():
+            raise ValueError(f"Not a CS Library root: {self.root}")
+        if not (self.ui_root / "index.html").is_file():
+            raise ValueError(f"CS Library UI is missing: {self.ui_root}")
+        self.library_id = library_identity(self.root)
+        self.parent_pid = parent_pid
         self.library = build_library(self.root)
         self.allowed_paths = frozenset(file["path"] for file in self.library["materials"])
         self._epub_cache: dict[
@@ -818,6 +861,14 @@ class LibraryHTTPServer(ThreadingHTTPServer):
             daemon=True,
         )
         self._watcher.start()
+        self._parent_watcher: threading.Thread | None = None
+        if parent_pid is not None:
+            self._parent_watcher = threading.Thread(
+                target=self._watch_parent,
+                name="cs-library-parent-watcher",
+                daemon=True,
+            )
+            self._parent_watcher.start()
 
     def epub_package(
         self,
@@ -849,11 +900,25 @@ class LibraryHTTPServer(ThreadingHTTPServer):
         with self._state_condition:
             return {
                 "app": "cs-library",
+                "protocolVersion": PROTOCOL_VERSION,
+                "libraryId": self.library_id,
+                "root": str(self.root),
                 "status": "ok",
                 "revision": self.revision,
                 "watching": not self._watcher_stop.is_set(),
                 "refreshError": self.last_refresh_error,
             }
+
+    def _watch_parent(self) -> None:
+        assert self.parent_pid is not None
+        while not self._watcher_stop.wait(1.0):
+            try:
+                os.kill(self.parent_pid, 0)
+            except ProcessLookupError:
+                threading.Thread(target=self.shutdown, daemon=True).start()
+                return
+            except PermissionError:
+                continue
 
     def wait_for_revision(self, revision: int, timeout: float) -> tuple[int, dict[str, Any]]:
         with self._state_condition:
@@ -906,6 +971,8 @@ class LibraryHTTPServer(ThreadingHTTPServer):
         super().server_close()
         if self._watcher.is_alive() and threading.current_thread() is not self._watcher:
             self._watcher.join(timeout=2)
+        if self._parent_watcher and self._parent_watcher.is_alive() and threading.current_thread() is not self._parent_watcher:
+            self._parent_watcher.join(timeout=2)
 
     def handle_error(self, request: Any, client_address: Any) -> None:
         """Ignore routine disconnects from closed tabs and native app windows."""
@@ -1053,7 +1120,7 @@ class LibraryRequestHandler(BaseHTTPRequestHandler):
             filename, content_type = static
             self._send_bytes(
                 HTTPStatus.OK,
-                (self.server.root / "ui" / filename).read_bytes(),
+                (self.server.ui_root / filename).read_bytes(),
                 content_type,
                 cache="no-cache",
                 head_only=head_only,
@@ -1159,6 +1226,8 @@ class LibraryRequestHandler(BaseHTTPRequestHandler):
             relative = decode_epub_key(book_key)
             entry = normalize_epub_entry(urllib.parse.unquote(encoded_entry))
             _package, media_types, path = self.server.epub_package(relative)
+            if entry not in media_types:
+                raise ValueError("EPUB resource is not declared by the package")
             archive = zipfile.ZipFile(path)
             try:
                 info = archive.getinfo(entry)
@@ -1257,24 +1326,47 @@ class LibraryRequestHandler(BaseHTTPRequestHandler):
         self._send_json(HTTPStatus.OK, {"ok": True, "action": action, "path": relative})
 
 
-def find_running_library(port: int) -> str | None:
+def find_running_library(port: int, expected_library_id: str | None = None) -> str | None:
     url = f"http://127.0.0.1:{port}"
     try:
         with urllib.request.urlopen(f"{url}/api/health", timeout=0.4) as response:
             payload = json.loads(response.read())
     except (OSError, urllib.error.URLError, json.JSONDecodeError):
         return None
-    return url if payload.get("app") == "cs-library" else None
+    if payload.get("app") != "cs-library" or payload.get("protocolVersion") != PROTOCOL_VERSION:
+        return None
+    if expected_library_id is not None and payload.get("libraryId") != expected_library_id:
+        return None
+    return url
 
 
-def create_server(port: int, root: Path = REPO_ROOT) -> LibraryHTTPServer:
-    return LibraryHTTPServer(("127.0.0.1", port), root=root)
+def create_server(
+    port: int,
+    root: Path = REPO_ROOT,
+    *,
+    ui_root: Path | None = None,
+    parent_pid: int | None = None,
+) -> LibraryHTTPServer:
+    return LibraryHTTPServer(
+        ("127.0.0.1", port),
+        root=root,
+        ui_root=ui_root,
+        parent_pid=parent_pid,
+    )
 
 
-def run_server(port: int, *, open_browser: bool = True) -> int:
+def run_server(
+    port: int,
+    *,
+    root: Path = REPO_ROOT,
+    ui_root: Path | None = None,
+    parent_pid: int | None = None,
+    open_browser: bool = True,
+) -> int:
     candidates = [port] if port == 0 else list(range(port, min(port + 20, 65536)))
+    expected_library_id = library_identity(root)
     for candidate in candidates:
-        if candidate and (running_url := find_running_library(candidate)):
+        if candidate and (running_url := find_running_library(candidate, expected_library_id)):
             print(f"CS Library is already running at {running_url}")
             if open_browser:
                 webbrowser.open(running_url)
@@ -1283,7 +1375,7 @@ def run_server(port: int, *, open_browser: bool = True) -> int:
     server: LibraryHTTPServer | None = None
     for candidate in candidates:
         try:
-            server = create_server(candidate)
+            server = create_server(candidate, root=root, ui_root=ui_root, parent_pid=parent_pid)
             break
         except OSError:
             continue
@@ -1313,6 +1405,9 @@ def run_server(port: int, *, open_browser: bool = True) -> int:
 def build_parser() -> argparse.ArgumentParser:
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--port", type=int, default=8765, help="Preferred local port")
+    parser.add_argument("--root", type=Path, default=REPO_ROOT, help="CS Library content root")
+    parser.add_argument("--ui-root", type=Path, default=None, help="Bundled UI resource directory")
+    parser.add_argument("--parent-pid", type=int, default=None, help="Exit when this parent process exits")
     parser.add_argument("--no-browser", action="store_true", help="Do not open a browser")
     return parser
 
@@ -1322,7 +1417,20 @@ def main(argv: list[str] | None = None) -> int:
     if args.port < 0 or args.port > 65535:
         print("Port must be between 0 and 65535.", file=sys.stderr)
         return 2
-    return run_server(args.port, open_browser=not args.no_browser)
+    if args.parent_pid is not None and args.parent_pid <= 1:
+        print("Parent PID must be greater than 1.", file=sys.stderr)
+        return 2
+    try:
+        return run_server(
+            args.port,
+            root=args.root,
+            ui_root=args.ui_root,
+            parent_pid=args.parent_pid,
+            open_browser=not args.no_browser,
+        )
+    except (OSError, ValueError) as exc:
+        print(str(exc), file=sys.stderr)
+        return 1
 
 
 if __name__ == "__main__":
