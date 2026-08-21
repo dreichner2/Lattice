@@ -52,7 +52,14 @@ jobs:
               archive.extractall(root, members=members, filter='data')
           PY
           python3 scripts/apply_cross_platform_patch.py
-          rm -f scripts/cross_platform_payload.part-* scripts/cross_platform_payload.ready .github/workflows/bootstrap-cross-platform.yml
+          rm -f \
+            .github/workflows/apply-cross-platform-patch.yml \
+            .github/workflows/quality.yml \
+            .github/workflows/windows-app.yml
+          git checkout HEAD -- \
+            .github/workflows/bootstrap-cross-platform.yml \
+            .github/workflows/native-macos.yml
+          rm -f scripts/cross_platform_payload.part-* scripts/cross_platform_payload.ready
 
       - name: Validate generated source
         run: |
@@ -73,10 +80,6 @@ jobs:
               'CONTRIBUTING.md',
               'open-library.command',
               'docs/ARCHITECTURE.md',
-              '.github/workflows/apply-cross-platform-patch.yml',
-              '.github/workflows/native-macos.yml',
-              '.github/workflows/quality.yml',
-              '.github/workflows/windows-app.yml',
               'scripts/apply_cross_platform_patch.py',
               'scripts/build-macos-app.sh',
               'scripts/cross_platform_server.py',
@@ -104,7 +107,6 @@ jobs:
           git config user.name "github-actions[bot]"
           git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
           git ls-files -z \
-            '.github/workflows/bootstrap-cross-platform.yml' \
             'scripts/cross_platform_payload.part-*' \
             'scripts/cross_platform_payload.ready' | xargs -0 git add -u --
           xargs -0 git add -- < .stage-paths
