@@ -4,7 +4,12 @@ on:
   pull_request:
     paths:
       - "native/**"
-      - "scripts/build-macos-app.sh"
+      - "ui/**"
+      - "scripts/**"
+      - "tests/**"
+      - "README.md"
+      - "ARCHITECTURE.md"
+      - "SECURITY.md"
       - ".github/workflows/native-macos.yml"
   workflow_dispatch:
 
@@ -14,15 +19,27 @@ permissions:
 jobs:
   build:
     runs-on: macos-15
-    timeout-minutes: 10
+    timeout-minutes: 20
     steps:
       - name: Check out repository
         uses: actions/checkout@v4
 
-      - name: Check reader JavaScript
+      - name: Archive source snapshot
+        run: |
+          /usr/bin/ditto -c -k --sequesterRsrc --keepParent . source-snapshot.zip
+
+      - name: Upload source snapshot
+        uses: actions/upload-artifact@v4
+        with:
+          name: source-snapshot
+          path: source-snapshot.zip
+          retention-days: 3
+
+      - name: Check JavaScript and shell
         run: |
           node --check native/ImmersiveEPUB.js
           node --check ui/app.js
+          /bin/zsh -n scripts/build-macos-app.sh
 
       - name: Test native reader JavaScript
         run: node --test tests/test_immersive_epub.mjs
@@ -34,3 +51,11 @@ jobs:
         run: |
           test -x "CS Library.app/Contents/MacOS/CS Library"
           /usr/bin/codesign --verify --deep --strict "CS Library.app"
+          /usr/bin/plutil -lint "CS Library.app/Contents/Info.plist"
+
+      - name: Upload built app
+        uses: actions/upload-artifact@v4
+        with:
+          name: CS-Library-macOS
+          path: CS Library.app
+          retention-days: 7
