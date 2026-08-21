@@ -9,3 +9,6 @@ __pycache__/
 # personal-use downloads, and legacy imports with unverified redistribution.
 /books/
 /papers/
+
+# Local UI/runtime state never belongs in the repository.
+/.library-cache/

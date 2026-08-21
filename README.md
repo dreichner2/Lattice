@@ -21,6 +21,38 @@
 | 🧾 **[Read the library rules](LIBRARY_RULES.md)** | Understand naming, deduplication, metadata, and remote-storage policy. |
 | 🔎 **[Inspect provenance](notes/provenance/)** | Review import history, source gates, licenses, and acquisition caveats. |
 
+## Open the virtual library
+
+Double-click **`open-library.command`** in Finder. It starts the private local
+catalog and opens it in your browser. Keep the small Terminal window open while
+you use the library; press Control-C or close that window when you are done.
+
+You can also launch it from Terminal:
+
+```bash
+./open-library.command
+```
+
+The interface provides:
+
+- instant search across titles, authors, subjects, formats, and filenames;
+- first-class views for 39 books, 20 lecture PDFs, seven course volumes, two
+  papers, two specifications, and two professional/technical standards;
+- subject shelves plus favorites, currently-reading, and finished views;
+- a responsive grid/list layout and light/dark themes;
+- direct in-browser reading for PDFs and text;
+- one-click opening in the default Mac app or revealing a file in Finder;
+- expandable access to all 20 MIT 6.006 lectures and all seven Software
+  Foundations archives;
+- a library desk for the study guide, provenance/cleanup notes, rules, raw
+  catalog, and SHA-256 integrity manifest;
+- reading status and recent activity stored only in this browser.
+
+The server binds only to `127.0.0.1`. It has no upload feature, does not expose
+a network-facing listener, and only permits file actions for paths represented
+by the catalog metadata. The books remain exactly where they are under
+`books/` and `papers/`.
+
 ## Start here
 
 Choose one lane and begin building things immediately:
@@ -99,6 +131,9 @@ cs-library/
 ├── manifests/                 # stable SHA-256 inventories
 ├── notes/provenance/          # acquisition and license history
 ├── scripts/fetch.py           # fetch, list, verify, audit, manifest
+├── scripts/library_ui.py      # loopback-only virtual-library server
+├── ui/                        # local bookshelf interface
+├── open-library.command       # double-click Mac launcher
 ├── books/                     # local payloads; ignored by Git
 └── papers/                    # local payloads; ignored by Git
 ```

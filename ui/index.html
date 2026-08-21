@@ -1,0 +1,171 @@
+<!doctype html>
+<html lang="en" data-theme="light">
+  <head>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <meta name="color-scheme" content="light dark">
+    <meta name="theme-color" content="#f2eee5">
+    <title>CS Library</title>
+    <link rel="stylesheet" href="/styles.css">
+  </head>
+  <body>
+    <div class="app-shell">
+      <aside class="sidebar" id="sidebar" aria-label="Library navigation">
+        <div class="brand">
+          <div class="brand-mark" aria-hidden="true">
+            <span></span><span></span><span></span>
+          </div>
+          <div>
+            <strong>CS Library</strong>
+            <small>Personal collection</small>
+          </div>
+        </div>
+
+        <nav class="primary-nav" aria-label="Collection views">
+          <button class="nav-item is-active" type="button" data-view="all">
+            <span class="nav-icon" aria-hidden="true">⌂</span>
+            <span>All works</span>
+            <span class="nav-count" id="allCount">—</span>
+          </button>
+          <button class="nav-item" type="button" data-view="files">
+            <span class="nav-icon" aria-hidden="true">▤</span>
+            <span>All files</span>
+            <span class="nav-count" id="allFileCount">—</span>
+          </button>
+          <button class="nav-item" type="button" data-view="favorites">
+            <span class="nav-icon" aria-hidden="true">♡</span>
+            <span>Favorites</span>
+            <span class="nav-count" id="favoriteCount">0</span>
+          </button>
+          <button class="nav-item" type="button" data-view="reading">
+            <span class="nav-icon" aria-hidden="true">◐</span>
+            <span>Reading</span>
+            <span class="nav-count" id="readingCount">0</span>
+          </button>
+          <button class="nav-item" type="button" data-view="finished">
+            <span class="nav-icon" aria-hidden="true">✓</span>
+            <span>Finished</span>
+            <span class="nav-count" id="finishedCount">0</span>
+          </button>
+        </nav>
+
+        <div class="nav-section material-section">
+          <p class="nav-label">Materials</p>
+          <nav id="materialNav" class="shelf-nav" aria-label="Material types"></nav>
+        </div>
+
+        <div class="nav-section">
+          <p class="nav-label">Shelves</p>
+          <nav id="shelfNav" class="shelf-nav" aria-label="Subject shelves"></nav>
+        </div>
+
+        <div class="sidebar-footer">
+          <div class="document-links">
+            <a href="/document/STUDY_GUIDE.md" target="_blank">Study guide <span>↗</span></a>
+            <a href="/document/CATALOG.md" target="_blank">Raw catalog <span>↗</span></a>
+            <a href="/document/notes/provenance/library-cleanup-2026-08-20.md" target="_blank">Source & cleanup notes <span>↗</span></a>
+            <a href="/document/manifests/library.sha256" target="_blank">Integrity manifest <span>↗</span></a>
+            <a href="/document/LIBRARY_RULES.md" target="_blank">Library rules <span>↗</span></a>
+          </div>
+          <div class="local-badge">
+            <span class="status-dot" aria-hidden="true"></span>
+            <div><strong>Local & private</strong><small>Files stay on this Mac</small></div>
+          </div>
+        </div>
+      </aside>
+
+      <div class="mobile-scrim" id="mobileScrim"></div>
+
+      <main class="main-content">
+        <header class="topbar">
+          <button class="icon-button mobile-menu" id="menuButton" type="button" aria-label="Open navigation">☰</button>
+          <label class="search-box" for="searchInput">
+            <span aria-hidden="true">⌕</span>
+            <input id="searchInput" type="search" autocomplete="off" placeholder="Search books, authors, subjects…">
+            <kbd>/</kbd>
+          </label>
+          <div class="topbar-actions">
+            <button class="icon-button" id="themeButton" type="button" aria-label="Switch color theme">◒</button>
+            <button class="avatar" type="button" aria-label="Personal local library">DL</button>
+          </div>
+        </header>
+
+        <div class="page-content">
+          <section class="hero" aria-labelledby="pageTitle">
+            <div class="hero-copy">
+              <p class="eyebrow"><span></span> Your private reading room</p>
+              <h1 id="pageTitle">Your computer science library</h1>
+              <p class="hero-description">Every book, paper, specification, and course file—organized into a shelf you can actually use.</p>
+              <div class="hero-actions">
+                <button class="button button-primary" id="randomButton" type="button">Surprise me <span aria-hidden="true">↗</span></button>
+                <button class="button button-quiet" id="focusSearchButton" type="button">Find a book</button>
+              </div>
+            </div>
+            <div class="hero-stats" aria-label="Library statistics">
+              <div class="stat"><strong id="workStat">—</strong><span>works</span></div>
+              <div class="stat"><strong id="artifactStat">—</strong><span>files</span></div>
+              <div class="stat"><strong id="sizeStat">—</strong><span>local shelf</span></div>
+              <div class="stat integrity-stat"><strong id="integrityStat">—</strong><span>available</span></div>
+            </div>
+          </section>
+
+          <section class="recent-section" id="recentSection" hidden aria-labelledby="recentTitle">
+            <div class="section-heading compact">
+              <div><p class="eyebrow">Pick up where you left off</p><h2 id="recentTitle">Recently opened</h2></div>
+              <button class="text-button" id="clearRecentButton" type="button">Clear recent</button>
+            </div>
+            <div class="recent-row" id="recentRow"></div>
+          </section>
+
+          <section class="library-section" aria-labelledby="sectionTitle">
+            <div class="section-heading">
+              <div>
+                <p class="eyebrow" id="sectionEyebrow">The complete collection</p>
+                <h2 id="sectionTitle">All books</h2>
+              </div>
+              <p class="result-count" id="resultCount">Loading your shelf…</p>
+            </div>
+
+            <div class="toolbar" aria-label="Catalog controls">
+              <div class="subject-chips" id="subjectChips" aria-label="Subject filters"></div>
+              <div class="toolbar-right">
+                <label class="sort-control">Sort
+                  <select id="sortSelect">
+                    <option value="title">Title</option>
+                    <option value="author">Author</option>
+                    <option value="subject">Shelf</option>
+                    <option value="recent">Recently opened</option>
+                  </select>
+                </label>
+                <button class="view-button" id="viewButton" type="button" aria-label="Switch to list view">☷</button>
+              </div>
+            </div>
+
+            <div class="library-grid" id="libraryGrid" aria-live="polite">
+              <div class="loading-card"><span></span><p>Arranging the shelves…</p></div>
+            </div>
+
+            <div class="empty-state" id="emptyState" hidden>
+              <div class="empty-mark" aria-hidden="true">⌕</div>
+              <h3>No books found</h3>
+              <p>Try another title, author, or shelf.</p>
+              <button class="button button-quiet" id="clearFiltersButton" type="button">Clear filters</button>
+            </div>
+          </section>
+        </div>
+      </main>
+    </div>
+
+    <div class="drawer-scrim" id="drawerScrim"></div>
+    <aside class="detail-drawer" id="detailDrawer" aria-label="Book details" aria-hidden="true">
+      <div class="drawer-header">
+        <p>Book details</p>
+        <button class="icon-button" id="drawerClose" type="button" aria-label="Close details">×</button>
+      </div>
+      <div class="drawer-body" id="drawerBody"></div>
+    </aside>
+
+    <div class="toast-region" id="toastRegion" aria-live="polite"></div>
+    <script src="/app.js" defer></script>
+  </body>
+</html>
