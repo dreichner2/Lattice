@@ -1,6 +1,17 @@
 name: Native macOS app
 
 on:
+  push:
+    branches:
+      - codex/cross-platform-library
+    paths:
+      - "native/**"
+      - "scripts/build-macos-app.sh"
+      - "scripts/cross_platform_server.py"
+      - "scripts/library_ui.py"
+      - "tests/**"
+      - "ui/**"
+      - ".github/workflows/native-macos.yml"
   pull_request:
     paths:
       - "native/**"
