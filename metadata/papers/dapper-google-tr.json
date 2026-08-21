@@ -1,0 +1,11 @@
+{
+  "title": "Dapper, a Large-Scale Distributed Systems Tracing Infrastructure",
+  "path": "papers/dapper-google-tr.pdf",
+  "authors": "Sigelman et al. (Google)",
+  "source": "User-supplied exact URL",
+  "source_url": "https://static.googleusercontent.com/media/research.google.com/en//pubs/archive/36356.pdf",
+  "license": "Google Technical Report via Google Research archive",
+  "sha256": "41baea09d066e0167ca0943968d44f7f07790be700440427f78c034910e5765d",
+  "bytes": 1551487,
+  "downloaded_at": "2026-08-21T18:53:21.472085+00:00"
+}

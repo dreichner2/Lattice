@@ -1,0 +1,11 @@
+{
+  "title": "Homotopy Type Theory",
+  "path": "books/hott-online.pdf",
+  "authors": "Univalent Foundations Program",
+  "source": "User-supplied exact URL",
+  "source_url": "https://hott.github.io/book/hott-online-82-g578b85c.pdf",
+  "license": "CC BY-SA (HoTT Book official build, verify in colophon)",
+  "sha256": "89bfbed17259573dcdc1c1f0e14347030aa42902baba7e0a395fcd7493594aac",
+  "bytes": 3169950,
+  "downloaded_at": "2026-08-21T18:53:19.497309+00:00"
+}

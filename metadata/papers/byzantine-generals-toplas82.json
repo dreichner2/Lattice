@@ -1,0 +1,11 @@
+{
+  "title": "The Byzantine Generals Problem",
+  "path": "papers/byzantine-generals-toplas82.pdf",
+  "authors": "Lamport, Shostak, Pease (ACM TOPLAS 1982)",
+  "source": "User-supplied exact URL",
+  "source_url": "https://lamport.azurewebsites.net/pubs/byz.pdf",
+  "license": "Author-hosted copy (Lamport publications site)",
+  "sha256": "40807dab08eb08477d6bd1ed22b91b4dcd6633550a4a62682ecbbd00c00d8b08",
+  "bytes": 1245510,
+  "downloaded_at": "2026-08-21T18:53:25.227342+00:00"
+}
