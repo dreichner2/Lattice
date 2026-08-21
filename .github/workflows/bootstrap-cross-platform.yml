@@ -5,7 +5,7 @@ on:
     branches:
       - codex/cross-platform-library
     paths:
-      - scripts/cross_platform_payload.b64
+      - scripts/cross_platform_payload.ready
   workflow_dispatch:
 
 permissions:
@@ -31,7 +31,11 @@ jobs:
           from pathlib import Path, PurePosixPath
 
           root = Path.cwd().resolve()
-          payload = base64.b64decode(Path('scripts/cross_platform_payload.b64').read_text().strip())
+          parts = sorted(Path('scripts').glob('cross_platform_payload.part-*'))
+          if not parts:
+              raise SystemExit('Cross-platform source payload is missing')
+          encoded = ''.join(path.read_text() for path in parts)
+          payload = base64.b64decode(encoded, validate=True)
           with tarfile.open(fileobj=io.BytesIO(payload), mode='r:gz') as archive:
               members = []
               for member in archive.getmembers():
@@ -42,7 +46,13 @@ jobs:
               archive.extractall(root, members=members, filter='data')
           PY
           python3 scripts/apply_cross_platform_patch.py
-          rm -f scripts/cross_platform_payload.b64 .github/workflows/bootstrap-cross-platform.yml
+          rm -f \
+            scripts/cross_platform_payload.part-00 \
+            scripts/cross_platform_payload.part-01 \
+            scripts/cross_platform_payload.part-02 \
+            scripts/cross_platform_payload.part-03 \
+            scripts/cross_platform_payload.ready \
+            .github/workflows/bootstrap-cross-platform.yml
 
       - name: Validate generated source
         run: |
@@ -68,7 +78,11 @@ jobs:
               '.github/workflows/quality.yml',
               '.github/workflows/windows-app.yml',
               '.github/workflows/bootstrap-cross-platform.yml',
-              'scripts/cross_platform_payload.b64',
+              'scripts/cross_platform_payload.part-00',
+              'scripts/cross_platform_payload.part-01',
+              'scripts/cross_platform_payload.part-02',
+              'scripts/cross_platform_payload.part-03',
+              'scripts/cross_platform_payload.ready',
               'scripts/apply_cross_platform_patch.py',
               'scripts/build-macos-app.sh',
               'scripts/cross_platform_server.py',
