@@ -1,0 +1,45 @@
+name: Cross-platform quality
+
+on:
+  pull_request:
+    paths:
+      - "scripts/**"
+      - "tests/**"
+      - "native/*.js"
+      - "windows/reader/**"
+      - ".github/workflows/quality.yml"
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  test:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 10
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.13"
+
+      - name: Set up Node
+        uses: actions/setup-node@v4
+        with:
+          node-version: "24"
+
+      - name: Compile Python sources
+        run: |
+          python -m py_compile scripts/library_ui.py scripts/cross_platform_server.py windows/server_bootstrap.py
+
+      - name: Run local-server tests
+        run: python tests/test_cross_platform_server.py
+
+      - name: Run reader tests
+        run: |
+          node --test tests/test_immersive_epub.mjs
+          node --test tests/test_reader_state.mjs
+          node --check windows/reader/pdf-reader.js
