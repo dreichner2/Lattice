@@ -225,12 +225,16 @@ extension NativePDFReaderController {
 
     func closeWebReaderShell() {
         let script = """
-        document.body.classList.remove('reader-open');
-        const shell = document.querySelector('#readerShell');
-        shell?.setAttribute('aria-hidden', 'true');
-        shell?.classList.remove('is-epub', 'is-focused');
-        const pdf = document.querySelector('#pdfReader');
-        if (pdf) { pdf.src = 'about:blank'; pdf.hidden = true; }
+        if (typeof window.csLibraryCloseReader === 'function') {
+            window.csLibraryCloseReader();
+        } else {
+            document.body.classList.remove('reader-open');
+            const shell = document.querySelector('#readerShell');
+            shell?.setAttribute('aria-hidden', 'true');
+            shell?.classList.remove('is-epub', 'is-focused');
+            const pdf = document.querySelector('#pdfReader');
+            if (pdf) { pdf.src = 'about:blank'; pdf.hidden = true; }
+        }
         """
         webView?.evaluateJavaScript(script)
     }

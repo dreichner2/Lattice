@@ -19,6 +19,14 @@ jobs:
       - name: Check out repository
         uses: actions/checkout@v4
 
+      - name: Check reader JavaScript
+        run: |
+          node --check native/ImmersiveEPUB.js
+          node --check ui/app.js
+
+      - name: Test native reader JavaScript
+        run: node --test tests/test_immersive_epub.mjs
+
       - name: Build CS Library.app
         run: ./scripts/build-macos-app.sh
 

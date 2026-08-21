@@ -7,6 +7,12 @@
     (document.head || document.documentElement).append(node);
   };
 
+  const focusContentsSearch = targetDocument => {
+    const toggle = targetDocument.querySelector("#readerTocButton:not([hidden])");
+    if (toggle?.getAttribute("aria-expanded") !== "true") toggle?.click();
+    setTimeout(() => targetDocument.querySelector("#epubTocSearch")?.focus(), 220);
+  };
+
   if (window.top !== window) {
     style("cs-native-epub-page", `
       html{scrollbar-width:none!important}html::-webkit-scrollbar{display:none!important}
@@ -29,8 +35,7 @@
       const topDocument = window.top.document;
       if (event.metaKey && event.key.toLowerCase() === "f") {
         event.preventDefault();
-        topDocument.querySelector("#readerTocButton:not([hidden])")?.click();
-        setTimeout(() => topDocument.querySelector("#epubTocSearch")?.focus(), 180);
+        focusContentsSearch(topDocument);
         return;
       }
       if (event.metaKey || event.ctrlKey || event.altKey) return;
@@ -44,6 +49,7 @@
   }
 
   document.documentElement.classList.add("cs-native-reader");
+  window.csLibraryFocusEpubSearch = () => focusContentsSearch(document);
   style("cs-native-reader-ui", `
     html.cs-native-reader .reader-shell.is-epub .reader-panel{inset:0!important;border:0!important;border-radius:0!important;background:#111318!important}
     html.cs-native-reader .reader-shell.is-epub .reader-toolbar{min-height:56px!important;background:color-mix(in srgb,var(--panel-solid) 86%,transparent)!important;box-shadow:0 8px 30px rgba(0,0,0,.08)!important}
@@ -76,7 +82,15 @@
   const bookKey = () => ($("#readerTitle")?.textContent || "Untitled").trim();
   const chapter = () => ($("#epubChapterLabel")?.textContent || "").trim();
   const read = () => { try { return JSON.parse(localStorage.getItem(key) || "{}") || {}; } catch { return {}; } };
-  const write = value => { try { localStorage.setItem(key, JSON.stringify(value)); } catch {} };
+  const write = value => {
+    try {
+      localStorage.setItem(key, JSON.stringify(value));
+      return true;
+    } catch {
+      return false;
+    }
+  };
+  if (window.__CS_LIBRARY_TEST__) window.__CS_LIBRARY_TEST__.writeNotes = write;
 
   const renderNotes = () => {
     const list = $(".native-note-list");
@@ -101,7 +115,11 @@
       body.append(meta);
       const remove = document.createElement("button");
       remove.type = "button"; remove.className = "native-note-delete"; remove.textContent = "×"; remove.setAttribute("aria-label", "Delete note");
-      remove.addEventListener("click", () => { const all = read(); all[bookKey()] = (all[bookKey()] || []).filter(item => item.id !== note.id); write(all); renderNotes(); });
+      remove.addEventListener("click", () => {
+        const all = read();
+        all[bookKey()] = (all[bookKey()] || []).filter(item => item.id !== note.id);
+        if (write(all)) renderNotes();
+      });
       card.append(body, remove); list.append(card);
     });
   };
@@ -130,12 +148,19 @@
     const compose = document.createElement("div"); compose.className = "native-note-compose";
     const quote = document.createElement("div"); quote.className = "native-note-quote";
     const input = document.createElement("textarea"); input.className = "native-note-input"; input.placeholder = "Write a note about this page or passage…";
+    input.addEventListener("input", () => input.setCustomValidity(""));
     const save = document.createElement("button"); save.type = "button"; save.className = "native-note-save"; save.textContent = "Save to this book";
     save.addEventListener("click", () => {
       const note = input.value.trim(); if (!note && !selection) return;
       const all = read(); const name = bookKey(); const notes = all[name] || [];
       notes.push({ id: `${Date.now()}-${Math.random().toString(16).slice(2)}`, quote: selection, note, chapter: selectionSource || chapter(), createdAt: Date.now() });
-      all[name] = notes.slice(-250); write(all); input.value = ""; selection = ""; selectionSource = ""; quote.textContent = ""; quote.classList.remove("has-selection"); $("#nativeReaderNotesButton")?.classList.remove("has-selection"); renderNotes();
+      all[name] = notes.slice(-250);
+      if (!write(all)) {
+        input.setCustomValidity("This note could not be saved. Free some local storage and try again.");
+        input.reportValidity();
+        return;
+      }
+      input.setCustomValidity(""); input.value = ""; selection = ""; selectionSource = ""; quote.textContent = ""; quote.classList.remove("has-selection"); $("#nativeReaderNotesButton")?.classList.remove("has-selection"); renderNotes();
     });
     compose.append(quote, input, save);
     const list = document.createElement("div"); list.className = "native-note-list";
@@ -166,7 +191,7 @@
   document.addEventListener("keydown", event => {
     const active = document.body.classList.contains("reader-open") && $("#readerShell")?.classList.contains("is-epub");
     if (!active || ["input", "textarea", "select"].includes(event.target?.tagName?.toLowerCase()) || event.target?.isContentEditable) return;
-    if (event.metaKey && event.key.toLowerCase() === "f") { event.preventDefault(); $("#readerTocButton:not([hidden])")?.click(); setTimeout(() => $("#epubTocSearch")?.focus(), 180); return; }
+    if (event.metaKey && event.key.toLowerCase() === "f") { event.preventDefault(); focusContentsSearch(document); return; }
     if (event.metaKey || event.ctrlKey || event.altKey) return;
     const keyName = event.key.toLowerCase();
     if (event.code === "Space") { event.preventDefault(); $(event.shiftKey ? "#epubPrevious" : "#epubNext")?.click(); }

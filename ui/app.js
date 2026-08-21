@@ -437,7 +437,6 @@ function showReaderShell(title, kicker, mode) {
 }
 
 function closeReader() {
-  if (!document.body.classList.contains("reader-open")) return;
   saveEpubPosition();
   window.clearTimeout(state.epubSaveTimer);
   window.clearTimeout(state.epubTurnTimer);
@@ -476,6 +475,8 @@ function closeReader() {
   if (state.readerLastFocus && document.contains(state.readerLastFocus)) state.readerLastFocus.focus();
   state.readerLastFocus = null;
 }
+
+window.csLibraryCloseReader = closeReader;
 
 function configureLocalReaderActions(work, file) {
   state.readerPath = file.path;

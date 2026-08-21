@@ -39,6 +39,7 @@ extension NativePDFReaderController {
         titleLabel.textColor = .labelColor
         titleLabel.setContentCompressionResistancePriority(.defaultLow, for: .horizontal)
         titleLabel.setContentHuggingPriority(.defaultLow, for: .horizontal)
+        titleLabel.widthAnchor.constraint(greaterThanOrEqualToConstant: 120).isActive = true
 
         let previousButton = makeIconButton(symbol: "chevron.left", accessibilityLabel: "Previous page", action: #selector(previousPageAction(_:)))
         let nextButton = makeIconButton(symbol: "chevron.right", accessibilityLabel: "Next page", action: #selector(nextPageAction(_:)))

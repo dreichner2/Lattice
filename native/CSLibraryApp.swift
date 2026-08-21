@@ -105,7 +105,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, WKNavigationDelegate, 
         window.title = "CS Library"
         window.titleVisibility = .hidden
         window.titlebarAppearsTransparent = true
-        window.minSize = NSSize(width: 980, height: 640)
+        window.minSize = NSSize(width: 1180, height: 640)
         window.contentView = rootView
         window.backgroundColor = NSColor.windowBackgroundColor
         window.setFrameAutosaveName("CSLibraryMainWindow")
@@ -350,7 +350,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, WKNavigationDelegate, 
 
     @objc private func readerFind(_ sender: Any?) {
         if immersiveReader?.focusSearch() != true {
-            webView.evaluateJavaScript("document.querySelector('#readerTocButton:not([hidden])')?.click(); setTimeout(() => document.querySelector('#epubTocSearch')?.focus(), 180)")
+            webView.evaluateJavaScript("window.csLibraryFocusEpubSearch?.()")
         }
     }
 

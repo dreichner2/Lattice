@@ -78,6 +78,7 @@ final class NativePDFReaderController: NSObject, NSTextViewDelegate {
         else {
             showOpenError()
             closeWebReaderShell()
+            onClose?()
             return
         }
 
