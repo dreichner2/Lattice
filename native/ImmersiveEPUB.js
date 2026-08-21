@@ -30,6 +30,12 @@
       const source = window.top.document.querySelector("#epubChapterLabel")?.textContent || document.title || "";
       window.top.postMessage({ type: "cs-library-reader-selection", text, source }, window.location.origin);
     });
+    window.top.postMessage({
+      type: "cs-library-reader-index",
+      id: location.pathname,
+      title: document.title || location.pathname.split("/").pop(),
+      body: (document.body?.innerText || "").slice(0, 200000),
+    }, window.location.origin);
     document.addEventListener("keydown", event => {
       if (["input", "textarea", "select"].includes(event.target?.tagName?.toLowerCase()) || event.target?.isContentEditable) return;
       const topDocument = window.top.document;
@@ -118,7 +124,10 @@
       remove.addEventListener("click", () => {
         const all = read();
         all[bookKey()] = (all[bookKey()] || []).filter(item => item.id !== note.id);
-        if (write(all)) renderNotes();
+        if (write(all)) {
+          window.dispatchEvent(new CustomEvent("cs-library-reader-delete-annotation", { detail: { id: note.id } }));
+          renderNotes();
+        }
       });
       card.append(body, remove); list.append(card);
     });
@@ -153,13 +162,22 @@
     save.addEventListener("click", () => {
       const note = input.value.trim(); if (!note && !selection) return;
       const all = read(); const name = bookKey(); const notes = all[name] || [];
-      notes.push({ id: `${Date.now()}-${Math.random().toString(16).slice(2)}`, quote: selection, note, chapter: selectionSource || chapter(), createdAt: Date.now() });
+      const saved = { id: `${Date.now()}-${Math.random().toString(16).slice(2)}`, quote: selection, note, chapter: selectionSource || chapter(), createdAt: Date.now() };
+      notes.push(saved);
       all[name] = notes.slice(-250);
       if (!write(all)) {
         input.setCustomValidity("This note could not be saved. Free some local storage and try again.");
         input.reportValidity();
         return;
       }
+      window.dispatchEvent(new CustomEvent("cs-library-reader-save-annotation", { detail: {
+        id: saved.id,
+        locator: { type: "epub", label: saved.chapter, position: $("#epubChapterLabel")?.textContent || "" },
+        quote: saved.quote,
+        note: saved.note,
+        color: "yellow",
+        createdAt: saved.createdAt / 1000,
+      } }));
       input.setCustomValidity(""); input.value = ""; selection = ""; selectionSource = ""; quote.textContent = ""; quote.classList.remove("has-selection"); $("#nativeReaderNotesButton")?.classList.remove("has-selection"); renderNotes();
     });
     compose.append(quote, input, save);
@@ -168,12 +186,28 @@
   };
 
   window.addEventListener("message", event => {
-    if (event.origin !== location.origin || event.data?.type !== "cs-library-reader-selection") return;
+    if (event.origin !== location.origin) return;
+    if (event.data?.type === "cs-library-reader-index") {
+      window.dispatchEvent(new CustomEvent("cs-library-reader-index", { detail: event.data }));
+      return;
+    }
+    if (event.data?.type !== "cs-library-reader-selection") return;
     selection = String(event.data.text || "").trim().slice(0, 4000);
     selectionSource = String(event.data.source || chapter()).trim();
     const quote = $(".native-note-quote"); if (quote) { quote.textContent = selection; quote.classList.toggle("has-selection", !!selection); }
     $("#nativeReaderNotesButton")?.classList.toggle("has-selection", !!selection);
   });
+
+  window.csLibraryHighlightSelection = color => {
+    if (!selection) return false;
+    window.dispatchEvent(new CustomEvent("cs-library-reader-save-annotation", { detail: {
+      locator: { type: "epub", label: selectionSource || chapter(), position: $("#epubChapterLabel")?.textContent || "" },
+      quote: selection,
+      note: "",
+      color: String(color || "yellow"),
+    } }));
+    return true;
+  };
 
   const sync = () => {
     const active = document.body.classList.contains("reader-open") && $("#readerShell")?.classList.contains("is-epub");

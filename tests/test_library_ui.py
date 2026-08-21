@@ -79,6 +79,10 @@ class CatalogTests(unittest.TestCase):
 
     def test_catalog_shape(self) -> None:
         self.assertEqual(self.library["stats"]["works"], 47)
+        if not (ROOT / "books").is_dir():
+            self.assertEqual(self.library["stats"]["artifacts"], 0)
+            self.assertFalse(self.library["stats"]["allPresent"])
+            return
         self.assertEqual(self.library["stats"]["artifacts"], 72)
         self.assertEqual(self.library["stats"]["present"], 72)
         self.assertEqual(self.library["stats"]["subjects"], 9)
@@ -96,6 +100,8 @@ class CatalogTests(unittest.TestCase):
         )
 
     def test_every_artifact_is_present_and_unique(self) -> None:
+        if not (ROOT / "books").is_dir():
+            self.skipTest("local book payloads are intentionally not committed")
         files = [file for work in self.library["works"] for file in work["files"]]
         paths = [file["path"] for file in files]
         self.assertEqual(len(paths), len(set(paths)))
@@ -125,14 +131,16 @@ class CatalogTests(unittest.TestCase):
         self.assertTrue(all(file["path"].endswith(".epub") for file in software_foundations))
 
     def test_payload_resolution_rejects_escape_and_unknown_paths(self) -> None:
-        allowed = {"books/sicp.pdf"}
-        self.assertEqual(
-            library_ui.resolve_payload(ROOT, "books/sicp.pdf", allowed),
-            (ROOT / "books/sicp.pdf").resolve(),
-        )
-        for value in ("../CATALOG.md", "/etc/passwd", "books/unknown.pdf"):
-            with self.assertRaises(ValueError):
-                library_ui.resolve_payload(ROOT, value, allowed)
+        with tempfile.TemporaryDirectory() as temporary:
+            root = Path(temporary)
+            (root / "books").mkdir()
+            fixture = root / "books" / "fixture.pdf"
+            fixture.write_bytes(b"%PDF-1.1\n%%EOF\n")
+            allowed = {"books/fixture.pdf"}
+            self.assertEqual(library_ui.resolve_payload(root, "books/fixture.pdf", allowed), fixture.resolve())
+            for value in ("../CATALOG.md", "/etc/passwd", "books/unknown.pdf"):
+                with self.assertRaises(ValueError):
+                    library_ui.resolve_payload(root, value, allowed)
 
     def test_byte_ranges(self) -> None:
         self.assertEqual(library_ui.parse_byte_range("bytes=0-4", 100), (0, 4))
@@ -157,6 +165,8 @@ class CatalogTests(unittest.TestCase):
         self.assertFalse(library["works"][0]["cataloged"])
 
     def test_study_guide_links_resolve_to_local_materials(self) -> None:
+        if not (ROOT / "books").is_dir():
+            self.skipTest("local book payloads are intentionally not committed")
         guide = (ROOT / "STUDY_GUIDE.md").read_text(encoding="utf-8")
         links = re.findall(r"\]\(((?:books|papers)/[^)]+)\)", guide)
         material_paths = {material["path"] for material in self.library["materials"]}
@@ -199,6 +209,8 @@ class ServerTests(unittest.TestCase):
             self.assertTrue(payload["actionToken"])
 
     def test_pdf_range_request(self) -> None:
+        if not (ROOT / "books" / "sicp.pdf").is_file():
+            self.skipTest("local book payloads are intentionally not committed")
         request = urllib.request.Request(
             self.base + "/content/books/sicp.pdf",
             headers={"Range": "bytes=0-4"},

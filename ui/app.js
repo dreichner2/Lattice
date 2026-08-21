@@ -51,6 +51,7 @@ const state = {
   epubPageIndex: 0,
   epubFocused: false,
   epubRestoreRatio: null,
+  nativeReaderRestore: null,
   epubScrollFrame: 0,
   epubSaveTimer: 0,
   epubTurnTimer: 0,
@@ -438,12 +439,16 @@ function showReaderShell(title, kicker, mode) {
 
 function closeReader() {
   saveEpubPosition();
+  window.dispatchEvent(new CustomEvent("cs-library-reader-closed"));
   window.clearTimeout(state.epubSaveTimer);
   window.clearTimeout(state.epubTurnTimer);
   window.cancelAnimationFrame(state.epubScrollFrame);
   document.body.classList.remove("reader-open");
   elements.readerShell.setAttribute("aria-hidden", "true");
   elements.readerShell.classList.remove("is-epub", "is-focused");
+  delete elements.readerShell.dataset.path;
+  delete elements.readerShell.dataset.workId;
+  delete elements.readerShell.dataset.format;
   elements.readerPdf.src = "about:blank";
   elements.epubFrame.src = "about:blank";
   elements.readerPdf.hidden = true;
@@ -471,6 +476,7 @@ function closeReader() {
   state.epubFocused = false;
   state.epubTurning = false;
   state.epubRestoreRatio = null;
+  state.nativeReaderRestore = null;
   elements.epubFrame.classList.remove("is-page-turning");
   if (state.readerLastFocus && document.contains(state.readerLastFocus)) state.readerLastFocus.focus();
   state.readerLastFocus = null;
@@ -481,9 +487,21 @@ window.csLibraryCloseReader = closeReader;
 function configureLocalReaderActions(work, file) {
   state.readerPath = file.path;
   state.readerWorkId = work.id;
+  elements.readerShell.dataset.path = file.path;
+  elements.readerShell.dataset.workId = work.id;
+  elements.readerShell.dataset.format = file.format;
   elements.readerMac.hidden = false;
   elements.readerFinder.hidden = false;
   elements.readerMac.textContent = file.format === "EPUB" ? "Open in Books" : "Open on Mac";
+  const descriptor = {
+    path: file.path,
+    workId: work.id,
+    sha256: file.sha256 || "",
+    title: file.title || work.title,
+    format: file.format,
+  };
+  window.dispatchEvent(new CustomEvent("cs-library-reader-document", { detail: descriptor }));
+  return descriptor;
 }
 
 function showPdfReader(work, file) {
@@ -493,10 +511,20 @@ function showPdfReader(work, file) {
   }
   recordOpen(work);
   showReaderShell(file.title, `${work.title} · PDF`, "pdf");
-  configureLocalReaderActions(work, file);
+  const descriptor = configureLocalReaderActions(work, file);
   elements.readerPdf.title = `${file.title} PDF reader`;
-  elements.readerPdf.hidden = false;
-  elements.readerPdf.src = contentUrl(file.path);
+  const useWebFallback = () => {
+    elements.readerPdf.hidden = false;
+    elements.readerPdf.src = contentUrl(file.path);
+  };
+  if (IS_NATIVE_APP && typeof window.csLibraryNativeCall === "function") {
+    window.csLibraryNativeCall("document.upsert", descriptor)
+      .then(() => window.csLibraryNativeCall("document.open", { path: file.path }))
+      .then(result => { if (!result?.opened) useWebFallback(); })
+      .catch(useWebFallback);
+  } else {
+    useWebFallback();
+  }
   renderCards();
 }
 
@@ -842,6 +870,13 @@ function updateEpubLocation() {
   elements.readerBookmark.classList.toggle("is-bookmarked", isBookmarked);
   elements.readerBookmark.textContent = isBookmarked ? "★" : "☆";
   elements.readerBookmark.setAttribute("aria-label", isBookmarked ? "Remove chapter bookmark" : "Bookmark this position");
+  window.dispatchEvent(new CustomEvent("cs-library-reader-position", {
+    detail: {
+      locator: { type: "epub", entry: chapter.entry, index: state.epubIndex, ratio: safeRatio },
+      page: metrics.pageIndex,
+      progress: overall,
+    },
+  }));
 }
 
 function saveEpubPosition() {
@@ -920,23 +955,27 @@ function toggleEpubBookmark() {
     ? [...state.epubBookmarks[state.readerPath]]
     : [];
   const existing = bookmarks.findIndex((bookmark) => bookmark.entry === chapter.entry);
+  const bookmark = {
+    entry: chapter.entry,
+    index: state.epubIndex,
+    ratio: currentEpubRatio(),
+    label: chapter.label,
+    createdAt: Date.now(),
+  };
   if (existing >= 0) {
     bookmarks.splice(existing, 1);
     announce(`Removed bookmark from ${chapter.label}`);
   } else {
-    bookmarks.unshift({
-      entry: chapter.entry,
-      index: state.epubIndex,
-      ratio: currentEpubRatio(),
-      label: chapter.label,
-      createdAt: Date.now(),
-    });
+    bookmarks.unshift(bookmark);
     announce(`Bookmarked ${chapter.label}`);
   }
   state.epubBookmarks[state.readerPath] = bookmarks.slice(0, 50);
   writeStorage(STORAGE.epubBookmarks, state.epubBookmarks);
   renderEpubBookmarks();
   updateEpubLocation();
+  window.dispatchEvent(new CustomEvent("cs-library-reader-bookmark-toggle", {
+    detail: { bookmarked: existing < 0, locator: { type: "epub", ...bookmark }, label: chapter.label },
+  }));
 }
 
 function applyEpubSettings({ persist = true, preservePosition = false } = {}) {
@@ -1116,7 +1155,8 @@ async function showEpubReader(work, file) {
     applyEpubSettings({ persist: false });
     renderEpubToc();
     renderEpubBookmarks();
-    const saved = state.epubProgress[file.path];
+    const nativeSaved = state.nativeReaderRestore?.path === file.path ? state.nativeReaderRestore.locator : null;
+    const saved = nativeSaved?.type === "epub" ? nativeSaved : state.epubProgress[file.path];
     let index = packageData.chapters.findIndex((chapter) => chapter.entry === saved?.entry);
     if (index < 0) index = clamp(Number(saved?.index) || 0, 0, packageData.chapters.length - 1);
     navigateEpub(index, { ratio: clamp(Number(saved?.ratio) || 0, 0, 1) });
@@ -1691,6 +1731,16 @@ function initializeTheme() {
 }
 
 function bindEvents() {
+  window.addEventListener("cs-library-reader-restore", event => {
+    const saved = event.detail;
+    if (!saved || saved.path !== state.readerPath) return;
+    state.nativeReaderRestore = saved;
+    const locator = saved.locator;
+    if (state.readerMode !== "epub" || !state.epubPackage || locator?.type !== "epub") return;
+    let index = state.epubPackage.chapters.findIndex(chapter => chapter.entry === locator.entry);
+    if (index < 0) index = clamp(Number(locator.index) || 0, 0, state.epubPackage.chapters.length - 1);
+    navigateEpub(index, { ratio: clamp(Number(locator.ratio) || 0, 0, 1) });
+  });
   $$(".nav-item").forEach((item) => item.addEventListener("click", () => setView(item.dataset.view)));
   $$("[data-document]").forEach((item) => item.addEventListener("click", () => openDocument(item.dataset.document, item.dataset.title)));
   elements.search.addEventListener("input", () => {

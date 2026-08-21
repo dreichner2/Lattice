@@ -71,20 +71,30 @@ extension NativePDFReaderController {
     func restoreState() {
         guard let document, let reader = pdfView else { return }
         let defaults = UserDefaults.standard
-        let savedMode = defaults.string(forKey: stateKey("display-mode")) ?? "continuous"
-        reader.displayMode = savedMode == "page" ? .singlePage : .singlePageContinuous
-        displayModeControl?.selectedSegment = savedMode == "page" ? 1 : 0
+        let savedMode = (try? store.preference(key: stateKey("display-mode")))
+            ?? defaults.string(forKey: legacyStateKey("display-mode"))
+            ?? "continuous"
+        switch savedMode {
+        case "page": reader.displayMode = .singlePage; displayModeControl?.selectedSegment = 1
+        case "spread": reader.displayMode = .twoUpContinuous; displayModeControl?.selectedSegment = 2
+        default: reader.displayMode = .singlePageContinuous; displayModeControl?.selectedSegment = 0
+        }
 
-        let pageIndex = min(max(defaults.integer(forKey: stateKey("page")), 0), max(document.pageCount - 1, 0))
+        let durablePage = (try? store.position(documentID: documentRecord.id))?.page
+        let legacyPage = defaults.integer(forKey: legacyStateKey("page"))
+        let pageIndex = min(max(durablePage ?? legacyPage, 0), max(document.pageCount - 1, 0))
         if let page = document.page(at: pageIndex) {
             reader.go(to: page)
         }
 
-        let useAutoScale = defaults.object(forKey: stateKey("auto-scale")) as? Bool ?? true
+        let useAutoScale = (try? store.preference(key: stateKey("auto-scale"))).flatMap(Bool.init)
+            ?? defaults.object(forKey: legacyStateKey("auto-scale")) as? Bool
+            ?? true
         if useAutoScale {
             reader.autoScales = true
         } else {
-            let savedScale = defaults.double(forKey: stateKey("scale"))
+            let savedScale = (try? store.preference(key: stateKey("scale"))).flatMap(Double.init)
+                ?? defaults.double(forKey: legacyStateKey("scale"))
             reader.autoScales = false
             if savedScale > 0 {
                 reader.scaleFactor = min(max(savedScale, reader.minScaleFactor), reader.maxScaleFactor)
@@ -99,16 +109,20 @@ extension NativePDFReaderController {
 
     func persistState() {
         guard let document, let reader = pdfView, !stateIdentifier.isEmpty else { return }
-        let defaults = UserDefaults.standard
+        let pageIndex: Int
         if let page = reader.currentPage {
-            defaults.set(document.index(for: page), forKey: stateKey("page"))
-        }
-        defaults.set(reader.autoScales, forKey: stateKey("auto-scale"))
-        defaults.set(reader.scaleFactor, forKey: stateKey("scale"))
-        defaults.set(reader.displayMode == .singlePage ? "page" : "continuous", forKey: stateKey("display-mode"))
-        defaults.set(sidebarVisible, forKey: stateKey("sidebar"))
-        defaults.set(bookmarks, forKey: stateKey("bookmarks"))
-        defaults.set(pageNotes, forKey: stateKey("notes"))
+            pageIndex = document.index(for: page)
+        } else { pageIndex = 0 }
+        let progress = document.pageCount > 1 ? Double(pageIndex) / Double(document.pageCount - 1) : 0
+        try? store.savePosition(ReaderPosition(
+            documentID: documentRecord.id, locator: pdfLocator(page: pageIndex), page: pageIndex,
+            progress: progress, updatedAt: Date().timeIntervalSince1970
+        ))
+        let mode = reader.displayMode == .singlePage ? "page" : (reader.displayMode == .twoUpContinuous ? "spread" : "continuous")
+        try? store.setPreference(key: stateKey("auto-scale"), value: String(reader.autoScales))
+        try? store.setPreference(key: stateKey("scale"), value: String(Double(reader.scaleFactor)))
+        try? store.setPreference(key: stateKey("display-mode"), value: mode)
+        try? store.setPreference(key: stateKey("sidebar"), value: String(sidebarVisible))
     }
 
     func refreshToolbar() {
@@ -119,7 +133,8 @@ extension NativePDFReaderController {
         pageSummary?.stringValue = "/ \(max(document.pageCount, 1))"
         let percentage = document.pageCount > 0 ? Int(round(Double(pageNumber) / Double(document.pageCount) * 100)) : 0
         pageSummary?.toolTip = "Page \(pageNumber) of \(document.pageCount) · \(percentage)%"
-        notesPageLabel?.stringValue = "Page \(pageNumber)"
+        let pageLabel = reader.currentPage?.label ?? "Page \(pageNumber)"
+        notesPageLabel?.stringValue = pageLabel
         bookmarkButton?.image = NSImage(
             systemSymbolName: bookmarks.contains(pageIndex) ? "bookmark.fill" : "bookmark",
             accessibilityDescription: "Bookmark this page"
@@ -150,8 +165,19 @@ extension NativePDFReaderController {
         let key = String(loadedNotePage)
         if text.isEmpty {
             pageNotes.removeValue(forKey: key)
+            try? store.deleteAnnotation(id: noteIdentifier(page: loadedNotePage))
         } else {
             pageNotes[key] = text
+            let identifier = noteIdentifier(page: loadedNotePage)
+            let existing = durableAnnotations.first(where: { $0.id == identifier })
+            let now = Date().timeIntervalSince1970
+            let annotation = ReaderAnnotation(
+                id: identifier, documentID: documentRecord.id, locator: pdfLocator(page: loadedNotePage),
+                quote: "", note: text, color: "note", createdAt: existing?.createdAt ?? now, updatedAt: now
+            )
+            try? store.saveAnnotation(annotation)
+            durableAnnotations.removeAll { $0.id == identifier }
+            durableAnnotations.append(annotation)
         }
     }
 
@@ -174,6 +200,124 @@ extension NativePDFReaderController {
         window?.makeFirstResponder(notesTextView)
         saveCurrentPageNote()
         persistState()
+    }
+
+    @discardableResult
+    func addHighlight() -> Bool {
+        guard
+            let document,
+            let selection = pdfView?.currentSelection,
+            let quote = selection.string?.trimmingCharacters(in: .whitespacesAndNewlines),
+            !quote.isEmpty
+        else {
+            NSSound.beep()
+            return false
+        }
+        let now = Date().timeIntervalSince1970
+        var saved = false
+        for page in selection.pages {
+            let pageIndex = document.index(for: page)
+            let bounds = selection.bounds(for: page)
+            guard !bounds.isEmpty else { continue }
+            let identifier = "pdf-highlight:\(UUID().uuidString.lowercased())"
+            let annotation = PDFAnnotation(bounds: bounds, forType: .highlight, withProperties: nil)
+            annotation.color = NSColor.systemYellow.withAlphaComponent(0.34)
+            annotation.userName = identifier
+            page.addAnnotation(annotation)
+            let stored = ReaderAnnotation(
+                id: identifier,
+                documentID: documentRecord.id,
+                locator: pdfLocator(page: pageIndex, bounds: bounds),
+                quote: String(quote.prefix(20_000)),
+                note: "",
+                color: "yellow",
+                createdAt: now,
+                updatedAt: now
+            )
+            try? store.saveAnnotation(stored)
+            durableAnnotations.append(stored)
+            saved = true
+        }
+        return saved
+    }
+
+    func restoreHighlights() {
+        guard let document else { return }
+        for stored in durableAnnotations where stored.color != "note" {
+            guard
+                let locator = locatorObject(stored.locator),
+                let pageIndex = locator["page"] as? Int,
+                let page = document.page(at: pageIndex),
+                let rawBounds = locator["bounds"] as? [String: Any],
+                let x = (rawBounds["x"] as? NSNumber)?.doubleValue,
+                let y = (rawBounds["y"] as? NSNumber)?.doubleValue,
+                let width = (rawBounds["width"] as? NSNumber)?.doubleValue,
+                let height = (rawBounds["height"] as? NSNumber)?.doubleValue
+            else { continue }
+            let annotation = PDFAnnotation(
+                bounds: NSRect(x: x, y: y, width: width, height: height),
+                forType: .highlight,
+                withProperties: nil
+            )
+            annotation.color = color(named: stored.color).withAlphaComponent(0.34)
+            annotation.userName = stored.id
+            page.addAnnotation(annotation)
+        }
+    }
+
+    func indexPDFText() {
+        let url = fileURL
+        let documentID = documentRecord.id
+        let documentTitle = documentRecord.title
+        let store = store
+        DispatchQueue.global(qos: .utility).async {
+            guard let pdf = PDFDocument(url: url) else { return }
+            var batch: [ReaderSearchItem] = []
+            let now = Date().timeIntervalSince1970
+            for index in 0..<pdf.pageCount {
+                autoreleasepool {
+                    guard let body = pdf.page(at: index)?.string?.trimmingCharacters(in: .whitespacesAndNewlines), !body.isEmpty else { return }
+                    batch.append(ReaderSearchItem(
+                        id: "pdf:\(documentID):\(index)", documentID: documentID, kind: "page",
+                        title: "\(documentTitle) · Page \(index + 1)", body: String(body.prefix(200_000)), updatedAt: now
+                    ))
+                }
+                if batch.count >= 25 {
+                    try? store.indexSearchItems(batch)
+                    batch.removeAll(keepingCapacity: true)
+                }
+            }
+            if !batch.isEmpty { try? store.indexSearchItems(batch) }
+        }
+    }
+
+    func pageIndex(from locator: String) -> Int? {
+        (locatorObject(locator)?["page"] as? NSNumber)?.intValue
+    }
+
+    func locatorObject(_ locator: String) -> [String: Any]? {
+        guard let data = locator.data(using: .utf8) else { return nil }
+        return try? JSONSerialization.jsonObject(with: data) as? [String: Any]
+    }
+
+    func pdfLocator(page: Int, bounds: NSRect? = nil) -> String {
+        var value: [String: Any] = ["type": "pdf", "page": page]
+        if let bounds {
+            value["bounds"] = ["x": bounds.origin.x, "y": bounds.origin.y, "width": bounds.width, "height": bounds.height]
+        }
+        guard let data = try? JSONSerialization.data(withJSONObject: value, options: [.sortedKeys]) else { return "{}" }
+        return String(data: data, encoding: .utf8) ?? "{}"
+    }
+
+    func noteIdentifier(page: Int) -> String { "pdf-note:\(documentRecord.id):\(page)" }
+
+    func color(named value: String) -> NSColor {
+        switch value.lowercased() {
+        case "green": return .systemGreen
+        case "blue": return .systemBlue
+        case "pink": return .systemPink
+        default: return .systemYellow
+        }
     }
 
     func goToPage(offset: Int) {
@@ -248,7 +392,11 @@ extension NativePDFReaderController {
     }
 
     func stateKey(_ suffix: String) -> String {
-        "cs-library.pdf.\(stateIdentifier).\(suffix)"
+        "pdf.\(stateIdentifier).\(suffix)"
+    }
+
+    func legacyStateKey(_ suffix: String) -> String {
+        "cs-library.pdf.\(stableIdentifier(for: fileURL)).\(suffix)"
     }
 
     func showOpenError() {
@@ -267,6 +415,7 @@ extension NativePDFReaderController {
     @objc func toggleFocusAction(_ sender: Any?) { toggleFocus() }
     @objc func toggleBookmarkAction(_ sender: Any?) { toggleBookmark() }
     @objc func addSelectionToNoteAction(_ sender: Any?) { appendSelectionToNote() }
+    @objc func highlightSelectionAction(_ sender: Any?) { _ = addHighlight() }
 
     @objc func goToPageFieldAction(_ sender: NSTextField) {
         goToPage(index: max(sender.integerValue, 1) - 1)
@@ -293,7 +442,11 @@ extension NativePDFReaderController {
 
     @objc func changeDisplayModeAction(_ sender: NSSegmentedControl) {
         guard let reader = pdfView else { return }
-        reader.displayMode = sender.selectedSegment == 1 ? .singlePage : .singlePageContinuous
+        switch sender.selectedSegment {
+        case 1: reader.displayMode = .singlePage
+        case 2: reader.displayMode = .twoUpContinuous
+        default: reader.displayMode = .singlePageContinuous
+        }
         reader.autoScales = true
         persistState()
     }
