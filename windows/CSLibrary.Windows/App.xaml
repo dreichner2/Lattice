@@ -1,0 +1,17 @@
+<Application x:Class="CSLibrary.Windows.App"
+             xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+             xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+             ShutdownMode="OnMainWindowClose">
+  <Application.Resources>
+    <SolidColorBrush x:Key="ChromeBrush" Color="#171A21" />
+    <SolidColorBrush x:Key="MutedBrush" Color="#A9AFBD" />
+    <Style TargetType="Button">
+      <Setter Property="Foreground" Value="#F5F6F8" />
+      <Setter Property="Background" Value="#272C38" />
+      <Setter Property="BorderBrush" Value="#3A4050" />
+      <Setter Property="Padding" Value="12,6" />
+      <Setter Property="Margin" Value="0,0,7,0" />
+      <Setter Property="Cursor" Value="Hand" />
+    </Style>
+  </Application.Resources>
+</Application>

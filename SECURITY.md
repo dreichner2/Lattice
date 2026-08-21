@@ -2,12 +2,13 @@
 
 CS Library is a local desktop application that opens untrusted PDF, EPUB, and
 text files. The principal security goal is to keep those files and all reading
-data on the selected Mac while preventing local content from escaping the
+data on the selected computer while preventing local content from escaping the
 library boundary or executing active web content.
 
 ## Supported version
 
-The current development line is version 2.x on macOS 13 or later. Security fixes
+The current development line is version 2.x on macOS 13 or later and Windows
+10 build 19041 or later. Security fixes
 are made on the repository's protected development branch and should be included
 in the next tagged release.
 
@@ -27,9 +28,9 @@ malicious document is required.
 - Publishes a protocol version and library-root identity.
 - Serves only currently indexed files beneath `books/` or `papers/`.
 - Resolves paths and rejects traversal and symlink escape.
-- Requires a random in-memory token for Finder/open actions.
+- Requires a random in-memory token for platform file actions and reader-state APIs.
 - Accepts those actions only from loopback origins.
-- Exits when its native parent disappears when launched by the Mac app.
+- Exits when its desktop parent disappears when launched by either packaged app.
 
 ### EPUB isolation
 
@@ -49,8 +50,9 @@ malicious document is required.
 
 ### Reader data
 
-- Progress, notes, bookmarks, annotations, and sessions are stored in a local
-  SQLite database.
+- Native Mac progress, notes, bookmarks, annotations, and sessions are stored
+  in its local SQLite database. Windows web-reader state uses a separate local
+  SQLite database scoped by library identity.
 - Database writes use transactions and WAL mode.
 - Daily local backups are retained.
 - Reader data can be exported to JSON or Markdown.
@@ -58,9 +60,11 @@ malicious document is required.
 
 ## Remaining trust boundaries
 
-- PDF parsing and rendering depend on Apple's PDFKit.
-- Web rendering depends on WebKit.
-- The local service depends on the user's Python 3 runtime.
+- PDF parsing and rendering depend on Apple's PDFKit on macOS and the installed
+  Microsoft Edge WebView2 Runtime on Windows.
+- Web rendering depends on WebKit on macOS and WebView2 on Windows.
+- The Mac local service depends on the user's Python 3 runtime; the Windows
+  artifact bundles its Python service with PyInstaller.
 - Ad-hoc signing verifies bundle consistency but is not Developer ID
   notarization.
 - Imported books may have restrictive copyright or machine-processing terms;

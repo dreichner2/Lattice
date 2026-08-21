@@ -1,0 +1,67 @@
+name: Windows desktop app
+
+on:
+  pull_request:
+    paths:
+      - "windows/**"
+      - "native/*.js"
+      - "scripts/**"
+      - "tests/**"
+      - "ui/**"
+      - ".github/workflows/windows-app.yml"
+  push:
+    branches:
+      - main
+    paths:
+      - "windows/**"
+      - "native/*.js"
+      - "scripts/**"
+      - "tests/**"
+      - "ui/**"
+      - ".github/workflows/windows-app.yml"
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  build:
+    runs-on: windows-2025
+    timeout-minutes: 35
+    steps:
+      - name: Check out source
+        uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.13"
+
+      - name: Set up Node
+        uses: actions/setup-node@v4
+        with:
+          node-version: "24"
+
+      - name: Set up .NET
+        uses: actions/setup-dotnet@v4
+        with:
+          dotnet-version: "8.0.x"
+
+      - name: Build and test portable app
+        shell: pwsh
+        run: ./windows/build-windows.ps1 -Runtime win-x64
+
+      - name: Verify package
+        shell: pwsh
+        run: |
+          if (-not (Test-Path "artifacts/CS-Library-Windows-win-x64.zip")) { throw "Archive missing" }
+          if (-not (Test-Path "windows/build/package-win-x64/CS Library.exe")) { throw "App missing" }
+          if (-not (Test-Path "windows/build/package-win-x64/Server/CSLibraryServer.exe")) { throw "Server missing" }
+
+      - name: Upload Windows app
+        uses: actions/upload-artifact@v4
+        with:
+          name: CS-Library-Windows-win-x64
+          path: artifacts/CS-Library-Windows-win-x64.zip
+          if-no-files-found: error
+          retention-days: 14
