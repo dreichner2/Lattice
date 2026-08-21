@@ -1,0 +1,15 @@
+{
+  "title": "The Java Language Specification, Java SE 26 Edition",
+  "path": "books/jls-26.pdf",
+  "authors": "James Gosling, Bill Joy, Guy Steele, Gilad Bracha, Alex Buckley, Daniel Smith, and Gavin Bierman",
+  "year": "2026",
+  "license": "Oracle Limited License Grant in Appendix A; all rights reserved",
+  "source": "Oracle Java SE specifications",
+  "catalog_type": "language specification",
+  "page_url": "https://docs.oracle.com/javase/specs/jls/se26/html/",
+  "download_url": "https://docs.oracle.com/javase/specs/jls/se26/jls26.pdf",
+  "source_url": "https://docs.oracle.com/javase/specs/jls/se26/html/",
+  "sha256": "37477ecc0e32460d5d13d67b51cbdc1667cdacfa5758ea5e2acb496383b4528b",
+  "bytes": 5332752,
+  "downloaded_at": "2026-08-21T04:48:42.235787+00:00"
+}

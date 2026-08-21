@@ -1,0 +1,14 @@
+{
+  "title": "Fairness and Machine Learning: Limitations and Opportunities",
+  "path": "books/fairness-ml.pdf",
+  "authors": "Solon Barocas, Moritz Hardt, and Arvind Narayanan",
+  "year": "2023",
+  "license": "CC BY-NC-ND 4.0",
+  "source": "Authors' official book site / MIT Press",
+  "page_url": "https://www.fairmlbook.org/",
+  "download_url": "https://www.fairmlbook.org/pdf/fairmlbook.pdf",
+  "source_url": "https://www.fairmlbook.org/",
+  "sha256": "da6e7782b714c52d2fb30d09bcf37db1e37a4fa94a3ba7ec7ca134ad82a60dc3",
+  "bytes": 2220375,
+  "downloaded_at": "2026-08-21T04:49:07.376287+00:00"
+}

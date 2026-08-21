@@ -1,0 +1,13 @@
+{
+  "title": "Structure and Interpretation of Computer Programs: JavaScript Edition",
+  "path": "books/sicp-js.pdf",
+  "authors": "Harold Abelson and Gerald Jay Sussman; adapted by Martin Henz and Tobias Wrigstad",
+  "year": "2022",
+  "license": "CC BY-NC-SA (reported by the legacy README; verify current terms)",
+  "source": "Imported from the legacy cs-books collection",
+  "original_filename": "SICP JavaScript Edition - Source Academy.pdf",
+  "pages": 640,
+  "sha256": "4d56aeb96745457401acd2fecb9a05b695e6de895c5c2e5d4f6bb954db5412d1",
+  "bytes": 9507496,
+  "imported_at": "2026-08-20T13:59:23Z"
+}

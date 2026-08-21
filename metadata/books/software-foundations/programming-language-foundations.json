@@ -1,0 +1,14 @@
+{
+  "title": "Programming Language Foundations",
+  "path": "books/software-foundations/programming-language-foundations.tgz",
+  "authors": "Benjamin C. Pierce, Arthur Azevedo de Amorim, Chris Casinghino, Marco Gaboardi, Michael Greenberg, Cătălin Hrițcu, Vilhelm Sjöberg, Brent Yorgey, Andrew W. Appel, Arthur Charguéraud, and contributors",
+  "year": "2026",
+  "source": "Open courseware / open textbook set",
+  "source_url": "https://softwarefoundations.cis.upenn.edu/",
+  "file_url": "https://softwarefoundations.cis.upenn.edu/plf-current/plf.tgz",
+  "license": "Official free electronic textbook sources; author-of-record copyright; no broad redistribution license stated on the release pages",
+  "sha256": "6aba52a47d59e7348f06bda3c9005e189b718fae5486690edec5ec32abe07012",
+  "bytes": 6015764,
+  "version": "7.0 (2026-01-07; Rocq 9.0.0 or later)",
+  "downloaded_at": "2026-08-21T04:50:52.126621+00:00"
+}

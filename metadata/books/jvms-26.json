@@ -1,0 +1,15 @@
+{
+  "title": "The Java Virtual Machine Specification, Java SE 26 Edition",
+  "path": "books/jvms-26.pdf",
+  "authors": "Tim Lindholm, Frank Yellin, Gilad Bracha, Alex Buckley, and Daniel Smith",
+  "year": "2026",
+  "license": "Oracle Limited License Grant in Appendix A; all rights reserved",
+  "source": "Oracle Java SE specifications",
+  "catalog_type": "virtual-machine specification",
+  "page_url": "https://docs.oracle.com/javase/specs/jvms/se26/html/",
+  "download_url": "https://docs.oracle.com/javase/specs/jvms/se26/jvms26.pdf",
+  "source_url": "https://docs.oracle.com/javase/specs/jvms/se26/html/",
+  "sha256": "f66473962626b7bb1d4007fae666fd08f70b18a77e03b9c53103da2acc3f7a53",
+  "bytes": 2876270,
+  "downloaded_at": "2026-08-21T04:48:42.763876+00:00"
+}

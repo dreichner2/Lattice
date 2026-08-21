@@ -1,0 +1,14 @@
+{
+  "title": "Specifying Systems",
+  "path": "books/specifying-systems.pdf",
+  "authors": "Leslie Lamport",
+  "year": "2002",
+  "license": "Copyright Pearson; download and one printed copy for personal use only",
+  "source": "Author's official TLA+ book page / Pearson",
+  "page_url": "https://lamport.azurewebsites.net/tla/book.html",
+  "download_url": "https://lamport.azurewebsites.net/tla/book-21-07-04.pdf",
+  "source_url": "https://lamport.azurewebsites.net/tla/book.html",
+  "sha256": "34883e30182414d08923852c129fd530e889a3f819ad05ebfebde4aefe3d661d",
+  "bytes": 1787495,
+  "downloaded_at": "2026-08-21T04:48:53.538883+00:00"
+}

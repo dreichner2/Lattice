@@ -1,0 +1,14 @@
+{
+  "title": "QuickChick: Property-Based Testing in Rocq",
+  "path": "books/software-foundations/quickchick.tgz",
+  "authors": "Benjamin C. Pierce, Arthur Azevedo de Amorim, Chris Casinghino, Marco Gaboardi, Michael Greenberg, Cătălin Hrițcu, Vilhelm Sjöberg, Brent Yorgey, Andrew W. Appel, Arthur Charguéraud, and contributors",
+  "year": "2026",
+  "source": "Open courseware / open textbook set",
+  "source_url": "https://softwarefoundations.cis.upenn.edu/",
+  "file_url": "https://softwarefoundations.cis.upenn.edu/qc-current/qc.tgz",
+  "license": "Official free electronic textbook sources; author-of-record copyright; no broad redistribution license stated on the release pages",
+  "sha256": "6c632e62a68413e9760643c6d42ac58a5989e2d236d67cdddc099b38c06ee126",
+  "bytes": 5181232,
+  "version": "2.0 (2026-01-07; Rocq 9.0.0 or later)",
+  "downloaded_at": "2026-08-21T04:50:52.132648+00:00"
+}

@@ -1,0 +1,14 @@
+{
+  "title": "Reinforcement Learning: An Introduction",
+  "path": "books/reinforcement-learning-2e.pdf",
+  "authors": "Richard S. Sutton and Andrew G. Barto",
+  "year": "2018",
+  "edition": "2nd",
+  "license": "Not recorded in the legacy collection; verify before redistribution",
+  "source": "Imported from the legacy cs-books collection",
+  "original_filename": "Reinforcement Learning - Sutton & Barto (2e).pdf",
+  "pages": 548,
+  "sha256": "2dd0d71d9ee883fbeb99f9b888c65ac3255fae2512203d11b18e838befffe9a6",
+  "bytes": 73129769,
+  "imported_at": "2026-08-20T13:59:23Z"
+}

@@ -1,0 +1,23 @@
+{
+  "title": "Dynamic Operating System Scheduling Using Double DQN: A Reinforcement Learning Approach to Task Optimization",
+  "path": "papers/double-dqn-scheduling.pdf",
+  "id": "2503.23659v1",
+  "authors": [
+    "Xiaoxuan Sun",
+    "Yifei Duan",
+    "Yingnan Deng",
+    "Fan Guo",
+    "Guohui Cai",
+    "Yuting Peng"
+  ],
+  "published": "2025-03-31T01:48:21Z",
+  "summary": "In this paper, an operating system scheduling algorithm based on Double DQN (Double Deep Q network) is proposed, and its performance under different task types and system loads is verified by experiments. Compared with the traditional scheduling algorithm, the algorithm based on Double DQN can dynamically adjust the task priority and resource allocation strategy, thus improving the task completion efficiency, system throughput, and response speed. The experimental results show that the Double DQN algorithm has high scheduling performance under light load, medium load and heavy load scenarios, especially when dealing with I/O intensive tasks, and can effectively reduce task completion time and system response time. In addition, the algorithm also shows high optimization ability in resource utilization and can intelligently adjust resource allocation according to the system state, avoiding resource waste and excessive load. Future studies will further explore the application of the algorithm in more complex systems, especially scheduling optimization in cloud computing and large-scale distributed environments, combining factors such as network latency and energy efficiency to improve the overall performance and adaptability of the algorithm.",
+  "abstract_url": "https://arxiv.org/abs/2503.23659v1",
+  "pdf_url": "https://arxiv.org/pdf/2503.23659v1",
+  "source": "arXiv",
+  "source_url": "https://arxiv.org/abs/2503.23659v1",
+  "license": "See the license field on the arXiv record",
+  "sha256": "d533d90e8967f039cabc27f2750f5725033d099419fb09b2313ba66beee276a9",
+  "bytes": 594833,
+  "downloaded_at": "2026-08-20T06:48:33.968849+00:00"
+}

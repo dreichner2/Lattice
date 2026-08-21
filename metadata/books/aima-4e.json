@@ -1,0 +1,15 @@
+{
+  "title": "Artificial Intelligence: A Modern Approach",
+  "path": "books/aima-4e.pdf",
+  "authors": "Stuart Russell and Peter Norvig",
+  "year": "2020",
+  "edition": "4th",
+  "license": "Not recorded in the legacy collection; verify before redistribution",
+  "source": "Imported from the legacy cs-books collection",
+  "original_filename": "AIMA - AI A Modern Approach (Russell & Norvig, 4e).pdf",
+  "quality_note": "Complete scan with an OCR-like text layer",
+  "pages": 1144,
+  "sha256": "9daaee9e456586c7773c0a30a030aabdbf5ba2ba581d64c426ca0c73cb162517",
+  "bytes": 75535005,
+  "imported_at": "2026-08-20T13:59:23Z"
+}

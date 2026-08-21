@@ -1,0 +1,15 @@
+{
+  "title": "Probabilistic Machine Learning: An Introduction",
+  "path": "books/pml-intro.pdf",
+  "authors": "Kevin P. Murphy",
+  "year": "2025",
+  "version": "2025-04-18 draft",
+  "license": "CC BY-NC-ND 4.0",
+  "source": "Author's official book site and GitHub release",
+  "page_url": "https://probml.github.io/pml-book/book1.html",
+  "download_url": "https://github.com/probml/pml-book/releases/latest/download/book1.pdf",
+  "source_url": "https://probml.github.io/pml-book/book1.html",
+  "sha256": "89749245bc8065d7575f990815c621a091de3facca1585168fc0369542742dcf",
+  "bytes": 92323940,
+  "downloaded_at": "2026-08-21T04:48:58.415814+00:00"
+}

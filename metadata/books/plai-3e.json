@@ -1,0 +1,15 @@
+{
+  "title": "Programming Languages: Application and Interpretation, 3rd Edition",
+  "path": "books/plai-3e.pdf",
+  "authors": "Shriram Krishnamurthi",
+  "year": "2025",
+  "version": "3.2.5",
+  "license": "CC BY-NC-SA 4.0",
+  "source": "Author's official PLAI site",
+  "page_url": "https://www.plai.org/",
+  "download_url": "https://www.plai.org/3/5/plai-v325.pdf",
+  "source_url": "https://www.plai.org/",
+  "sha256": "e11a257e7363497139d9137573e3bc867809d0dd36974406c9d7d377cb91be08",
+  "bytes": 4918908,
+  "downloaded_at": "2026-08-21T04:48:52.201738+00:00"
+}

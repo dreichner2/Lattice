@@ -1,0 +1,14 @@
+{
+  "title": "Mathematics for Machine Learning",
+  "path": "books/math-for-ml.pdf",
+  "authors": "Marc Peter Deisenroth, A. Aldo Faisal, and Cheng Soon Ong",
+  "year": "2020",
+  "license": "Copyright; publisher-authorized free PDF (no open reuse license stated)",
+  "source": "Authors' official companion site / Cambridge University Press",
+  "page_url": "https://mml-book.github.io/",
+  "download_url": "https://mml-book.github.io/book/mml-book.pdf",
+  "source_url": "https://mml-book.github.io/",
+  "sha256": "3f87b70c64a35d30ec4e565b4d5cfd18fe913002d3b3bed44691c7d0838911bc",
+  "bytes": 17565898,
+  "downloaded_at": "2026-08-21T04:48:47.497888+00:00"
+}

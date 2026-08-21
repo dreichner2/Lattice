@@ -1,0 +1,13 @@
+{
+  "title": "Clean Code: A Handbook of Agile Software Craftsmanship",
+  "path": "books/clean-code.pdf",
+  "authors": "Robert C. Martin",
+  "year": "2008",
+  "license": "Not recorded in the legacy collection; verify before redistribution",
+  "source": "Imported from the legacy cs-books collection",
+  "original_filename": "Clean Code - Robert C. Martin.pdf",
+  "pages": 462,
+  "sha256": "034292d5e0a2e27bc3444ff41216139537b4e0729661c79ee0a8ad3298db3857",
+  "bytes": 3782924,
+  "imported_at": "2026-08-20T13:59:23Z"
+}

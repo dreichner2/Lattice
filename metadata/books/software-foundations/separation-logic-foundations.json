@@ -1,0 +1,14 @@
+{
+  "title": "Separation Logic Foundations",
+  "path": "books/software-foundations/separation-logic-foundations.tgz",
+  "authors": "Benjamin C. Pierce, Arthur Azevedo de Amorim, Chris Casinghino, Marco Gaboardi, Michael Greenberg, Cătălin Hrițcu, Vilhelm Sjöberg, Brent Yorgey, Andrew W. Appel, Arthur Charguéraud, and contributors",
+  "year": "2026",
+  "source": "Open courseware / open textbook set",
+  "source_url": "https://softwarefoundations.cis.upenn.edu/",
+  "file_url": "https://softwarefoundations.cis.upenn.edu/slf-current/slf.tgz",
+  "license": "Official free electronic textbook sources; author-of-record copyright; no broad redistribution license stated on the release pages",
+  "sha256": "25013f1cf8c0ab174552a08c98dade611383699b1f20bb5bf2ec183ccd4320c9",
+  "bytes": 6002037,
+  "version": "3.0 (2026-01-07; Rocq 9.0.0 or later)",
+  "downloaded_at": "2026-08-21T04:50:52.139574+00:00"
+}

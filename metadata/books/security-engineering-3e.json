@@ -1,0 +1,14 @@
+{
+  "title": "Security Engineering, 3rd Edition",
+  "path": "books/security-engineering-3e.pdf",
+  "authors": "Ross Anderson",
+  "year": "2020",
+  "license": "Copyright; author/publisher-authorized free online edition",
+  "source": "Author's University of Cambridge archive",
+  "page_url": "https://www.cl.cam.ac.uk/archive/rja14/book.html",
+  "download_url": "https://www.cl.cam.ac.uk/archive/rja14/Papers/SEv3.pdf",
+  "source_url": "https://www.cl.cam.ac.uk/archive/rja14/book.html",
+  "sha256": "fce27ff96ec1bd851899ca6347a051a5b6e0c54c0f587155665553f1b1d47dbd",
+  "bytes": 9149696,
+  "downloaded_at": "2026-08-21T04:48:55.301563+00:00"
+}

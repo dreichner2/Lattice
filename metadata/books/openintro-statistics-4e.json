@@ -1,0 +1,14 @@
+{
+  "title": "OpenIntro Statistics, 4th Edition",
+  "path": "books/openintro-statistics-4e.pdf",
+  "authors": "David M. Diez, Mine Cetinkaya-Rundel, and Christopher D. Barr",
+  "year": "2019",
+  "license": "CC BY-SA 3.0 (book content; branding exclusions apply)",
+  "source": "OpenIntro",
+  "page_url": "https://www.openintro.org/book/os/",
+  "download_url": "https://www.openintro.org/go/?id=os4_tablet",
+  "source_url": "https://www.openintro.org/book/os/",
+  "sha256": "2dabf41f78a929bd09679722253716af8e1b6a536523f82448a9ec50be871260",
+  "bytes": 20695068,
+  "downloaded_at": "2026-08-21T04:48:43.958529+00:00"
+}

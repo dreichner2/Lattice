@@ -1,0 +1,13 @@
+{
+  "title": "Design Patterns: Elements of Reusable Object-Oriented Software",
+  "path": "books/design-patterns.pdf",
+  "authors": "Erich Gamma, Richard Helm, Ralph Johnson, and John Vlissides",
+  "year": "1994",
+  "license": "Not recorded in the legacy collection; verify before redistribution",
+  "source": "Imported from the legacy cs-books collection",
+  "original_filename": "Design Patterns (GoF - Gamma et al).pdf",
+  "pages": 354,
+  "sha256": "f69c262b0d3c234464d5fe07d567175b5b1eb6045e916f8a19e01b3558185234",
+  "bytes": 4781428,
+  "imported_at": "2026-08-20T13:59:23Z"
+}

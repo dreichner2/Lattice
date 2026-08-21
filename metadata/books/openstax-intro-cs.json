@@ -1,0 +1,14 @@
+{
+  "title": "Introduction to Computer Science",
+  "path": "books/openstax-intro-cs.pdf",
+  "authors": "OpenStax contributors",
+  "year": "2024",
+  "license": "CC BY-NC-SA 4.0; OpenStax additionally prohibits LLM training or ingestion without permission",
+  "page_url": "https://openstax.org/details/books/introduction-computer-science",
+  "download_url": "https://assets.openstax.org/oscms-prodcms/media/documents/Introduction_To_Computer_Science_-_WEB.pdf",
+  "source": "OpenStax",
+  "source_url": "https://openstax.org/details/books/introduction-computer-science",
+  "sha256": "fd56aaf80c851e9f3b417745785ea5c832fc2911acfd2094a86f4c517fdf435a",
+  "bytes": 56261511,
+  "downloaded_at": "2026-08-20T02:59:03.105851+00:00"
+}

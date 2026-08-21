@@ -1,0 +1,18 @@
+{
+  "title": "Operating Systems: Three Easy Pieces (v1.10, complete)",
+  "path": "books/ostep.pdf",
+  "authors": "Remzi H. Arpaci-Dusseau and Andrea C. Arpaci-Dusseau",
+  "year": "2023",
+  "version": "1.10",
+  "license": "Free to use (OSTEP)",
+  "source": "Local ordered compilation of 68 official OSTEP chapter PDFs",
+  "source_url": "https://pages.cs.wisc.edu/~remzi/OSTEP/",
+  "derived_from": "68 official chapter PDFs downloaded from the OSTEP site; temporary source copies are not retained",
+  "input_file_count": 68,
+  "pages": 834,
+  "section_bookmarks": 8,
+  "chapter_bookmarks": 68,
+  "sha256": "ee1d2eacf1b98565ac55cdeafb2ad5a1e11f8c6efcd0d72bb66793cf47564c57",
+  "bytes": 7451368,
+  "created_at": "2026-08-20T13:51:42Z"
+}

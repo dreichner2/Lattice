@@ -1,0 +1,18 @@
+{
+  "title": "Physically Based Rendering, 4th Edition — Official Website Source",
+  "path": "books/pbrt-4e.zip",
+  "authors": "Matt Pharr, Wenzel Jakob, and Greg Humphreys",
+  "year": "2023",
+  "license": "Book text CC BY-NC-ND 4.0; software/source components vary",
+  "source": "Authors' official website repository, commit b56160a8",
+  "catalog_type": "complete web-book source archive",
+  "page_url": "https://www.pbr-book.org/4ed/",
+  "download_url": "https://codeload.github.com/mmp/pbr-book-website/zip/b56160a8e4ac0cc8bdd051e8181aa6692b127151",
+  "filename": "pbrt-4e.zip",
+  "expected": "zip",
+  "included_path": "pbr-book-website-b56160a8e4ac0cc8bdd051e8181aa6692b127151/4ed/",
+  "source_url": "https://www.pbr-book.org/4ed/",
+  "sha256": "e6a4e11c90c0ef05367bb9b78db42a9adad1570c6ae2ea01a3398dc98652c785",
+  "bytes": 1072892349,
+  "downloaded_at": "2026-08-21T04:50:05.709958+00:00"
+}

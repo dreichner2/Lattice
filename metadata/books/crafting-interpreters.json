@@ -1,0 +1,18 @@
+{
+  "title": "Crafting Interpreters — Complete Web Book and Code Source",
+  "path": "books/crafting-interpreters.zip",
+  "authors": "Robert Nystrom",
+  "year": "2021",
+  "license": "Book/site CC BY-NC-ND 4.0; interpreter source code MIT",
+  "source": "Author's official GitHub repository, commit 4a840f70",
+  "catalog_type": "complete web-book source archive",
+  "page_url": "https://craftinginterpreters.com/",
+  "download_url": "https://codeload.github.com/munificent/craftinginterpreters/zip/4a840f70f69c6ddd17cfef4f6964f8e1bcd8c3d4",
+  "filename": "crafting-interpreters.zip",
+  "expected": "zip",
+  "included_path": "craftinginterpreters-4a840f70f69c6ddd17cfef4f6964f8e1bcd8c3d4/book/",
+  "source_url": "https://craftinginterpreters.com/",
+  "sha256": "c4c8a07244f778c4946358ffad0c047adad9819d15524568a07d98c1a6d73af1",
+  "bytes": 10662749,
+  "downloaded_at": "2026-08-21T04:48:51.888744+00:00"
+}

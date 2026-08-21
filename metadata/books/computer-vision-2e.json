@@ -1,0 +1,17 @@
+{
+  "title": "Computer Vision: Algorithms and Applications",
+  "path": "books/computer-vision-2e.pdf",
+  "authors": "Richard Szeliski",
+  "year": "2022",
+  "edition": "2nd",
+  "version": "Final draft (September 30, 2021)",
+  "license": "Copyright Springer; official personalized PDF for personal use only; posting and redistribution prohibited",
+  "source": "User-completed official personal-copy form",
+  "page_url": "https://szeliski.org/Book/",
+  "source_url": "https://szeliski.org/Book/download.php",
+  "pages": 1232,
+  "privacy_note": "The PDF is personalized and must remain local; do not expose its title-page watermark",
+  "sha256": "63269b818139d30c85c90b64bcd3453a72688de06d01817ec4543cff7f214c47",
+  "bytes": 43190964,
+  "downloaded_at": "2026-08-21T05:12:53+00:00"
+}

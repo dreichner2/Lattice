@@ -1,0 +1,11 @@
+.DS_Store
+__pycache__/
+*.pyc
+*.part
+*.tmp
+
+# The repository versions the shelf index, metadata, provenance, and tools.
+# Book/paper payloads stay local because the collection mixes open editions,
+# personal-use downloads, and legacy imports with unverified redistribution.
+/books/
+/papers/

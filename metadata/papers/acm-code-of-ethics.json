@@ -1,0 +1,16 @@
+{
+  "title": "ACM Code of Ethics and Professional Conduct",
+  "path": "papers/acm-code-of-ethics.pdf",
+  "authors": "Association for Computing Machinery",
+  "year": "2018",
+  "license": "Copyright ACM; official freely accessible professional standard",
+  "source": "Association for Computing Machinery",
+  "catalog_type": "professional standard",
+  "dest": "papers",
+  "page_url": "https://www.acm.org/code-of-ethics",
+  "download_url": "https://www.acm.org/binaries/content/assets/about/acm-code-of-ethics-and-professional-conduct.pdf",
+  "source_url": "https://www.acm.org/code-of-ethics",
+  "sha256": "1c6f849bcec39d8fefcfc9b9d7daee97150ecffac348d4ef9c0ff515bd69bf2e",
+  "bytes": 194121,
+  "downloaded_at": "2026-08-21T04:49:07.645957+00:00"
+}

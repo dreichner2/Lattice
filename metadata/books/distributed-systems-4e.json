@@ -1,0 +1,17 @@
+{
+  "title": "Distributed Systems",
+  "path": "books/distributed-systems-4e.pdf",
+  "authors": "Maarten van Steen and Andrew S. Tanenbaum",
+  "year": "2023",
+  "edition": "4th",
+  "version": "4.03x (February 2025)",
+  "license": "Copyright Maarten van Steen and Andrew S. Tanenbaum; official personalized copy for personal use; copying and redistribution prohibited",
+  "source": "User-completed official personalized-copy form",
+  "page_url": "https://www.distributed-systems.net/index.php/books/ds4/",
+  "source_url": "https://www.distributed-systems.net/index.php/books/ds4/ds4-ebook/",
+  "pages": 685,
+  "privacy_note": "The PDF is personalized and must remain local; do not expose its page watermark",
+  "sha256": "fa43377425ab25f5a3c346aea67fbda27f2311c75e4016190770a454aad16b94",
+  "bytes": 24350883,
+  "downloaded_at": "2026-08-21T05:14:17+00:00"
+}

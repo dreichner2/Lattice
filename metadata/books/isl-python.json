@@ -1,0 +1,14 @@
+{
+  "title": "An Introduction to Statistical Learning with Applications in Python",
+  "path": "books/isl-python.pdf",
+  "authors": "Gareth James, Daniela Witten, Trevor Hastie, Robert Tibshirani, and Jonathan Taylor",
+  "year": "2023",
+  "license": "Copyright Springer; official free PDF for personal study",
+  "source": "Authors' official Statistical Learning site",
+  "page_url": "https://www.statlearning.com/",
+  "download_url": "https://drive.google.com/uc?export=download&id=1ajFkHO6zjrdGNqhqW1jKBZdiNGh_8YQ1",
+  "source_url": "https://www.statlearning.com/",
+  "sha256": "278d3bdd49a8a480c2ff8e03245822caad8a3a48e81afd6d039c52c8fc13ad60",
+  "bytes": 20053984,
+  "downloaded_at": "2026-08-21T04:49:06.469369+00:00"
+}

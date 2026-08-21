@@ -1,0 +1,14 @@
+{
+  "title": "Calculus Volume 3",
+  "path": "books/openstax-calculus-3.pdf",
+  "authors": "Gilbert Strang and Edwin Herman",
+  "year": "2016",
+  "license": "CC BY-NC-SA 4.0; OpenStax additionally prohibits LLM training or ingestion without permission",
+  "source": "OpenStax",
+  "page_url": "https://openstax.org/details/books/calculus-volume-3",
+  "download_url": "https://assets.openstax.org/oscms-prodcms/media/documents/CalculusVolume3-OP.pdf",
+  "source_url": "https://openstax.org/details/books/calculus-volume-3",
+  "sha256": "63d36af23d6f9a163b5e627aaa714b63e4196d8159b9d5fa3ea93bdbdd284ca9",
+  "bytes": 64663743,
+  "downloaded_at": "2026-08-21T04:48:47.074690+00:00"
+}

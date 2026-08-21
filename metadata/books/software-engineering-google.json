@@ -1,0 +1,18 @@
+{
+  "title": "Software Engineering at Google — Complete Official HTML Source",
+  "path": "books/software-engineering-google.zip",
+  "authors": "Titus Winters, Tom Manshreck, and Hyrum Wright (curators)",
+  "year": "2020",
+  "license": "Book subdirectory CC BY-NC-ND 4.0; other repository content may differ",
+  "source": "Official Abseil site source, commit e9e24835",
+  "catalog_type": "complete web-book source archive",
+  "page_url": "https://abseil.io/resources/swe-book",
+  "download_url": "https://codeload.github.com/abseil/abseil.github.io/zip/e9e24835cb889fe25251cb9ec6d51b79233e358d",
+  "filename": "software-engineering-google.zip",
+  "expected": "zip",
+  "included_path": "abseil.github.io-e9e24835cb889fe25251cb9ec6d51b79233e358d/resources/swe-book/",
+  "source_url": "https://abseil.io/resources/swe-book",
+  "sha256": "431223875c546d821193c9c4eb79ac6102de5e26bb91291bf15a424687157c9a",
+  "bytes": 19748712,
+  "downloaded_at": "2026-08-21T04:48:56.714415+00:00"
+}

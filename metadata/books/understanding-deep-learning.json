@@ -1,0 +1,15 @@
+{
+  "title": "Understanding Deep Learning",
+  "path": "books/understanding-deep-learning.pdf",
+  "authors": "Simon J. D. Prince",
+  "year": "2026",
+  "version": "5.0.3 (2026-02-09 correction)",
+  "license": "MIT Press open-access edition; see the PDF for exact reuse terms",
+  "source": "Author's official GitHub release / MIT Press open-access edition",
+  "page_url": "https://mitpress.mit.edu/9780262377102/understanding-deep-learning/",
+  "download_url": "https://github.com/udlbook/udlbook/releases/download/v5.0.3/UnderstandingDeepLearning_02_09_26_C.pdf",
+  "source_url": "https://mitpress.mit.edu/9780262377102/understanding-deep-learning/",
+  "sha256": "f8237d393163900fa8e43210e680a3f987b45ccac7750b372e156fae3df0bf32",
+  "bytes": 22344992,
+  "downloaded_at": "2026-08-21T04:48:59.124133+00:00"
+}

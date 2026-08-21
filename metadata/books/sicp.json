@@ -1,0 +1,14 @@
+{
+  "title": "Structure and Interpretation of Computer Programs",
+  "path": "books/sicp.pdf",
+  "authors": "Harold Abelson and Gerald Jay Sussman",
+  "year": "1996",
+  "license": "Free to use (MIT 6.001)",
+  "page_url": "https://web.mit.edu/6.001/6.037/sicp.pdf",
+  "download_url": "https://web.mit.edu/6.001/6.037/sicp.pdf",
+  "source": "MIT course mirror",
+  "source_url": "https://web.mit.edu/6.001/6.037/sicp.pdf",
+  "sha256": "08709a87567d8311d6fd29c4f4a5386801153e71450e628c4a5a5d7e85feda8b",
+  "bytes": 7416886,
+  "downloaded_at": "2026-08-20T06:40:37.830315+00:00"
+}

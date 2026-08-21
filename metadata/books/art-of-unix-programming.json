@@ -1,0 +1,13 @@
+{
+  "title": "The Art of Unix Programming",
+  "path": "books/art-of-unix-programming.pdf",
+  "authors": "Eric S. Raymond",
+  "year": "2003",
+  "license": "CC BY-ND 2003 (reported by the legacy README; verify current terms)",
+  "source": "Imported from the legacy cs-books collection",
+  "original_filename": "The Art of Unix Programming - Eric S. Raymond.pdf",
+  "pages": 549,
+  "sha256": "be9174b0437bad9e0900d39a76a81bc54dc9e02c42a29e37ea90d85fe7843080",
+  "bytes": 2316192,
+  "imported_at": "2026-08-20T13:59:23Z"
+}

@@ -1,0 +1,14 @@
+{
+  "title": "Introduction to Algorithms",
+  "path": "books/clrs-4e.pdf",
+  "authors": "Thomas H. Cormen, Charles E. Leiserson, Ronald L. Rivest, and Clifford Stein",
+  "year": "2022",
+  "edition": "4th",
+  "license": "Not recorded in the legacy collection; verify before redistribution",
+  "source": "Imported from the legacy cs-books collection",
+  "original_filename": "CLRS - Introduction to Algorithms (Cormen et al, 4e, 2022).pdf",
+  "pages": 1312,
+  "sha256": "79e37a0c8a68eec510bffd25f9fdba3ada91b8014f1161fc91dacadd035f7e4c",
+  "bytes": 12261102,
+  "imported_at": "2026-08-20T13:59:23Z"
+}

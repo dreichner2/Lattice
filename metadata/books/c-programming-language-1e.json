@@ -1,0 +1,14 @@
+{
+  "title": "The C Programming Language",
+  "path": "books/c-programming-language-1e.pdf",
+  "authors": "Brian W. Kernighan and Dennis M. Ritchie",
+  "year": "1978",
+  "edition": "1st",
+  "license": "Not recorded in the legacy collection; verify before redistribution",
+  "source": "Imported from the legacy cs-books collection",
+  "original_filename": "K&R - The C Programming Language (1978).pdf",
+  "pages": 152,
+  "sha256": "9e4b9f8f7f265da7f806626bbf628bcf57166ee0f3d850eb04ff65547c1a3c28",
+  "bytes": 5763604,
+  "imported_at": "2026-08-20T13:59:23Z"
+}

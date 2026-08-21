@@ -1,0 +1,14 @@
+{
+  "title": "Convex Optimization",
+  "path": "books/convex-optimization.pdf",
+  "authors": "Stephen Boyd and Lieven Vandenberghe",
+  "year": "2004",
+  "license": "Copyright Cambridge University Press; authorized free web copy",
+  "source": "Authors' Stanford book page / Cambridge University Press",
+  "page_url": "https://web.stanford.edu/~boyd/cvxbook/",
+  "download_url": "https://web.stanford.edu/~boyd/cvxbook/bv_cvxbook.pdf",
+  "source_url": "https://web.stanford.edu/~boyd/cvxbook/",
+  "sha256": "40d976c83c18cce1900eff8c41bd5ad408c102b813af39d05ff85678ccf8d76e",
+  "bytes": 6881335,
+  "downloaded_at": "2026-08-21T04:48:50.865462+00:00"
+}

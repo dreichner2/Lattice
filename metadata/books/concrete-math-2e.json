@@ -1,0 +1,14 @@
+{
+  "title": "Concrete Mathematics: A Foundation for Computer Science",
+  "path": "books/concrete-math-2e.pdf",
+  "authors": "Ronald L. Graham, Donald E. Knuth, and Oren Patashnik",
+  "year": "1994",
+  "edition": "2nd",
+  "license": "Not recorded in the legacy collection; verify before redistribution",
+  "source": "Imported from the legacy cs-books collection",
+  "original_filename": "Concrete Mathematics 2e - Graham, Knuth, Patashnik.pdf",
+  "pages": 670,
+  "sha256": "9137617220ddb1d4f2a8fb619132817f5ecf4549e609f6e3ae5d1c26f9ac257f",
+  "bytes": 2962919,
+  "imported_at": "2026-08-20T13:59:23Z"
+}
