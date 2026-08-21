@@ -14,3 +14,7 @@ __pycache__/
 /.library-cache/
 /work/
 /CS Library.app/
+/artifacts/
+/windows/build/
+/windows/CSLibrary.Windows/bin/
+/windows/CSLibrary.Windows/obj/

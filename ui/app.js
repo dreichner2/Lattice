@@ -22,7 +22,12 @@ const DEFAULT_EPUB_SETTINGS = Object.freeze({
   tone: "paper",
 });
 
-const IS_NATIVE_APP = new URLSearchParams(window.location.search).get("app") === "1";
+const APP_MODE = new URLSearchParams(window.location.search).get("app");
+const IS_NATIVE_APP = APP_MODE === "1";
+const IS_WINDOWS = APP_MODE === "windows" || navigator.userAgent.includes("Windows");
+const COMPUTER_LABEL = IS_WINDOWS ? "PC" : "Mac";
+const FILE_MANAGER_LABEL = IS_WINDOWS ? "Explorer" : "Finder";
+const SYSTEM_OPEN_LABEL = IS_WINDOWS ? "Open in Windows" : "Open on Mac";
 
 const state = {
   library: null,
@@ -492,7 +497,8 @@ function configureLocalReaderActions(work, file) {
   elements.readerShell.dataset.format = file.format;
   elements.readerMac.hidden = false;
   elements.readerFinder.hidden = false;
-  elements.readerMac.textContent = file.format === "EPUB" ? "Open in Books" : "Open on Mac";
+  elements.readerMac.textContent = file.format === "EPUB" && !IS_WINDOWS ? "Open in Books" : SYSTEM_OPEN_LABEL;
+  elements.readerFinder.textContent = FILE_MANAGER_LABEL;
   const descriptor = {
     path: file.path,
     workId: work.id,
@@ -506,7 +512,7 @@ function configureLocalReaderActions(work, file) {
 
 function showPdfReader(work, file) {
   if (!file.exists) {
-    announce(`${file.title} is no longer on this Mac`, true);
+    announce(`${file.title} is no longer on this computer`, true);
     return;
   }
   recordOpen(work);
@@ -530,7 +536,7 @@ function showPdfReader(work, file) {
 
 async function showTextReader(work, file) {
   if (!file.exists) {
-    announce(`${file.title} is no longer on this Mac`, true);
+    announce(`${file.title} is no longer on this computer`, true);
     return;
   }
   recordOpen(work);
@@ -1134,7 +1140,7 @@ function handleEpubFrameLoad() {
 
 async function showEpubReader(work, file) {
   if (!file.exists) {
-    announce(`${file.title} is no longer on this Mac`, true);
+    announce(`${file.title} is no longer on this computer`, true);
     return;
   }
   recordOpen(work);
@@ -1175,13 +1181,13 @@ async function showEpubReader(work, file) {
 
 async function openOnMac(work, file) {
   if (!file.exists) {
-    announce(`${file.title} is no longer on this Mac`, true);
+    announce(`${file.title} is no longer on this computer`, true);
     return;
   }
   recordOpen(work);
   try {
     await localAction(file.path, "open");
-    announce(`Opened ${file.title} on your Mac`);
+    announce(`Opened ${file.title} on your ${COMPUTER_LABEL}`);
   } catch (error) {
     announce(error.message, true);
   }
@@ -1281,7 +1287,7 @@ function handleDocumentLink(event) {
 async function revealFile(file) {
   try {
     await localAction(file.path, "reveal");
-    announce("Revealed the file in Finder");
+    announce(`Revealed the file in ${FILE_MANAGER_LABEL}`);
   } catch (error) {
     announce(error.message, true);
   }
@@ -1339,7 +1345,7 @@ function makeCard(work) {
   info.append(meta);
 
   const actions = node("div", "card-actions");
-  const primaryAction = button("button button-primary button-small", work.isCollection ? "Browse files" : isBrowserReadable(primaryFile(work)) ? "Read here" : "Open on Mac", () => {
+  const primaryAction = button("button button-primary button-small", work.isCollection ? "Browse files" : isBrowserReadable(primaryFile(work)) ? "Read here" : SYSTEM_OPEN_LABEL, () => {
       if (work.isCollection) showDrawer(work.id);
       else openFile(work, primaryFile(work));
     });
@@ -1381,7 +1387,7 @@ function makeMaterialCard(material) {
   info.append(meta);
   const actions = node("div", "card-actions");
   actions.append(
-    button("button button-primary button-small", isBrowserReadable(material) ? "Read here" : "Open on Mac", () => openFile(work, material)),
+    button("button button-primary button-small", isBrowserReadable(material) ? "Read here" : SYSTEM_OPEN_LABEL, () => openFile(work, material)),
     button("button button-quiet button-small", "Work details", () => showDrawer(work.id)),
   );
   info.append(actions);
@@ -1604,16 +1610,16 @@ function renderDrawer(work) {
 
   const actions = node("div", "drawer-actions");
   const firstFile = primaryFile(work);
-  const readAction = button("button button-primary", isBrowserReadable(firstFile) ? "Read here" : (firstFile.format === "EPUB" ? "Open in Books" : "Open on Mac"), () => openFile(work, firstFile));
+  const readAction = button("button button-primary", isBrowserReadable(firstFile) ? "Read here" : (firstFile.format === "EPUB" && !IS_WINDOWS ? "Open in Books" : SYSTEM_OPEN_LABEL), () => openFile(work, firstFile));
   readAction.disabled = !firstFile.exists;
   actions.append(readAction);
   if (isBrowserReadable(firstFile)) {
-    const macAction = button("button button-quiet", "Open on Mac", () => openOnMac(work, firstFile));
+    const macAction = button("button button-quiet", SYSTEM_OPEN_LABEL, () => openOnMac(work, firstFile));
     macAction.disabled = !firstFile.exists;
     actions.append(macAction);
   }
   actions.append(button("button button-quiet", state.favorites.has(work.id) ? "♥ Favorited" : "♡ Favorite", () => toggleFavorite(work)));
-  const finderAction = button("button button-quiet", "Finder", () => revealFile(firstFile), "Reveal in Finder");
+  const finderAction = button("button button-quiet", FILE_MANAGER_LABEL, () => revealFile(firstFile), `Reveal in ${FILE_MANAGER_LABEL}`);
   finderAction.disabled = !firstFile.exists;
   actions.append(finderAction);
   body.append(actions);
@@ -1639,14 +1645,14 @@ function renderDrawer(work) {
   work.files.forEach((file) => {
     const row = node("div", `file-row${file.exists ? "" : " is-missing"}`);
     const details = node("div", "");
-    details.append(node("strong", "", file.title), node("small", "", `${file.format} · ${humanBytes(file.bytes)} · ${file.exists ? file.path : "Missing from this Mac"}`));
+    details.append(node("strong", "", file.title), node("small", "", `${file.format} · ${humanBytes(file.bytes)} · ${file.exists ? file.path : "Missing from this computer"}`));
     const fileActions = node("div", "file-actions");
     if (file.exists) {
       fileActions.append(button("mini-action mini-action-primary", isBrowserReadable(file) ? "Read here" : "Open", () => openFile(work, file)));
-      if (isBrowserReadable(file)) fileActions.append(button("mini-action", "Mac", () => openOnMac(work, file), `Open ${file.title} on this Mac`));
-      fileActions.append(button("mini-action", "Finder", () => revealFile(file), `Reveal ${file.title} in Finder`));
+      if (isBrowserReadable(file)) fileActions.append(button("mini-action", COMPUTER_LABEL, () => openOnMac(work, file), `Open ${file.title} on this computer`));
+      fileActions.append(button("mini-action", FILE_MANAGER_LABEL, () => revealFile(file), `Reveal ${file.title} in ${FILE_MANAGER_LABEL}`));
     } else {
-      fileActions.append(node("span", "missing-label", "Not on Mac"));
+      fileActions.append(node("span", "missing-label", "Not on this computer"));
     }
     row.append(details, fileActions);
     fileList.append(row);
@@ -1663,7 +1669,7 @@ function renderDrawer(work) {
     ["Access", work.access],
     ["Size", humanBytes(work.totalBytes)],
     ["Local path", work.localPath],
-    ["Availability", work.isAvailable ? "On this Mac" : `${work.availableFileCount}/${work.fileCount} files on this Mac`],
+    ["Availability", work.isAvailable ? "On this computer" : `${work.availableFileCount}/${work.fileCount} files on this computer`],
     ["License note", primaryFile(work).license],
   ].forEach(([label, value]) => {
     const item = node("div", "metadata-item");
