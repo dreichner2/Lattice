@@ -1,0 +1,11 @@
+{
+  "title": "Handbook of Applied Cryptography, Chapter 1",
+  "path": "papers/chap1.pdf",
+  "authors": "Alfred J. Menezes, Paul C. van Oorschot, Scott A. Vanstone",
+  "source": "User-supplied exact URL",
+  "source_url": "https://cacr.uwaterloo.ca/hac/about/chap1.pdf",
+  "license": "Freely available from authors' official site",
+  "sha256": "5de3d24deb279f5bc7669a90742876d2807200eabc9195bb6e8714b400b0532a",
+  "bytes": 343046,
+  "downloaded_at": "2026-08-21T19:21:50.378564+00:00"
+}
