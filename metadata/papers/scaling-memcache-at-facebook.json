@@ -1,0 +1,11 @@
+{
+  "title": "Scaling Memcache at Facebook",
+  "path": "papers/scaling-memcache-at-facebook.pdf",
+  "authors": "Rajashekhar Nishtala et al.",
+  "source": "User-supplied exact URL",
+  "source_url": "https://www.usenix.org/system/files/conference/nsdi13/nsdi13-final170_update.pdf",
+  "license": "Freely available from USENIX (NSDI '13)",
+  "sha256": "d9d788538f999a0320da8f115edc3d4cf8f39aacbd6d8fe0ed9fedf82b395647",
+  "bytes": 378946,
+  "downloaded_at": "2026-08-21T19:22:49.028339+00:00"
+}
