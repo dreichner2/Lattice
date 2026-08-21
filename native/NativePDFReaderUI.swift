@@ -71,15 +71,17 @@ extension NativePDFReaderController {
         self.bookmarkPopup = bookmarkPopup
 
         let addQuote = makeIconButton(symbol: "text.quote", accessibilityLabel: "Add selected text to page note", action: #selector(addSelectionToNoteAction(_:)))
+        let highlight = makeIconButton(symbol: "highlighter", accessibilityLabel: "Highlight selected text", action: #selector(highlightSelectionAction(_:)))
         let zoomOut = makeIconButton(symbol: "minus.magnifyingglass", accessibilityLabel: "Zoom out", action: #selector(zoomOutAction(_:)))
         let fit = makeIconButton(symbol: "arrow.up.left.and.arrow.down.right", accessibilityLabel: "Fit page", action: #selector(fitPageAction(_:)))
         let zoomIn = makeIconButton(symbol: "plus.magnifyingglass", accessibilityLabel: "Zoom in", action: #selector(zoomInAction(_:)))
 
-        let displayMode = NSSegmentedControl(labels: ["Scroll", "Page"], trackingMode: .selectOne, target: self, action: #selector(changeDisplayModeAction(_:)))
+        let displayMode = NSSegmentedControl(labels: ["Scroll", "Page", "Spread"], trackingMode: .selectOne, target: self, action: #selector(changeDisplayModeAction(_:)))
         displayMode.segmentStyle = .rounded
         displayMode.selectedSegment = 0
         displayMode.setWidth(50, forSegment: 0)
         displayMode.setWidth(46, forSegment: 1)
+        displayMode.setWidth(52, forSegment: 2)
         displayModeControl = displayMode
 
         let searchField = NSSearchField(frame: .zero)
@@ -115,6 +117,7 @@ extension NativePDFReaderController {
         stack.addArrangedSubview(bookmarkButton)
         stack.addArrangedSubview(bookmarkPopup)
         stack.addArrangedSubview(addQuote)
+        stack.addArrangedSubview(highlight)
         stack.addArrangedSubview(makeSeparator())
         stack.addArrangedSubview(zoomOut)
         stack.addArrangedSubview(fit)
