@@ -109,6 +109,7 @@ extension NativePDFReaderController {
         defaults.set(sidebarVisible, forKey: stateKey("sidebar"))
         defaults.set(bookmarks, forKey: stateKey("bookmarks"))
         defaults.set(pageNotes, forKey: stateKey("notes"))
+        ReaderDataStore.shared.capturePDFState(identifier: stateIdentifier)
     }
 
     func refreshToolbar() {

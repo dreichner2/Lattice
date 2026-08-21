@@ -1,0 +1,9 @@
+{
+  "name": "cs-library-windows-reader-assets",
+  "private": true,
+  "version": "1.0.0",
+  "description": "Offline PDF.js assets for the CS Library Windows reader",
+  "dependencies": {
+    "pdfjs-dist": "6.2.108"
+  }
+}

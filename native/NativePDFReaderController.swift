@@ -84,6 +84,7 @@ final class NativePDFReaderController: NSObject, NSTextViewDelegate {
 
         self.document = document
         stateIdentifier = stableIdentifier(for: fileURL)
+        ReaderDataStore.shared.preparePDFState(identifier: stateIdentifier)
         bookmarks = UserDefaults.standard.array(forKey: stateKey("bookmarks")) as? [Int] ?? []
         bookmarks = Array(Set(bookmarks.filter { $0 >= 0 && $0 < document.pageCount })).sorted()
         pageNotes = UserDefaults.standard.dictionary(forKey: stateKey("notes")) as? [String: String] ?? [:]

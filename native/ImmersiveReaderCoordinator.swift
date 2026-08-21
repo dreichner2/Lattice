@@ -17,10 +17,22 @@ final class ImmersiveReaderCoordinator {
         self.libraryRoot = libraryRoot
     }
 
-    static func epubUserScript(libraryRoot: URL) -> WKUserScript? {
-        let scriptURL = libraryRoot.appendingPathComponent("native/ImmersiveEPUB.js")
-        guard let source = try? String(contentsOf: scriptURL, encoding: .utf8) else { return nil }
-        return WKUserScript(source: source, injectionTime: .atDocumentEnd, forMainFrameOnly: false)
+    static func userScripts(libraryRoot: URL) -> [WKUserScript] {
+        let specifications: [(String, WKUserScriptInjectionTime)] = [
+            ("SharedReaderState.js", .atDocumentStart),
+            ("ImmersiveEPUB.js", .atDocumentEnd),
+        ]
+        return specifications.compactMap { filename, injectionTime in
+            let scriptURL = libraryRoot.appendingPathComponent("native/\(filename)")
+            guard let source = try? String(contentsOf: scriptURL, encoding: .utf8) else {
+                return nil
+            }
+            return WKUserScript(
+                source: source,
+                injectionTime: injectionTime,
+                forMainFrameOnly: false
+            )
+        }
     }
 
     var isPDFOpen: Bool {
@@ -113,10 +125,12 @@ final class ImmersiveReaderCoordinator {
         guard isLocalLibraryURL(url), url.path.hasPrefix("/content/") else { return nil }
         let encodedRelative = String(url.path.dropFirst("/content/".count))
         let relative = encodedRelative.removingPercentEncoding ?? encodedRelative
-        let candidate = libraryRoot.appendingPathComponent(relative).standardizedFileURL
-        let rootPath = libraryRoot.standardizedFileURL.path.hasSuffix("/")
-            ? libraryRoot.standardizedFileURL.path
-            : libraryRoot.standardizedFileURL.path + "/"
+        let root = libraryRoot.resolvingSymlinksInPath().standardizedFileURL
+        let candidate = root
+            .appendingPathComponent(relative)
+            .resolvingSymlinksInPath()
+            .standardizedFileURL
+        let rootPath = root.path.hasSuffix("/") ? root.path : root.path + "/"
         guard
             candidate.path.hasPrefix(rootPath),
             candidate.pathExtension.lowercased() == "pdf",

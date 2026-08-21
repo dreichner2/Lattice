@@ -14,6 +14,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, WKNavigationDelegate, 
     private var healthSession: URLSession!
     private var readerKeyMonitor: Any?
     private var immersiveReader: ImmersiveReaderCoordinator!
+    private var expectedLibraryID = ""
 
     func applicationDidFinishLaunching(_ notification: Notification) {
         NSApp.setActivationPolicy(.regular)
@@ -27,6 +28,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, WKNavigationDelegate, 
             return
         }
         libraryRoot = root
+        expectedLibraryID = LibraryIdentity.id(for: root)
 
         let sessionConfiguration = URLSessionConfiguration.ephemeral
         sessionConfiguration.timeoutIntervalForRequest = 0.45
@@ -74,7 +76,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, WKNavigationDelegate, 
         let configuration = WKWebViewConfiguration()
         configuration.websiteDataStore = .default()
         configuration.preferences.isElementFullscreenEnabled = true
-        if let script = ImmersiveReaderCoordinator.epubUserScript(libraryRoot: libraryRoot) {
+        for script in ImmersiveReaderCoordinator.userScripts(libraryRoot: libraryRoot) {
             configuration.userContentController.addUserScript(script)
         }
 
@@ -177,7 +179,9 @@ final class AppDelegate: NSObject, NSApplicationDelegate, WKNavigationDelegate, 
                     http.statusCode == 200,
                     let data,
                     let json = try? JSONSerialization.jsonObject(with: data) as? [String: Any],
-                    json["app"] as? String == "cs-library"
+                    json["app"] as? String == "cs-library",
+                    json["libraryId"] as? String == self.expectedLibraryID,
+                    (json["protocolVersion"] as? Int ?? 0) >= LibraryIdentity.protocolVersion
                 else { return }
                 lock.lock()
                 available.insert(port)
@@ -218,8 +222,10 @@ final class AppDelegate: NSObject, NSApplicationDelegate, WKNavigationDelegate, 
             let process = Process()
             process.executableURL = URL(fileURLWithPath: python)
             process.arguments = [
-                libraryRoot.appendingPathComponent("scripts/library_ui.py").path,
+                libraryRoot.appendingPathComponent("scripts/cross_platform_server.py").path,
+                "--root", libraryRoot.path,
                 "--port", String(preferredPort),
+                "--parent-pid", String(ProcessInfo.processInfo.processIdentifier),
                 "--no-browser"
             ]
             process.currentDirectoryURL = libraryRoot
@@ -354,6 +360,33 @@ final class AppDelegate: NSObject, NSApplicationDelegate, WKNavigationDelegate, 
         }
     }
 
+    @objc private func exportReadingData(_ sender: Any?) {
+        let panel = NSSavePanel()
+        panel.title = "Export CS Library Reading Data"
+        panel.nameFieldStringValue = "CS-Library-Reading-Data.json"
+        panel.allowedFileTypes = ["json"]
+        guard panel.runModal() == .OK, let url = panel.url else { return }
+        do {
+            try ReaderDataStore.shared.export(to: url)
+        } catch {
+            showFatalError(title: "Reading data could not be exported", message: error.localizedDescription, terminate: false)
+        }
+    }
+
+    @objc private func importReadingData(_ sender: Any?) {
+        let panel = NSOpenPanel()
+        panel.title = "Import CS Library Reading Data"
+        panel.allowedFileTypes = ["json"]
+        panel.allowsMultipleSelection = false
+        guard panel.runModal() == .OK, let url = panel.url else { return }
+        do {
+            try ReaderDataStore.shared.importData(from: url)
+            webView?.reloadFromOrigin()
+        } catch {
+            showFatalError(title: "Reading data could not be imported", message: error.localizedDescription, terminate: false)
+        }
+    }
+
     private func configureMenu() {
         let mainMenu = NSMenu()
 
@@ -371,6 +404,13 @@ final class AppDelegate: NSObject, NSApplicationDelegate, WKNavigationDelegate, 
         let fileMenu = NSMenu(title: "File")
         let openFolderItem = fileMenu.addItem(withTitle: "Open Library Folder", action: #selector(openLibraryFolder(_:)), keyEquivalent: "o")
         openFolderItem.target = self
+        fileMenu.addItem(.separator())
+        let exportItem = fileMenu.addItem(withTitle: "Export Reading Data…", action: #selector(exportReadingData(_:)), keyEquivalent: "e")
+        exportItem.keyEquivalentModifierMask = [.command, .shift]
+        exportItem.target = self
+        let importItem = fileMenu.addItem(withTitle: "Import Reading Data…", action: #selector(importReadingData(_:)), keyEquivalent: "i")
+        importItem.keyEquivalentModifierMask = [.command, .shift]
+        importItem.target = self
         fileItem.submenu = fileMenu
         mainMenu.addItem(fileItem)
 

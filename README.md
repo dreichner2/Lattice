@@ -23,10 +23,10 @@
 
 ## Open the Mac app
 
-Double-click **`CS Library.app`** in this folder. It is a native macOS window
-that runs the exact same library interface without opening a normal browser.
-The app starts the private local library service when needed and shuts down the
-copy it owns when you quit.
+Double-click **`CS Library.app`** in this folder. The macOS app uses the shared
+library interface for browsing, a native PDFKit workspace for PDFs, and the
+immersive EPUB reader for reflowable books. It starts the private local service
+when needed and shuts down the copy it owns when you quit.
 
 Rebuild the app after changing its native wrapper:
 
@@ -36,6 +36,21 @@ Rebuild the app after changing its native wrapper:
 
 The generated app stays local and is intentionally ignored by Git. Its native
 source, icon, build script, and the shared web interface are versioned.
+
+## Open the Windows app
+
+Download the Windows artifact from CI or build it on Windows:
+
+```powershell
+.\windows\build-windows.ps1
+```
+
+The portable package contains **`CS Library.exe`**, a bundled loopback-only
+server, the same shelf UI, the immersive EPUB layer, and an offline PDF.js
+workspace with thumbnails, text search, bookmarks, notes, resume position,
+selected-text capture, focus mode, and Markdown export. On first launch, select
+the folder containing this library. No Python installation is required by the
+packaged Windows build.
 
 ## Browser option
 
@@ -58,7 +73,9 @@ The interface provides:
 - a responsive grid/list layout and light/dark themes;
 - an in-app EPUB reader with chapter navigation, searchable contents, bookmarks,
   resume position, typography controls, page tones, and next/previous controls;
-- embedded PDF/text reading plus explicit **Open on Mac** and **Finder** actions;
+- native PDFKit reading on macOS and an offline PDF.js workspace on Windows,
+  with resume state, search, bookmarks, notes, thumbnails, zoom, and focus mode;
+- embedded text reading plus explicit operating-system and file-manager actions;
 - a study guide whose book and course links open the matching local material
   directly, plus the catalog, provenance notes, rules, and integrity manifest
   rendered inside a polished library reading desk instead of raw browser pages;
@@ -150,7 +167,8 @@ cs-library/
 ├── metadata/                  # one tracked JSON record per local artifact
 ├── manifests/                 # stable SHA-256 inventories
 ├── notes/provenance/          # acquisition and license history
-├── native/                    # macOS WKWebView wrapper, plist, and app icon
+├── native/                    # macOS app, durable reader store, and shared scripts
+├── windows/                   # WPF/WebView2 app and offline PDF.js reader
 ├── scripts/fetch.py           # fetch, list, verify, audit, manifest
 ├── scripts/build_readable_books.py # reproducible source-to-EPUB conversion
 ├── scripts/build-macos-app.sh # builds the double-clickable native app

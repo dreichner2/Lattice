@@ -1,0 +1,82 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <meta name="color-scheme" content="dark light">
+    <title>CS Library Reader</title>
+    <link rel="stylesheet" href="/windows-reader/pdf-reader.css">
+  </head>
+  <body>
+    <div class="reader" id="reader">
+      <header class="toolbar" id="toolbar">
+        <div class="toolbar-group leading">
+          <button id="closeButton" class="label-button" type="button"><span>←</span> Shelf</button>
+          <button id="sidebarButton" class="icon-button" type="button" aria-label="Toggle sidebar" title="Toggle sidebar (T)">☷</button>
+        </div>
+        <div class="book-heading">
+          <span>Reading in CS Library</span>
+          <strong id="bookTitle">PDF</strong>
+        </div>
+        <div class="toolbar-group controls">
+          <span class="session" id="sessionLabel">Reading 0m</span>
+          <button id="previousButton" class="icon-button" type="button" aria-label="Previous page">←</button>
+          <input id="pageField" class="page-field" type="number" min="1" value="1" aria-label="Page number">
+          <span id="pageSummary" class="page-summary">/ 1</span>
+          <button id="nextButton" class="icon-button" type="button" aria-label="Next page">→</button>
+          <button id="bookmarkButton" class="icon-button" type="button" aria-label="Bookmark page" title="Bookmark page (B)">☆</button>
+          <button id="quoteButton" class="icon-button" type="button" aria-label="Add selected text to note" title="Add selected text to note">❞</button>
+          <button id="zoomOutButton" class="icon-button" type="button" aria-label="Zoom out">−</button>
+          <button id="fitButton" class="text-button" type="button">Fit</button>
+          <button id="zoomInButton" class="icon-button" type="button" aria-label="Zoom in">＋</button>
+          <select id="displayMode" class="compact-select" aria-label="Page layout">
+            <option value="continuous">Scroll</option>
+            <option value="page">Page</option>
+          </select>
+          <label class="search-field">
+            <span aria-hidden="true">⌕</span>
+            <input id="searchInput" type="search" placeholder="Search this PDF" autocomplete="off">
+          </label>
+          <button id="focusButton" class="icon-button" type="button" aria-label="Focus mode" title="Focus mode (F)">⛶</button>
+          <button id="exportButton" class="icon-button" type="button" aria-label="Export notes" title="Export notes">⇩</button>
+        </div>
+      </header>
+
+      <div class="workspace">
+        <aside class="sidebar" id="sidebar">
+          <nav class="sidebar-tabs" aria-label="Reader sidebar">
+            <button type="button" data-tab="pages" class="is-active">Pages</button>
+            <button type="button" data-tab="bookmarks">Marks</button>
+            <button type="button" data-tab="notes">Notes</button>
+            <button type="button" data-tab="search">Search</button>
+          </nav>
+          <section class="sidebar-panel is-active" data-panel="pages">
+            <div class="thumbnail-list" id="thumbnailList"></div>
+          </section>
+          <section class="sidebar-panel" data-panel="bookmarks">
+            <div class="panel-heading"><strong>Bookmarks</strong><span id="bookmarkCount">0</span></div>
+            <div class="bookmark-list" id="bookmarkList"></div>
+          </section>
+          <section class="sidebar-panel note-panel" data-panel="notes">
+            <div class="panel-heading"><strong>Page note</strong><span id="notePageLabel">Page 1</span></div>
+            <textarea id="noteInput" placeholder="Write a note about this page or paste a selected passage…"></textarea>
+            <p class="note-help">Notes, bookmarks, position, and layout are saved locally and restored on macOS and Windows.</p>
+          </section>
+          <section class="sidebar-panel" data-panel="search">
+            <div class="panel-heading"><strong>Search results</strong><span id="searchCount">0</span></div>
+            <div class="search-results" id="searchResults"></div>
+          </section>
+        </aside>
+
+        <main class="document-stage" id="documentStage" tabindex="0">
+          <div class="loading" id="loading"><span></span><p>Preparing the PDF workspace…</p></div>
+          <div class="error" id="error" hidden><h1>This PDF could not be opened</h1><p id="errorMessage"></p></div>
+          <div class="pages" id="pages"></div>
+        </main>
+      </div>
+
+      <button id="focusExit" class="focus-exit" type="button" aria-label="Show reader controls" hidden>⛶</button>
+    </div>
+    <script type="module" src="/windows-reader/pdf-reader.js"></script>
+  </body>
+</html>

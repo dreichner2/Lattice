@@ -7,6 +7,7 @@ library_root=${script_dir:h}
 app_path="$library_root/CS Library.app"
 native_root="$library_root/native"
 build_root=$(/usr/bin/mktemp -d "${TMPDIR:-/tmp}/cs-library-app.XXXXXX")
+staged_app="$build_root/CS Library.app"
 
 cleanup() {
   /bin/rm -rf "$build_root"
@@ -18,9 +19,8 @@ if [[ -e "$app_path" && ! -d "$app_path/Contents" ]]; then
   exit 1
 fi
 
-/bin/rm -rf "$app_path"
-/bin/mkdir -p "$app_path/Contents/MacOS" "$app_path/Contents/Resources"
-/bin/cp "$native_root/Info.plist" "$app_path/Contents/Info.plist"
+/bin/mkdir -p "$staged_app/Contents/MacOS" "$staged_app/Contents/Resources"
+/bin/cp "$native_root/Info.plist" "$staged_app/Contents/Info.plist"
 
 for required_source in \
   "$native_root/CSLibraryApp.swift" \
@@ -28,7 +28,11 @@ for required_source in \
   "$native_root/NativePDFReaderController.swift" \
   "$native_root/NativePDFReaderUI.swift" \
   "$native_root/NativePDFReaderState.swift" \
-  "$native_root/ImmersiveEPUB.js"; do
+  "$native_root/ReaderDataStore.swift" \
+  "$native_root/LibraryIdentity.swift" \
+  "$native_root/ImmersiveEPUB.js" \
+  "$native_root/SharedReaderState.js" \
+  "$library_root/scripts/cross_platform_server.py"; do
   if [[ ! -f "$required_source" ]]; then
     print -u2 "Missing native reader source: $required_source"
     exit 1
@@ -42,12 +46,15 @@ target_arch=$(/usr/bin/uname -m)
   -framework AppKit \
   -framework PDFKit \
   -framework WebKit \
+  -lsqlite3 \
   "$native_root/CSLibraryApp.swift" \
   "$native_root/ImmersiveReaderCoordinator.swift" \
   "$native_root/NativePDFReaderController.swift" \
   "$native_root/NativePDFReaderUI.swift" \
   "$native_root/NativePDFReaderState.swift" \
-  -o "$app_path/Contents/MacOS/CS Library"
+  "$native_root/ReaderDataStore.swift" \
+  "$native_root/LibraryIdentity.swift" \
+  -o "$staged_app/Contents/MacOS/CS Library"
 
 iconset="$build_root/AppIcon.iconset"
 base_icon="$build_root/AppIcon.png"
@@ -68,10 +75,25 @@ if /usr/bin/sips -s format png "$native_root/AppIcon.svg" --out "$base_icon" >/d
     filename=${specification#* }
     /usr/bin/sips -z "$size" "$size" "$base_icon" --out "$iconset/$filename" >/dev/null
   done
-  /usr/bin/iconutil -c icns "$iconset" -o "$app_path/Contents/Resources/AppIcon.icns"
+  /usr/bin/iconutil -c icns "$iconset" -o "$staged_app/Contents/Resources/AppIcon.icns"
 fi
 
-/usr/bin/codesign --force --deep --sign - "$app_path" >/dev/null
+/usr/bin/codesign --force --deep --sign - "$staged_app" >/dev/null
+/usr/bin/codesign --verify --deep --strict "$staged_app"
+
+# Replace only after the complete staged application has compiled and verified.
+backup_path="$build_root/CS Library.previous.app"
+if [[ -d "$app_path/Contents" ]]; then
+  /bin/mv "$app_path" "$backup_path"
+fi
+if ! /bin/mv "$staged_app" "$app_path"; then
+  if [[ -d "$backup_path/Contents" ]]; then
+    /bin/mv "$backup_path" "$app_path"
+  fi
+  print -u2 "Could not install the newly built application. The previous app was restored."
+  exit 1
+fi
+/bin/rm -rf "$backup_path"
 /usr/bin/touch "$app_path"
 
 print "Built $app_path"
