@@ -1,6 +1,17 @@
 name: Windows desktop app
 
 on:
+  push:
+    branches:
+      - codex/cross-platform-library
+    paths:
+      - "windows/**"
+      - "native/SharedReaderState.js"
+      - "native/ImmersiveEPUB.js"
+      - "scripts/cross_platform_server.py"
+      - "scripts/library_ui.py"
+      - "tests/**"
+      - ".github/workflows/windows-app.yml"
   pull_request:
     paths:
       - "windows/**"
