@@ -4,7 +4,7 @@
     <meta charset="utf-8">
     <meta name="viewport" content="width=device-width, initial-scale=1">
     <meta name="color-scheme" content="light dark">
-    <meta name="theme-color" content="#f2eee5">
+    <meta name="theme-color" content="#f4f2ed">
     <title>CS Library</title>
     <link rel="stylesheet" href="/styles.css">
   </head>
@@ -15,9 +15,9 @@
           <div class="brand-mark" aria-hidden="true">
             <span></span><span></span><span></span>
           </div>
-          <div>
+          <div class="brand-copy">
             <strong>CS Library</strong>
-            <small>Personal collection</small>
+            <small>Local study system</small>
           </div>
         </div>
 
@@ -55,11 +55,12 @@
         </div>
 
         <div class="nav-section">
-          <p class="nav-label">Shelves</p>
+          <p class="nav-label">Subject shelves</p>
           <nav id="shelfNav" class="shelf-nav" aria-label="Subject shelves"></nav>
         </div>
 
         <div class="sidebar-footer">
+          <p class="nav-label desk-label">Library desk</p>
           <div class="document-links" aria-label="Library desk">
             <button type="button" data-document="STUDY_GUIDE.md" data-title="Study guide">Study guide <span>Read</span></button>
             <button type="button" data-document="CATALOG.md" data-title="Library catalog">Library catalog <span>Read</span></button>
@@ -80,9 +81,13 @@
       <main class="main-content">
         <header class="topbar">
           <button class="icon-button mobile-menu" id="menuButton" type="button" aria-label="Open navigation">☰</button>
+          <div class="topbar-context" aria-hidden="true">
+            <span>Library</span>
+            <strong>Collection</strong>
+          </div>
           <label class="search-box" for="searchInput">
-            <span aria-hidden="true">⌕</span>
-            <input id="searchInput" type="search" autocomplete="off" placeholder="Search books, authors, subjects…">
+            <span class="search-icon" aria-hidden="true">⌕</span>
+            <input id="searchInput" type="search" autocomplete="off" placeholder="Search title, author, topic, or file…">
             <kbd>/</kbd>
           </label>
           <div class="topbar-actions">
@@ -91,32 +96,37 @@
               <span id="syncText">Connecting…</span>
             </div>
             <button class="icon-button" id="themeButton" type="button" aria-label="Switch color theme">◒</button>
-            <button class="avatar" type="button" aria-label="Personal local library">DL</button>
+            <button class="avatar" type="button" aria-label="Personal local library">DR</button>
           </div>
         </header>
 
         <div class="page-content">
           <section class="hero" aria-labelledby="pageTitle">
             <div class="hero-copy">
-              <p class="eyebrow"><span></span> Your private reading room</p>
+              <p class="eyebrow"><span></span> Private · local · searchable</p>
               <h1 id="pageTitle">Your computer science library</h1>
-              <p class="hero-description">Every book, paper, specification, and course file—organized into a shelf you can actually use, and kept in sync with this Mac.</p>
+              <p class="hero-description">A focused workspace for books, papers, specifications, and course notes—with reading progress, native EPUB and PDF access, and live sync from this Mac.</p>
               <div class="hero-actions">
-                <button class="button button-primary" id="randomButton" type="button">Surprise me <span aria-hidden="true">↗</span></button>
-                <button class="button button-quiet" id="focusSearchButton" type="button">Find a book</button>
+                <button class="button button-primary" id="randomButton" type="button">Choose my next read <span aria-hidden="true">↗</span></button>
+                <button class="button button-quiet" id="focusSearchButton" type="button">Search the shelf</button>
+              </div>
+              <div class="hero-trust" aria-label="Library qualities">
+                <span><i aria-hidden="true"></i> Loopback only</span>
+                <span><i aria-hidden="true"></i> Files stay on Mac</span>
+                <span><i aria-hidden="true"></i> No account required</span>
               </div>
             </div>
             <div class="hero-stats" aria-label="Library statistics">
-              <div class="stat"><strong id="workStat">—</strong><span>works</span></div>
-              <div class="stat"><strong id="artifactStat">—</strong><span>files on Mac</span></div>
-              <div class="stat"><strong id="sizeStat">—</strong><span>local shelf</span></div>
-              <div class="stat integrity-stat"><strong id="integrityStat">—</strong><span>available</span></div>
+              <div class="stat"><span class="stat-label">Collection</span><strong id="workStat">—</strong><span>logical works</span></div>
+              <div class="stat"><span class="stat-label">Materials</span><strong id="artifactStat">—</strong><span>files on Mac</span></div>
+              <div class="stat"><span class="stat-label">Footprint</span><strong id="sizeStat">—</strong><span>local shelf</span></div>
+              <div class="stat integrity-stat"><span class="stat-label">Integrity</span><strong id="integrityStat">—</strong><span>files available</span></div>
             </div>
           </section>
 
           <section class="recent-section" id="recentSection" hidden aria-labelledby="recentTitle">
             <div class="section-heading compact">
-              <div><p class="eyebrow">Pick up where you left off</p><h2 id="recentTitle">Recently opened</h2></div>
+              <div><p class="eyebrow">Continue learning</p><h2 id="recentTitle">Pick up where you left off</h2></div>
               <button class="text-button" id="clearRecentButton" type="button">Clear recent</button>
             </div>
             <div class="recent-row" id="recentRow"></div>
@@ -126,7 +136,7 @@
             <div class="section-heading">
               <div>
                 <p class="eyebrow" id="sectionEyebrow">The complete collection</p>
-                <h2 id="sectionTitle">All books</h2>
+                <h2 id="sectionTitle">All works</h2>
               </div>
               <p class="result-count" id="resultCount">Loading your shelf…</p>
             </div>
@@ -134,7 +144,7 @@
             <div class="toolbar" aria-label="Catalog controls">
               <div class="subject-chips" id="subjectChips" aria-label="Subject filters"></div>
               <div class="toolbar-right">
-                <label class="sort-control">Sort
+                <label class="sort-control"><span>Sort by</span>
                   <select id="sortSelect">
                     <option value="title">Title</option>
                     <option value="author">Author</option>
@@ -153,10 +163,15 @@
             <div class="empty-state" id="emptyState" hidden>
               <div class="empty-mark" aria-hidden="true">⌕</div>
               <h3>No books found</h3>
-              <p>Try another title, author, or shelf.</p>
+              <p>Try another title, author, file type, or subject.</p>
               <button class="button button-quiet" id="clearFiltersButton" type="button">Clear filters</button>
             </div>
           </section>
+
+          <footer class="page-footer">
+            <span>CS Library</span>
+            <p>Private by design. The interface runs on this Mac and serves only the files already on your shelf.</p>
+          </footer>
         </div>
       </main>
     </div>
