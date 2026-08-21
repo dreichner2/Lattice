@@ -36,6 +36,7 @@ function loadBridge() {
 
   vm.runInNewContext(SOURCE, {
     window,
+    document: {},
     Storage: FakeStorage,
     XMLHttpRequest: FakeXHR,
     fetch: async (url, options) => { posts.push({ url, options }); return { ok: true }; },
@@ -63,4 +64,18 @@ test("native bridge mirrors state writes and deletes", async () => {
   assert.equal(bridge.posts.length, 2);
   assert.match(bridge.posts[0].url, /api\/state\/set$/);
   assert.match(bridge.posts[1].url, /api\/state\/delete$/);
+});
+
+test("native bridge mirrors clear only for CS Library keys", async () => {
+  const bridge = loadBridge();
+  bridge.localStorage.setItem("unrelated", "keep local");
+  bridge.posts.length = 0;
+  bridge.localStorage.clear();
+  await new Promise(resolve => setTimeout(resolve, 0));
+  assert.equal(bridge.posts.length, 1);
+  assert.match(bridge.posts[0].url, /api\/state\/delete$/);
+  assert.deepEqual(JSON.parse(bridge.posts[0].options.body), {
+    namespace: "localStorage",
+    key: "cs-library:progress",
+  });
 });
