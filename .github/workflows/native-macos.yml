@@ -3,7 +3,7 @@ name: Apply and validate CS Library upgrade
 on:
   pull_request:
     paths:
-      - ".github/upgrade/payload.b64"
+      - ".github/upgrade/**"
       - ".github/workflows/native-macos.yml"
   workflow_dispatch:
 
@@ -25,7 +25,7 @@ jobs:
         id: payload
         shell: bash
         run: |
-          if [[ -f .github/upgrade/payload.b64 ]]; then
+          if compgen -G '.github/upgrade/payload.b64.part*' > /dev/null; then
             echo "present=true" >> "$GITHUB_OUTPUT"
           else
             echo "present=false" >> "$GITHUB_OUTPUT"
@@ -35,7 +35,7 @@ jobs:
         if: steps.payload.outputs.present == 'true'
         shell: bash
         run: |
-          base64 --decode .github/upgrade/payload.b64 > /tmp/cs-library-upgrade.tar.gz
+          cat .github/upgrade/payload.b64.part* | base64 --decode > /tmp/cs-library-upgrade.tar.gz
           echo "cfaa2aec74d63f64024184f22dce2fb392eec18c3a39605bba14d98ffd763924  /tmp/cs-library-upgrade.tar.gz" | shasum -a 256 -c -
           tar -tzf /tmp/cs-library-upgrade.tar.gz > /tmp/cs-library-upgrade-files.txt
           tar -xzf /tmp/cs-library-upgrade.tar.gz -C .
@@ -91,7 +91,7 @@ jobs:
           while IFS= read -r path; do
             [[ -n "$path" ]] && git add -- "$path"
           done < /tmp/cs-library-upgrade-files.txt
-          git rm -- .github/upgrade/payload.b64
+          git rm -- .github/upgrade/payload.b64.part*
           git diff --cached --check
           git commit -m "feat: turn CS Library into a durable reading system"
           git push origin "HEAD:${HEAD_BRANCH}"
