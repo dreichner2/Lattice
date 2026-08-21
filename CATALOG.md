@@ -206,8 +206,10 @@ linked here so the catalog remains the only navigation page you need.
 ## Collection notes
 
 - **Multi-artifact works:** MIT 6.006 contributes 20 lecture PDFs; Software
-  Foundations contributes seven readable EPUB volumes. Every other catalog row maps
-  to one artifact, for 47 works and 72 artifacts total.
+  Foundations contributes seven readable EPUB volumes; The Art of HPC contributes
+  five volumes. The curated tables contain 83 works and 112 artifacts. Thirteen
+  additional held-arrival records below bring the maintained local reader to 96
+  works and 125 readable artifacts when those files are present.
 - **Deduplication:** the complete OSTEP PDF replaces 68 chapter-level copies;
   the complete Crafting Interpreters EPUB replaces its sample and source bundle. The
   retained shelf has no repeated SHA-256 digest.

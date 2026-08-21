@@ -3,8 +3,8 @@
 </p>
 
 <p align="center">
-  <strong>47 works</strong> · <strong>72 verified artifacts</strong> ·
-  <strong>0 exact duplicates</strong> · <strong>9 subject shelves</strong>
+  <strong>96 reader-visible works</strong> · <strong>125 readable artifacts</strong> ·
+  <strong>0 exact duplicates</strong> · <strong>12 shelf views</strong>
 </p>
 
 <p align="center">
@@ -182,6 +182,8 @@ projects and exit criteria.
 | Languages & formal methods | 7 | Crafting Interpreters |
 | Computer graphics & vision | 2 | PBRT 4e or Szeliski |
 | Ethics & professional practice | 1 | ACM Code of Ethics |
+| Open textbooks & reference | 10 | Book of Proof or Linear Algebra Done Right |
+| Research papers | 26 | Attention Is All You Need or Raft |
 
 ## Everyday shelf commands
 
@@ -306,9 +308,12 @@ honor the access metadata and exclude restricted works unless permission exists.
 
 ## Current integrity state
 
-- 47 logical works represented by 72 artifacts
-- 72/72 artifacts passed format, size, metadata, and SHA-256 verification on the
-  maintained local shelf
+- 83 cataloged works represented by 112 cataloged artifacts
+- 13 additional held arrivals appear automatically when their local files are
+  present, producing 96 reader-visible works and 125 readable artifacts
+- 126/126 manifest entries passed format, size, metadata, and SHA-256
+  verification on the maintained local shelf; one retained ZIP source bundle is
+  intentionally not a reader-visible artifact
 - 0 byte-identical duplicate groups
 - 0 filenames outside the short kebab-case convention
 - OSTEP chapter copies and the Crafting Interpreters sample were removed after

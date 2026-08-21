@@ -78,23 +78,24 @@ class CatalogTests(unittest.TestCase):
         cls.library = library_ui.build_library(ROOT)
 
     def test_catalog_shape(self) -> None:
-        self.assertEqual(self.library["stats"]["works"], 83)
         if not (ROOT / "books").is_dir():
+            self.assertEqual(self.library["stats"]["works"], 83)
             self.assertEqual(self.library["stats"]["artifacts"], 0)
             self.assertEqual(self.library["stats"]["indexedArtifacts"], 112)
             self.assertFalse(self.library["stats"]["allPresent"])
             return
-        self.assertEqual(self.library["stats"]["artifacts"], 112)
-        self.assertEqual(self.library["stats"]["present"], 112)
-        self.assertEqual(self.library["stats"]["subjects"], 11)
+        self.assertEqual(self.library["stats"]["works"], 96)
+        self.assertEqual(self.library["stats"]["artifacts"], 125)
+        self.assertEqual(self.library["stats"]["present"], 125)
+        self.assertEqual(self.library["stats"]["subjects"], 12)
         self.assertTrue(self.library["stats"]["allPresent"])
         self.assertEqual(
             self.library["stats"]["materialCounts"],
             {
-                "book": 53,
+                "book": 58,
                 "lecture": 20,
                 "course-volume": 7,
-                "paper": 28,
+                "paper": 36,
                 "specification": 2,
                 "standard": 2,
             },
@@ -246,7 +247,7 @@ class ServerTests(unittest.TestCase):
             self.assertEqual(response.headers["X-Frame-Options"], "DENY")
         with urllib.request.urlopen(self.base + "/api/library", timeout=3) as response:
             payload = json.loads(response.read())
-            self.assertEqual(payload["stats"]["works"], 83)
+            self.assertEqual(payload["stats"]["works"], 96 if (ROOT / "books").is_dir() else 83)
             self.assertTrue(payload["actionToken"])
 
     def test_pdf_range_request(self) -> None:
