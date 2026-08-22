@@ -1254,7 +1254,10 @@ public partial class MainWindow : Window
                 return { ready: false, error: "PDF reader frame has not loaded." };
               }
               const app = frameDocument.getElementById("pdfApp");
-              const spread = frameDocument.querySelector('[data-layout="spread"]');
+              // Be specific: once spread mode is active the document root also
+              // has data-layout="spread", but only the toolbar button exposes
+              // aria-pressed and accepts the mode-selection click.
+              const spread = frameDocument.querySelector('button[data-layout="spread"]');
               if (app?.dataset.ready === "true" && frame.dataset.smokeSpread !== "true") {
                 frame.dataset.smokeSpread = "true";
                 spread?.click();

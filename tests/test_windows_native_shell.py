@@ -150,6 +150,10 @@ class WindowsNativeShellTests(unittest.TestCase):
         self.assertIn("hasNativeAddBridge", self.window_code)
         self.assertIn("WaitForPdfReaderAsync", self.window_code)
         self.assertIn("WaitForPdfShelfReturnAsync", self.window_code)
+        self.assertIn(
+            "querySelector('button[data-layout=\"spread\"]')",
+            self.window_code,
+        )
         self.assertIn('getElementById("closeButton")', self.window_code)
         self.assertIn("ShelfReturnWorked", self.window_code)
         self.assertIn("Application.Current.Shutdown(exitCode);", self.window_code)
