@@ -5,21 +5,10 @@ from __future__ import annotations
 
 import argparse
 import struct
-import zlib
 from pathlib import Path
 
 
 ICON_SIZES = (16, 24, 32, 48, 64, 128, 256)
-PNG_SIGNATURE = b"\x89PNG\r\n\x1a\n"
-
-
-def _png_chunk(kind: bytes, payload: bytes) -> bytes:
-    return (
-        struct.pack(">I", len(payload))
-        + kind
-        + payload
-        + struct.pack(">I", zlib.crc32(kind + payload) & 0xFFFFFFFF)
-    )
 
 
 def _rounded_square_contains(x: int, y: int, size: int) -> bool:
@@ -38,7 +27,7 @@ def _rounded_square_contains(x: int, y: int, size: int) -> bool:
     return (px - center_x) ** 2 + (py - center_y) ** 2 <= radius**2
 
 
-def _render_png(size: int) -> bytes:
+def _render_pixels(size: int) -> list[list[tuple[int, int, int, int]]]:
     transparent = (0, 0, 0, 0)
     pixels = [[transparent for _x in range(size)] for _y in range(size)]
 
@@ -65,23 +54,53 @@ def _render_png(size: int) -> bytes:
     fill(0.15, 0.74, 0.84, 0.82, (245, 246, 248, 255))
     fill(0.15, 0.48, 0.84, 0.53, (70, 76, 94, 255))
 
-    scanlines = bytearray()
-    for row in pixels:
-        scanlines.append(0)
-        for red, green, blue, alpha in row:
-            scanlines.extend((red, green, blue, alpha))
+    return pixels
 
-    header = struct.pack(">IIBBBBB", size, size, 8, 6, 0, 0, 0)
-    return (
-        PNG_SIGNATURE
-        + _png_chunk(b"IHDR", header)
-        + _png_chunk(b"IDAT", zlib.compress(bytes(scanlines), level=9))
-        + _png_chunk(b"IEND", b"")
+
+def _render_dib(size: int) -> bytes:
+    """Return a classic 32-bit ICO bitmap understood by Windows PowerShell 5.1.
+
+    PNG-compressed ICO frames render in modern Windows, but the legacy
+    ``System.Drawing.Icon.ToBitmap`` used by the installer can reject them.
+    A bottom-up BGRA DIB plus its 1-bit transparency mask works consistently in
+    both the legacy installer and the modern WPF shell.
+    """
+
+    pixels = _render_pixels(size)
+    xor_bitmap = bytearray()
+    and_mask = bytearray()
+    mask_stride = ((size + 31) // 32) * 4
+
+    for row in reversed(pixels):
+        for red, green, blue, alpha in row:
+            xor_bitmap.extend((blue, green, red, alpha))
+
+    for row in reversed(pixels):
+        mask_row = bytearray(mask_stride)
+        for x, (_red, _green, _blue, alpha) in enumerate(row):
+            if alpha == 0:
+                mask_row[x // 8] |= 0x80 >> (x % 8)
+        and_mask.extend(mask_row)
+
+    bitmap_header = struct.pack(
+        "<IiiHHIIiiII",
+        40,
+        size,
+        size * 2,
+        1,
+        32,
+        0,
+        len(xor_bitmap),
+        0,
+        0,
+        0,
+        0,
     )
+    return bitmap_header + bytes(xor_bitmap) + bytes(and_mask)
 
 
 def build_icon() -> bytes:
-    images = [(size, _render_png(size)) for size in ICON_SIZES]
+    images = [(size, _render_dib(size)) for size in ICON_SIZES]
     offset = 6 + (16 * len(images))
     entries = bytearray()
     payload = bytearray()
@@ -120,8 +139,29 @@ def validate_icon(data: bytes) -> None:
         decoded_height = 256 if height == 0 else height
         if decoded_width != decoded_height or planes != 1 or bits != 32:
             raise ValueError("ICO image entry is invalid")
-        if offset + length > len(data) or data[offset : offset + len(PNG_SIGNATURE)] != PNG_SIGNATURE:
+        if offset + length > len(data):
             raise ValueError("ICO image payload is invalid")
+        mask_stride = ((decoded_width + 31) // 32) * 4
+        expected_length = 40 + decoded_width * decoded_height * 4 + mask_stride * decoded_height
+        if length != expected_length:
+            raise ValueError("ICO bitmap payload has an invalid length")
+        (
+            header_size,
+            bitmap_width,
+            bitmap_height,
+            bitmap_planes,
+            bitmap_bits,
+            compression,
+        ) = struct.unpack_from("<IiiHHI", data, offset)
+        if (
+            header_size != 40
+            or bitmap_width != decoded_width
+            or bitmap_height != decoded_height * 2
+            or bitmap_planes != 1
+            or bitmap_bits != 32
+            or compression != 0
+        ):
+            raise ValueError("ICO bitmap payload is invalid")
         observed_sizes.append(decoded_width)
     if tuple(observed_sizes) != ICON_SIZES:
         raise ValueError("ICO sizes are incomplete")

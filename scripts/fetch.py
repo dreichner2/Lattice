@@ -1189,6 +1189,78 @@ def existing_metadata_path(payload: Path) -> Path:
     return tracked if tracked.is_file() else synced_metadata_path(payload)
 
 
+def load_canonical_inventory() -> tuple[
+    dict[str, tuple[Path, dict[str, Any]]], list[str]
+]:
+    """Load the canonical payload inventory from tracked metadata only.
+
+    Adjacent ``.library.json`` files belong to private Syncthing imports. They
+    remain usable by ``list`` and ``verify``, but they must not silently change
+    the repository's canonical artifact set or checksum manifest.
+    """
+    inventory: dict[str, tuple[Path, dict[str, Any]]] = {}
+    issues: list[str] = []
+    metadata_root = REPO_ROOT / "metadata"
+    record_paths = sorted(metadata_root.rglob("*.json")) if metadata_root.is_dir() else []
+
+    for record_path in record_paths:
+        display_path = record_path.relative_to(REPO_ROOT)
+        try:
+            record = json.loads(record_path.read_text(encoding="utf-8"))
+        except (OSError, json.JSONDecodeError) as exc:
+            issues.append(f"invalid metadata {display_path}: {exc}")
+            continue
+        if not isinstance(record, dict):
+            issues.append(f"invalid metadata {display_path}: expected a JSON object")
+            continue
+
+        relative = record.get("path")
+        if not isinstance(relative, str) or not relative:
+            issues.append(f"metadata missing path: {display_path}")
+            continue
+        relative_path = Path(relative)
+        if (
+            relative_path.is_absolute()
+            or ".." in relative_path.parts
+            or not relative_path.parts
+            or relative_path.parts[0] not in {"books", "papers", "lectures"}
+            or relative_path.as_posix() != relative
+        ):
+            issues.append(f"metadata has invalid payload path: {display_path}: {relative}")
+            continue
+
+        expected_record = metadata_root / relative_path.with_suffix(".json")
+        if record_path != expected_record:
+            issues.append(
+                f"misplaced metadata: {display_path} "
+                f"(expected {expected_record.relative_to(REPO_ROOT)})"
+            )
+        if relative in inventory:
+            issues.append(f"duplicate metadata path: {relative}")
+            continue
+        inventory[relative] = (REPO_ROOT / relative_path, record)
+
+    return inventory, issues
+
+
+_CATALOG_WORK_ENTRY_RE = re.compile(
+    r"<!--\s*work:\s*[^>]+-->\s*(?:###\s*)?\[([^\]]+)\]\(([^)]+)\)"
+)
+
+
+def catalog_readable_work_count(catalog: str) -> int:
+    """Count logical reader works, not repeated catalog representations."""
+    identities: set[str] = set()
+    for title, target in _CATALOG_WORK_ENTRY_RE.findall(catalog):
+        local_target = target.split("#", 1)[0].split("?", 1)[0].rstrip("/")
+        suffix = Path(local_target).suffix.lower()
+        if suffix and suffix not in READABLE_PAYLOAD_SUFFIXES:
+            continue
+        identity = re.sub(r"[^a-z0-9]+", " ", title.casefold()).strip()
+        identities.add(identity or local_target.casefold())
+    return len(identities)
+
+
 def cmd_list(_args: argparse.Namespace) -> int:
     payloads = library_payloads()
     for path in payloads:
@@ -1279,55 +1351,46 @@ def cmd_verify(args: argparse.Namespace) -> int:
 
 
 def cmd_audit(_args: argparse.Namespace) -> int:
-    """Audit metadata coverage, exact duplicates, and normalized filenames."""
-    payloads = library_payloads()
-    payload_by_relative = {path.relative_to(REPO_ROOT).as_posix(): path for path in payloads}
-    metadata_files = sorted((REPO_ROOT / "metadata").rglob("*.json"))
-    for folder in ("books", "papers", "lectures"):
-        directory = REPO_ROOT / folder
-        if directory.is_dir():
-            metadata_files.extend(sorted(directory.rglob(f"*{SYNCED_SIDECAR_SUFFIX}")))
-    issues: list[str] = []
-    metadata_paths: set[str] = set()
+    """Audit the tracked canonical inventory and catalog bookkeeping."""
+    inventory, issues = load_canonical_inventory()
+    readable_payloads = library_payloads()
 
-    for record_path in metadata_files:
-        try:
-            record = json.loads(record_path.read_text(encoding="utf-8"))
-        except (OSError, json.JSONDecodeError) as exc:
-            issues.append(f"invalid metadata {record_path.relative_to(REPO_ROOT)}: {exc}")
-            continue
-        relative = record.get("path")
-        if not isinstance(relative, str) or not relative:
-            issues.append(f"metadata missing path: {record_path.relative_to(REPO_ROOT)}")
-            continue
-        if relative in metadata_paths:
-            issues.append(f"duplicate metadata path: {relative}")
-        metadata_paths.add(relative)
-        payload = REPO_ROOT / relative
-        expected_records = {metadata_path(payload), synced_metadata_path(payload)}
-        if record_path not in expected_records:
-            issues.append(
-                f"misplaced metadata: {record_path.relative_to(REPO_ROOT)} "
-                f"(expected {metadata_path(payload).relative_to(REPO_ROOT)} or "
-                f"{synced_metadata_path(payload).relative_to(REPO_ROOT)})"
-            )
-        if relative not in payload_by_relative:
-            issues.append(f"metadata points to missing payload: {relative}")
-
-    for relative, path in payload_by_relative.items():
-        if relative not in metadata_paths:
+    # A readable payload with an adjacent sidecar is a private shared import,
+    # not a repository-curated artifact. Only truly unrecorded files are gaps.
+    for path in readable_payloads:
+        relative = path.relative_to(REPO_ROOT).as_posix()
+        if relative not in inventory and not synced_metadata_path(path).is_file():
             issues.append(f"payload has no metadata: {relative}")
-        if len(path.name) > 100:
-            issues.append(f"filename is longer than 100 characters: {relative}")
-        if not re.fullmatch(r"[a-z0-9]+(?:-[a-z0-9]+)*\.(?:pdf|epub|zip|tgz|txt)", path.name):
-            issues.append(f"filename is not normalized kebab-case: {relative}")
 
     by_digest: dict[str, list[str]] = {}
     actual_digests: dict[str, str] = {}
-    for relative, path in payload_by_relative.items():
+    for relative, (path, record) in sorted(inventory.items()):
+        if not path.is_file():
+            issues.append(f"metadata points to missing payload: {relative}")
+            continue
+        if len(path.name) > 100:
+            issues.append(f"filename is longer than 100 characters: {relative}")
+        if not re.fullmatch(
+            r"[a-z0-9]+(?:-[a-z0-9]+)*\.(?:pdf|epub|zip|tgz|txt)", path.name
+        ):
+            issues.append(f"filename is not normalized kebab-case: {relative}")
+
         digest = file_sha256(path)
         actual_digests[relative] = digest
         by_digest.setdefault(digest, []).append(relative)
+        expected_digest = record.get("sha256")
+        if not isinstance(expected_digest, str) or not re.fullmatch(
+            r"[0-9a-f]{64}", expected_digest
+        ):
+            issues.append(f"metadata has missing or invalid SHA-256: {relative}")
+        elif digest != expected_digest:
+            issues.append(f"metadata SHA-256 mismatch: {relative}")
+        expected_bytes = record.get("bytes")
+        if not isinstance(expected_bytes, int):
+            issues.append(f"metadata has missing or invalid byte count: {relative}")
+        elif path.stat().st_size != expected_bytes:
+            issues.append(f"metadata byte count mismatch: {relative}")
+
     duplicate_groups = [paths for paths in by_digest.values() if len(paths) > 1]
     for paths in duplicate_groups:
         issues.append("exact duplicate payloads: " + ", ".join(sorted(paths)))
@@ -1343,15 +1406,21 @@ def cmd_audit(_args: argparse.Namespace) -> int:
                 issues.append(f"invalid manifest line {number}")
                 continue
             digest, relative = match.groups()
+            if relative in manifest_digests:
+                issues.append(f"duplicate manifest path: {relative}")
             manifest_digests[relative] = digest
         if manifest_digests != actual_digests:
             issues.append("canonical manifest does not match the local payload set")
 
     catalog = (REPO_ROOT / "CATALOG.md").read_text(encoding="utf-8")
-    works = len(re.findall(r"<!-- work: [^>]+ -->", catalog))
+    works = catalog_readable_work_count(catalog)
+    readable_artifacts = sum(
+        Path(relative).suffix.lower() in READABLE_PAYLOAD_SUFFIXES
+        for relative in inventory
+    )
     print(
-        f"Library audit: {works} works, {len(payloads)} artifacts, "
-        f"{len(metadata_files)} metadata records, {len(duplicate_groups)} exact duplicates."
+        f"Library audit: {works} readable works, {readable_artifacts} readable artifacts, "
+        f"{len(inventory)} canonical records, {len(duplicate_groups)} exact duplicates."
     )
     for issue in issues:
         print(f"FAIL {issue}")
@@ -1361,10 +1430,16 @@ def cmd_audit(_args: argparse.Namespace) -> int:
 
 
 def cmd_manifest(_args: argparse.Namespace) -> int:
-    """Regenerate the canonical SHA-256 manifest in stable path order."""
+    """Regenerate the tracked canonical manifest in stable path order."""
+    inventory, issues = load_canonical_inventory()
+    if issues:
+        raise FetchError("cannot build manifest: " + "; ".join(issues))
+    missing = [relative for relative, (path, _record) in inventory.items() if not path.is_file()]
+    if missing:
+        raise FetchError("cannot build manifest; missing payloads: " + ", ".join(sorted(missing)))
     lines = [
-        f"{file_sha256(path)}  {path.relative_to(REPO_ROOT).as_posix()}"
-        for path in library_payloads()
+        f"{file_sha256(inventory[relative][0])}  {relative}"
+        for relative in sorted(inventory)
     ]
     destination = REPO_ROOT / "manifests" / "library.sha256"
     atomic_text(destination, "\n".join(lines) + ("\n" if lines else ""))

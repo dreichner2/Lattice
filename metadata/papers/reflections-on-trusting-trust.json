@@ -5,6 +5,7 @@
   "source": "User-supplied exact URL",
   "source_url": "https://www.cs.cmu.edu/~rdriley/487/papers/Thompson_1984_ReflectionsonTrustingTrust.pdf",
   "license": "Freely available (author-hosted copies; CACM 1984)",
+  "subject_ids": ["computer-science"],
   "sha256": "8ab9d339a2c2781382e6aa4c3c472a94edfcc05d10e3eedf63cbaac9530e9932",
   "bytes": 225044,
   "downloaded_at": "2026-08-21T19:21:51.265214+00:00",

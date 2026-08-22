@@ -7,29 +7,60 @@ metadata sidecars. OneDrive is not involved.
 
 ## Windows: one-time setup
 
-1. Clone the repository into its permanent location in PowerShell:
+The fast path needs Git for Windows, WinGet, and an internet connection. Clone
+the repository into its permanent location and run the checked-in setup:
 
-   ```powershell
-   git clone https://github.com/dreichner2/cs-library.git "$HOME\CS-Library"
-   cd "$HOME\CS-Library"
-   ```
+```powershell
+winget install --id Git.Git -e --source winget
+```
 
-2. Pair the Windows Syncthing device with the Mac mini hub. Exchange the device
-   ID privately; do not post it in an issue or commit it to the repository.
-3. On the incoming **Lattice** folder prompt, set:
+Close and reopen PowerShell if Git was just installed, then run:
 
-   | Setting | Exact value |
-   |---|---|
-   | Folder Label | `Lattice` |
-   | Folder ID | `cs-library-3b8290f24f15` |
-   | Folder Path | the clone root, normally `C:\Users\<name>\CS-Library` |
-   | Folder Type | `Send & Receive` |
-   | Watch for Changes | enabled |
+```powershell
+git clone https://github.com/dreichner2/cs-library.git "$HOME\Lattice"
+cd "$HOME\Lattice"
+& ".\windows\setup\Install Lattice and Connect.cmd"
+```
 
-4. Accept the folder. Do not add `books`, `papers`, or `lectures` as separate
-   Syncthing folders.
-5. Start the Windows Lattice app and choose that same clone root once. The
-   app saves the choice.
+The script validates the existing scaffold, installs the pinned Lattice `v2.0.0`
+package for the current user, installs official Syncthing `2.1.3` through
+WinGet when needed, saves the clone as Lattice's library, and configures this
+exact Syncthing folder on the Windows side:
+
+| Setting | Exact value |
+|---|---|
+| Folder Label | `Lattice` |
+| Folder ID | `cs-library-3b8290f24f15` |
+| Folder Path | the clone root, normally `C:\Users\<name>\Lattice` |
+| Folder Type | `Send & Receive` |
+| Watch for Changes | enabled |
+
+It also creates a per-user Syncthing startup shortcut, launches Lattice, and
+prints and copies the Windows Device ID. Syncthing's certificates, database,
+and API key remain outside the clone in `%LOCALAPPDATA%\Syncthing`. No hub GUI
+password or API key is copied or printed.
+
+The interactive happy path is designed to take less than two minutes. Actual
+download, install, Windows security-scan, and first-sync duration depends on the
+PC and connection. OneDrive is not used, and no content folders or ignore rules
+need to be created manually.
+
+### Required hub approval
+
+The setup cannot approve its own device on the Mac mini. Send the displayed
+Windows Device ID privately to the Mac mini owner; do not post it in an issue or
+commit it. On the Mac mini's authenticated Syncthing GUI, the owner must:
+
+1. choose **Add Remote Device** and enter that exact Windows Device ID;
+2. give it a recognizable name such as **Aidan's Windows PC**;
+3. share the existing folder whose ID is `cs-library-3b8290f24f15` with the new
+   device; and
+4. save, keep both computers online, and wait for each side to show **Up to
+   Date**.
+
+The visible hub label may still be **CS Library** or may already be **Lattice**;
+the stable folder ID above is authoritative. Do not create a second hub folder.
+Do not add `books`, `papers`, or `lectures` as separate Syncthing folders.
 
 ## macOS clients: one-time setup
 
@@ -99,6 +130,26 @@ Syncthing finishes, already carrying the same title and subject. The Mac mini's
 90-day versioning is recovery protection, but Syncthing is still synchronization
 rather than a complete backup: deletions also propagate.
 
-The only unavoidable manual security steps are pairing the two devices and
-choosing the clone root on the incoming-folder prompt. No content directories,
-nested collection folders, or ignore rules need to be created by hand.
+The only unavoidable manual security step in the Windows happy path is the Mac
+mini owner's approval of the new Device ID and existing-folder share. The
+Windows script has already selected the clone root and configured its half of
+the relationship.
+
+## Optional Codex metadata
+
+Codex is not required for cloning, Syncthing, reading, searching, importing, or
+editing metadata. If a person wants automatic metadata suggestions on their own
+computer, they can install the official Codex CLI and authenticate it locally:
+
+```powershell
+powershell -ExecutionPolicy ByPass -c "irm https://chatgpt.com/codex/install.ps1 | iex"
+codex login
+codex login status
+```
+
+Each person must use their own ChatGPT account. Never share an account or copy
+Codex credential files between the Mac and Windows computers. Lattice asks
+`gpt-5.6-luna` only for editable descriptive suggestions; if Codex is missing or
+unavailable, import completes with local fallback metadata. See the official
+[Codex authentication guide](https://learn.chatgpt.com/docs/auth) and
+[`gpt-5.6-luna` model page](https://developers.openai.com/api/docs/models/gpt-5.6-luna).

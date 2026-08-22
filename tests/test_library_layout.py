@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import json
 import sys
+import tempfile
 import unittest
 from pathlib import Path
 from unittest import mock
@@ -79,9 +80,15 @@ class LibraryLayoutTests(unittest.TestCase):
             ],
         )
         subject_ids = {subject["id"] for subject in self.taxonomy["subjects"]}
-        assigned_ids = set(self.taxonomy["topic_defaults"].values()) | set(
-            self.taxonomy["work_assignments"].values()
-        )
+        assignments = [
+            *self.taxonomy["topic_defaults"].values(),
+            *self.taxonomy["work_assignments"].values(),
+        ]
+        assigned_ids = {
+            subject_id
+            for assignment in assignments
+            for subject_id in (assignment if isinstance(assignment, list) else [assignment])
+        }
         self.assertTrue(assigned_ids <= subject_ids)
         self.assertEqual(
             self.taxonomy["topic_defaults"]["mathematics-statistics"],
@@ -89,11 +96,30 @@ class LibraryLayoutTests(unittest.TestCase):
         )
         self.assertEqual(
             self.taxonomy["work_assignments"]["books-riscv-spec-unprivileged-pdf"],
-            "computer-engineering",
+            ["computer-engineering", "computer-science"],
         )
         self.assertEqual(
             self.taxonomy["work_assignments"]["books-mackay-information-theory-pdf"],
-            "electrical-engineering",
+            [
+                "interdisciplinary",
+                "electrical-engineering",
+                "statistics-data-science",
+                "computer-science",
+                "mathematics",
+            ],
+        )
+        self.assertEqual(
+            self.taxonomy["work_assignments"]["art-of-hpc"],
+            ["computer-science", "computer-engineering", "general-engineering"],
+        )
+        self.assertEqual(
+            self.taxonomy["work_assignments"]["papers-shannon-1948-pdf"],
+            [
+                "electrical-engineering",
+                "mathematics",
+                "statistics-data-science",
+                "computer-science",
+            ],
         )
 
     def test_sidecars_append_suffix_to_full_payload_filename(self) -> None:
@@ -114,6 +140,45 @@ class LibraryLayoutTests(unittest.TestCase):
         self.assertLess(stignore.index("(?d).gitkeep"), stignore.index("!/books/**"))
         self.assertLess(stignore.index("(?d).syncthing.*.tmp"), stignore.index("!/books/**"))
         self.assertLess(stignore.index("/lectures/catalog.json"), stignore.index("!/lectures/**"))
+
+    def test_taxonomy_validator_accepts_multi_subject_assignments(self) -> None:
+        with tempfile.TemporaryDirectory() as temporary_name:
+            root = Path(temporary_name)
+            taxonomy = json.loads(json.dumps(self.taxonomy))
+            taxonomy["work_assignments"]["cross-disciplinary"] = [
+                "computer-science",
+                "mathematics",
+            ]
+            (root / "library-taxonomy.json").write_text(
+                json.dumps(taxonomy),
+                encoding="utf-8",
+            )
+            errors: list[str] = []
+            validate_library_layout._validate_taxonomy(root, errors)
+        self.assertEqual(errors, [])
+
+    def test_taxonomy_validator_caps_subjects_at_sidecar_limit(self) -> None:
+        with tempfile.TemporaryDirectory() as temporary_name:
+            root = Path(temporary_name)
+            taxonomy = json.loads(json.dumps(self.taxonomy))
+            taxonomy["subjects"].extend(
+                {
+                    "id": f"future-subject-{index}",
+                    "name": f"Future subject {index}",
+                    "description": "Future taxonomy fixture",
+                }
+                for index in range(
+                    len(taxonomy["subjects"]),
+                    validate_library_layout.MAX_ASSIGNED_SUBJECTS + 1,
+                )
+            )
+            (root / "library-taxonomy.json").write_text(
+                json.dumps(taxonomy),
+                encoding="utf-8",
+            )
+            errors: list[str] = []
+            validate_library_layout._validate_taxonomy(root, errors)
+        self.assertTrue(any("must not exceed 64" in error for error in errors))
 
     def test_boolean_schema_versions_are_rejected(self) -> None:
         boolean_layout = {**self.layout, "schema_version": True}

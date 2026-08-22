@@ -5,6 +5,7 @@
   "source": "User-supplied exact URL",
   "source_url": "https://storage.googleapis.com/gweb-research2023-media/pubtools/5068.pdf",
   "license": "Publisher PDF via Google Research archive",
+  "subject_ids": ["computer-science"],
   "sha256": "cd514fbdf07b1f96f9b32304c4bff62e9c1f048626439c9dd2c881bc09549801",
   "bytes": 337342,
   "downloaded_at": "2026-08-21T18:53:22.120241+00:00"

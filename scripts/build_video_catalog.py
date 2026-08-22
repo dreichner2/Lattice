@@ -69,7 +69,7 @@ PLAYLIST_COURSES: tuple[dict[str, Any], ...] = (
         "instructors": ["Prof. Chris Terman"],
         "term": "Spring 2017",
         "level": "Undergraduate",
-        "subject": "Systems & Security",
+        "subject": "Computer Engineering",
         "stage": 4,
         "description": "Digital systems from logic gates through processors, memory, compilation, operating systems, and concurrency.",
         "sourceUrl": "https://ocw.mit.edu/courses/6-004-computation-structures-spring-2017/",
@@ -470,14 +470,21 @@ def mit_subject(course: dict[str, Any]) -> str:
         return "AI & Machine Learning"
     if any(word in lowered for word in ("robot", "manufacturing processes")):
         return "Robotics"
-    if any(word in lowered for word in ("algorithm", "data structures", "folding")):
+    if any(
+        word in lowered
+        for word in ("algorithm", "data structures", "folding", "theory of computation")
+    ):
         return "Algorithms & Theory"
-    if any(word in lowered for word in ("language engineering", "theory of computation")):
+    if "language engineering" in lowered:
         return "Programming Languages"
     if any(word in lowered for word in ("video games", "computer vision", "inverse graphics")):
         return "Graphics, Games & Vision"
-    if any(word in lowered for word in ("mathematics", "probab", "stochastic", "nonlinear programming", "computational thinking")):
+    if any(word in lowered for word in ("data science", "probab", "stochastic")):
+        return "Statistics & Data Science"
+    if any(word in lowered for word in ("mathematics", "nonlinear programming", "computational thinking")):
         return "Mathematics"
+    if code == "6.004":
+        return "Computer Engineering"
     if any(
         word in lowered
         for word in (
@@ -485,12 +492,14 @@ def mit_subject(course: dict[str, Any]) -> str:
             "cryptograph",
             "multicore",
             "performance engineering",
-            "communication",
         )
-    ) or code == "6.004":
+    ):
         return "Systems & Security"
-    if any(word in lowered for word in ("circuits", "signal", "feedback", "electronics")):
-        return "Computer Engineering"
+    if any(
+        word in lowered
+        for word in ("circuits", "signal", "feedback", "electronics", "communication")
+    ):
+        return "Electrical Engineering"
     if any(word in lowered for word in ("programming", "structure and interpretation")):
         return "Programming"
     if "copyright" in lowered:
@@ -503,10 +512,12 @@ def subject_stage(subject: str) -> int:
         "Programming": 1,
         "Software Practice": 1,
         "Mathematics": 2,
+        "Statistics & Data Science": 2,
         "Algorithms & Theory": 3,
         "Systems & Security": 4,
         "Databases": 4,
         "Computer Engineering": 4,
+        "Electrical Engineering": 4,
         "Programming Languages": 6,
         "Ethics & Society": 7,
         "AI & Machine Learning": 8,

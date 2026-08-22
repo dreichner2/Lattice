@@ -3,12 +3,56 @@
              xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
              ShutdownMode="OnMainWindowClose">
   <Application.Resources>
-    <SolidColorBrush x:Key="ChromeBrush" Color="#171A21" />
-    <SolidColorBrush x:Key="MutedBrush" Color="#A9AFBD" />
+    <!-- Lattice's shared web palette, expressed as native WPF resources. -->
+    <Color x:Key="LatticeCanvasColor">#F4F3EF</Color>
+    <Color x:Key="LatticeRaisedColor">#F8F7F4</Color>
+    <Color x:Key="LatticePanelColor">#FFFFFF</Color>
+    <Color x:Key="LatticeInkColor">#17191F</Color>
+    <Color x:Key="LatticeInkSoftColor">#30333B</Color>
+    <Color x:Key="LatticeMutedColor">#71757F</Color>
+    <Color x:Key="LatticeFaintColor">#9A9DA5</Color>
+    <Color x:Key="LatticeLineColor">#1A1C1F27</Color>
+    <Color x:Key="LatticeLineStrongColor">#2E1C1F27</Color>
+    <Color x:Key="LatticeAccentColor">#5362D9</Color>
+    <Color x:Key="LatticeAccentDeepColor">#3E4BB6</Color>
+    <Color x:Key="LatticeAccentSoftColor">#E8EAFF</Color>
+    <Color x:Key="LatticeSuccessColor">#3F8B67</Color>
+    <Color x:Key="LatticeWarningColor">#B77735</Color>
+    <Color x:Key="LatticeDangerColor">#B6534C</Color>
+    <Color x:Key="LatticeSidebarColor">#171A23</Color>
+
+    <SolidColorBrush x:Key="LatticeCanvasBrush" Color="{StaticResource LatticeCanvasColor}" />
+    <SolidColorBrush x:Key="LatticeRaisedBrush" Color="{StaticResource LatticeRaisedColor}" />
+    <SolidColorBrush x:Key="LatticePanelBrush" Color="{StaticResource LatticePanelColor}" />
+    <SolidColorBrush x:Key="LatticeInkBrush" Color="{StaticResource LatticeInkColor}" />
+    <SolidColorBrush x:Key="LatticeInkSoftBrush" Color="{StaticResource LatticeInkSoftColor}" />
+    <SolidColorBrush x:Key="LatticeMutedBrush" Color="{StaticResource LatticeMutedColor}" />
+    <SolidColorBrush x:Key="LatticeFaintBrush" Color="{StaticResource LatticeFaintColor}" />
+    <SolidColorBrush x:Key="LatticeLineBrush" Color="{StaticResource LatticeLineColor}" />
+    <SolidColorBrush x:Key="LatticeLineStrongBrush" Color="{StaticResource LatticeLineStrongColor}" />
+    <SolidColorBrush x:Key="LatticeAccentBrush" Color="{StaticResource LatticeAccentColor}" />
+    <SolidColorBrush x:Key="LatticeAccentDeepBrush" Color="{StaticResource LatticeAccentDeepColor}" />
+    <SolidColorBrush x:Key="LatticeAccentSoftBrush" Color="{StaticResource LatticeAccentSoftColor}" />
+    <SolidColorBrush x:Key="LatticeSuccessBrush" Color="{StaticResource LatticeSuccessColor}" />
+    <SolidColorBrush x:Key="LatticeWarningBrush" Color="{StaticResource LatticeWarningColor}" />
+    <SolidColorBrush x:Key="LatticeDangerBrush" Color="{StaticResource LatticeDangerColor}" />
+    <SolidColorBrush x:Key="LatticeSidebarBrush" Color="{StaticResource LatticeSidebarColor}" />
+
+    <!-- Compatibility keys retained for any older shell markup. -->
+    <SolidColorBrush x:Key="ChromeBrush" Color="{StaticResource LatticeRaisedColor}" />
+    <SolidColorBrush x:Key="MutedBrush" Color="{StaticResource LatticeMutedColor}" />
+
+    <FontFamily x:Key="LatticeSansFont">Segoe UI Variable Text, Segoe UI</FontFamily>
+    <FontFamily x:Key="LatticeDisplayFont">Georgia</FontFamily>
+
     <DrawingImage x:Key="LatticeIcon">
       <DrawingImage.Drawing>
         <DrawingGroup>
-          <GeometryDrawing Brush="#202430" Geometry="M 2,2 H 30 V 30 H 2 Z" />
+          <GeometryDrawing Brush="{StaticResource LatticeSidebarBrush}">
+            <GeometryDrawing.Geometry>
+              <RectangleGeometry Rect="0,0,32,32" RadiusX="7" RadiusY="7" />
+            </GeometryDrawing.Geometry>
+          </GeometryDrawing>
           <GeometryDrawing Brush="#7C87EF" Geometry="M 6,7 H 11 V 25 H 6 Z" />
           <GeometryDrawing Brush="#D8956B" Geometry="M 13,5 H 19 V 25 H 13 Z" />
           <GeometryDrawing Brush="#62A18A" Geometry="M 21,9 H 26 V 25 H 21 Z" />
@@ -16,20 +60,134 @@
         </DrawingGroup>
       </DrawingImage.Drawing>
     </DrawingImage>
-    <Style TargetType="Button">
-      <Setter Property="Foreground" Value="#F5F6F8" />
-      <Setter Property="Background" Value="#272C38" />
-      <Setter Property="BorderBrush" Value="#3A4050" />
+
+    <Geometry x:Key="BackIconGeometry">M20,11 H7.83 L13.42,5.41 12,4 4,12 12,20 13.42,18.59 7.83,13 H20 Z</Geometry>
+    <Geometry x:Key="HomeIconGeometry">M4,11.2 12,4 20,11.2 V20 H14.8 V14.5 H9.2 V20 H4 Z</Geometry>
+    <Geometry x:Key="ReloadIconGeometry">M17.65,6.35 A8,8 0 1 0 19.73,14 H17.65 A6,6 0 1 1 16.24,7.76 L13,11 H21 V3 Z</Geometry>
+    <Geometry x:Key="PlusIconGeometry">M11,5 H13 V11 H19 V13 H13 V19 H11 V13 H5 V11 H11 Z</Geometry>
+    <Geometry x:Key="MoreIconGeometry">M6,10 A2,2 0 1 0 6,14 A2,2 0 1 0 6,10 M12,10 A2,2 0 1 0 12,14 A2,2 0 1 0 12,10 M18,10 A2,2 0 1 0 18,14 A2,2 0 1 0 18,10</Geometry>
+    <Geometry x:Key="FolderIconGeometry">M3,6 H10 L12,8 H21 V19 H3 Z</Geometry>
+
+    <Style x:Key="LatticeFocusVisual">
+      <Setter Property="Control.Template">
+        <Setter.Value>
+          <ControlTemplate>
+            <Border Margin="-3" BorderBrush="{StaticResource LatticeAccentBrush}"
+                    BorderThickness="2" CornerRadius="11" />
+          </ControlTemplate>
+        </Setter.Value>
+      </Setter>
+    </Style>
+
+    <Style x:Key="LatticeButtonStyle" TargetType="Button">
+      <Setter Property="MinHeight" Value="36" />
       <Setter Property="Padding" Value="12,6" />
-      <Setter Property="Margin" Value="0,0,7,0" />
+      <Setter Property="Foreground" Value="{StaticResource LatticeInkSoftBrush}" />
+      <Setter Property="Background" Value="{StaticResource LatticePanelBrush}" />
+      <Setter Property="BorderBrush" Value="{StaticResource LatticeLineBrush}" />
+      <Setter Property="BorderThickness" Value="1" />
+      <Setter Property="FontFamily" Value="{StaticResource LatticeSansFont}" />
+      <Setter Property="FontSize" Value="12.5" />
+      <Setter Property="FontWeight" Value="SemiBold" />
       <Setter Property="Cursor" Value="Hand" />
+      <Setter Property="FocusVisualStyle" Value="{StaticResource LatticeFocusVisual}" />
+      <Setter Property="Template">
+        <Setter.Value>
+          <ControlTemplate TargetType="Button">
+            <Border x:Name="ButtonSurface"
+                    Background="{TemplateBinding Background}"
+                    BorderBrush="{TemplateBinding BorderBrush}"
+                    BorderThickness="{TemplateBinding BorderThickness}"
+                    CornerRadius="10"
+                    SnapsToDevicePixels="True">
+              <ContentPresenter Margin="{TemplateBinding Padding}"
+                                HorizontalAlignment="{TemplateBinding HorizontalContentAlignment}"
+                                VerticalAlignment="{TemplateBinding VerticalContentAlignment}"
+                                RecognizesAccessKey="True" />
+            </Border>
+          </ControlTemplate>
+        </Setter.Value>
+      </Setter>
       <Style.Triggers>
+        <Trigger Property="IsMouseOver" Value="True">
+          <Setter Property="Background" Value="{StaticResource LatticeRaisedBrush}" />
+          <Setter Property="BorderBrush" Value="{StaticResource LatticeLineStrongBrush}" />
+        </Trigger>
+        <Trigger Property="IsPressed" Value="True">
+          <Setter Property="Background" Value="{StaticResource LatticeAccentSoftBrush}" />
+          <Setter Property="BorderBrush" Value="{StaticResource LatticeAccentBrush}" />
+        </Trigger>
         <Trigger Property="IsEnabled" Value="False">
-          <Setter Property="Foreground" Value="#737A8A" />
-          <Setter Property="Opacity" Value="0.58" />
+          <Setter Property="Foreground" Value="{StaticResource LatticeFaintBrush}" />
+          <Setter Property="Opacity" Value="0.54" />
           <Setter Property="Cursor" Value="Arrow" />
         </Trigger>
       </Style.Triggers>
+    </Style>
+
+    <Style TargetType="Button" BasedOn="{StaticResource LatticeButtonStyle}" />
+
+    <Style x:Key="LatticeIconButtonStyle" TargetType="Button" BasedOn="{StaticResource LatticeButtonStyle}">
+      <Setter Property="Width" Value="36" />
+      <Setter Property="MinWidth" Value="36" />
+      <Setter Property="Height" Value="36" />
+      <Setter Property="Padding" Value="8" />
+      <Setter Property="HorizontalContentAlignment" Value="Center" />
+      <Setter Property="VerticalContentAlignment" Value="Center" />
+    </Style>
+
+    <Style x:Key="LatticeQuietButtonStyle" TargetType="Button" BasedOn="{StaticResource LatticeButtonStyle}">
+      <Setter Property="Background" Value="Transparent" />
+      <Setter Property="BorderBrush" Value="Transparent" />
+    </Style>
+
+    <Style x:Key="LatticePrimaryButtonStyle" TargetType="Button" BasedOn="{StaticResource LatticeButtonStyle}">
+      <Setter Property="Foreground" Value="White" />
+      <Setter Property="Background" Value="{StaticResource LatticeAccentBrush}" />
+      <Setter Property="BorderBrush" Value="{StaticResource LatticeAccentDeepBrush}" />
+      <Setter Property="Padding" Value="14,7" />
+      <Style.Triggers>
+        <Trigger Property="IsMouseOver" Value="True">
+          <Setter Property="Background" Value="{StaticResource LatticeAccentDeepBrush}" />
+          <Setter Property="BorderBrush" Value="{StaticResource LatticeAccentDeepBrush}" />
+        </Trigger>
+        <Trigger Property="IsPressed" Value="True">
+          <Setter Property="Background" Value="#35419F" />
+        </Trigger>
+        <Trigger Property="IsEnabled" Value="False">
+          <Setter Property="Foreground" Value="#D9DCEB" />
+          <Setter Property="Background" Value="#8F97C9" />
+          <Setter Property="BorderBrush" Value="#8F97C9" />
+          <Setter Property="Opacity" Value="0.72" />
+        </Trigger>
+      </Style.Triggers>
+    </Style>
+
+    <Style TargetType="ToolTip">
+      <Setter Property="Foreground" Value="White" />
+      <Setter Property="Background" Value="{StaticResource LatticeSidebarBrush}" />
+      <Setter Property="BorderBrush" Value="#2AFFFFFF" />
+      <Setter Property="BorderThickness" Value="1" />
+      <Setter Property="Padding" Value="9,6" />
+      <Setter Property="FontFamily" Value="{StaticResource LatticeSansFont}" />
+      <Setter Property="FontSize" Value="11.5" />
+      <Setter Property="HasDropShadow" Value="True" />
+    </Style>
+
+    <Style TargetType="ContextMenu">
+      <Setter Property="Background" Value="{StaticResource LatticePanelBrush}" />
+      <Setter Property="Foreground" Value="{StaticResource LatticeInkBrush}" />
+      <Setter Property="BorderBrush" Value="{StaticResource LatticeLineStrongBrush}" />
+      <Setter Property="BorderThickness" Value="1" />
+      <Setter Property="Padding" Value="5" />
+      <Setter Property="FontFamily" Value="{StaticResource LatticeSansFont}" />
+      <Setter Property="HasDropShadow" Value="True" />
+    </Style>
+
+    <Style TargetType="MenuItem">
+      <Setter Property="Padding" Value="12,8" />
+      <Setter Property="Foreground" Value="{StaticResource LatticeInkBrush}" />
+      <Setter Property="Background" Value="Transparent" />
     </Style>
   </Application.Resources>
 </Application>

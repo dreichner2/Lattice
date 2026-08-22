@@ -27,20 +27,26 @@ books/example.pdf.library.json
 The suffix is appended to the full payload filename. Consequently,
 `example.pdf` and `example.epub` have distinct sidecars.
 
-## Sidecar schema version 1
+Kobo-style EPUBs may contain JavaScript or WebAssembly files. Lattice keeps
+those entries inside the original archive so otherwise-readable books import
+normally, but it excludes them from the reader resource map and never serves or
+executes them. Script-dependent interactive features therefore remain disabled,
+and DRM-protected EPUBs are still unsupported.
+
+## Sidecar schema version 2
 
 Every generated sidecar is a JSON object with these stable top-level keys:
 
 | Key | Shape | Ownership |
 |---|---|---|
-| `schema_version` | integer | Server-owned; currently `1`. |
+| `schema_version` | integer | Server-owned; currently `2`. |
 | `work_id` | string | Server-owned stable imported-work identity. |
 | `path` | string | Server-owned repository-relative payload path. |
 | `title` | string | Editable descriptive metadata. |
 | `authors` | string array | Editable descriptive metadata. |
 | `year` | integer or `null` | Editable descriptive metadata. |
 | `edition` | string | Editable descriptive metadata. |
-| `subject_id` | string | Editable only to an ID in `library-taxonomy.json`. |
+| `subject_ids` | string array | One or more unique IDs from `library-taxonomy.json`. |
 | `topics` | string array | Editable descriptive metadata. |
 | `material_type` | string | Server-owned destination/material classification. |
 | `bytes` | integer | Server-owned size of the installed payload. |
@@ -57,15 +63,24 @@ attempt may add `completedAt`; a failed or unavailable attempt may add `error`.
 These fields are diagnostic metadata, not proof that the suggested description
 is correct.
 
+Lattice still reads schema-version-1 sidecars containing one `subject_id`.
+They are normalized in memory and upgraded to version 2 the next time their
+descriptive metadata or enrichment status is saved, so existing synchronized
+libraries remain usable. Schema 2 must only be written after every computer
+that can edit the shared library has upgraded to Lattice 2.0 or newer; the
+singular compatibility aliases in API responses do not make an older on-disk
+writer schema-2-aware.
+
 Never hand-edit `path`, `bytes`, `sha256`, `access`, `work_id`,
 `material_type`, timestamps, or import provenance. Lattice recalculates and
 protects integrity fields; Codex and manual edits are limited to title, authors,
-year, edition, subject, and topics.
+year, edition, subjects, and topics.
 
 ## Optional Codex enrichment
 
 If the local Codex CLI is installed and authenticated, Lattice can invoke
-`gpt-5.6-luna` to suggest title, authors, year, edition, subject, and topics.
+`gpt-5.6-luna` to suggest title, authors, year, edition, subjects, and topics.
+The uploader requests medium reasoning effort for this classification pass.
 Each computer uses its own existing Codex sign-in. Lattice
 does not read, copy, display, or synchronize `auth.json`, API keys, or other
 credential material.
@@ -73,8 +88,8 @@ credential material.
 The model input policy is metadata-only: it includes the filename, selected
 material kind, publication metadata extracted locally from the container, and
 the allowed subject list. Document bytes and full text are not included. Output
-must match the expected structured schema, and `subject_id` must exist in
-`library-taxonomy.json` before a suggestion is accepted.
+must match the expected structured schema, and every `subject_ids` entry must
+exist in `library-taxonomy.json` before a suggestion is accepted.
 
 PDF imports use the filename only because arbitrary PDF byte searches can
 mistake page content for metadata. EPUB imports may include bounded title,
@@ -86,12 +101,13 @@ Codex is optional. If the executable is missing, the user is signed out, the
 model is unavailable, a timeout occurs, or output is invalid, import still
 finishes. Lattice derives a readable title locally, uses conservative unknown
 values where needed, and applies the taxonomy's `default_import_subject_id`
-(`other`). The result can be edited later.
+as the initial one-element subject list (`other`). The result can be edited later.
 
 ## Subject classification
 
-Subjects are broad disciplines; topics are narrower tags. The checked-in
-taxonomy currently defines:
+Subjects are broad disciplines; topics are narrower tags. One work may belong
+to several subjects, while its first subject remains the primary compatibility
+value exposed by the current API. The checked-in taxonomy currently defines:
 
 - Computer Science
 - Electrical Engineering
@@ -109,7 +125,8 @@ taxonomy currently defines:
 The original catalog defaults to Computer Science, with a Mathematics default
 for its mathematics shelf and selected work overrides such as RISC-V under
 Computer Engineering and MacKay's information-theory text under Electrical
-Engineering.
+Engineering. Taxonomy topic and work assignments accept either one subject ID
+or an ordered array of subject IDs.
 
 ## Sync and conflict expectations
 

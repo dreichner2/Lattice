@@ -7,10 +7,9 @@ library boundary or executing active web content.
 
 ## Supported version
 
-The current development line is version 2.x on macOS 13 or later and Windows
-10 build 19041 or later. Security fixes
-are made on the repository's protected development branch and should be included
-in the next tagged release.
+The current release line is version 2.x on macOS 13 or later and Windows 10
+build 19041 or later. Security fixes are reviewed and tested on `main` before
+they are included in a stable tagged release.
 
 ## Reporting a vulnerability
 
@@ -37,6 +36,79 @@ malicious document is required.
   payload and adjacent sidecar.
 - Exits when its desktop parent disappears when launched by either packaged app.
 
+### Windows installer and updater
+
+- The one-click bootstrap downloads the pinned `v2.0.0` Windows release and
+  compares it with its published SHA-256 companion before installation. It does
+  not use a mutable GitHub Actions artifact or require a GitHub token.
+- Automatic updates are supported only from the per-user versioned installation
+  under `%LOCALAPPDATA%\Programs\Lattice\versions\<version>`; portable and
+  development copies do not self-update.
+- The app fetches fixed `update-manifest.json` and
+  `update-manifest.json.sig` assets from the repository's latest stable GitHub
+  release. It verifies the exact manifest bytes with its embedded RSA-3072
+  public key using SHA-256 and PKCS#1 v1.5 before parsing or trusting any
+  manifest field.
+- Only strictly newer stable `major.minor.patch` versions are accepted. The
+  signed repository, `v<version>` tag, exact versioned HTTPS GitHub asset URL,
+  size, and SHA-256 must all agree.
+- Downloads, manifests, signatures, archive entry counts, and extracted bytes
+  are bounded. ZIP traversal, duplicate paths, symlinks, reparse points, and
+  incomplete or mismatched package metadata are rejected.
+- An update is extracted beside the active version. The candidate must start
+  from that exact version directory, own an isolated loopback server, pass its
+  `/api/health` response, and prove that the complete shared interface has
+  initialized before it may replace `active-version.json` and the Start-menu
+  shortcut. Each replacement is atomic; the active-version authority is
+  published first so an old shortcut launch redirects to it.
+- Candidate promotion takes a cross-process lock and re-reads the active
+  authority at commit time. An older candidate that finishes after a newer one
+  cannot roll the installation back, and stale cleanup never prunes a newer
+  staged or active version.
+- The healthy active version is never overwritten in place. After successful
+  promotion, the active version and one previous healthy version are retained;
+  recognized older non-running versions may be pruned. Launching a stale older
+  executable redirects to the recorded active version.
+
+The updater's release-manifest signature is not Windows Authenticode. The
+current Windows executable is not Authenticode-signed, so Microsoft Defender
+SmartScreen or Smart App Control may warn or block it based on local policy and
+reputation. Users must not be told to disable or bypass Windows protections to
+install Lattice.
+
+### Release signing key custody and rotation
+
+The update-manifest private key is release authority. It must stay local,
+permission-restricted, backed up securely, and outside the repository, release
+assets, GitHub secrets, and CI workflows. The application contains only the
+public key. `scripts/sign_update_manifest.py` refuses a private key unless its
+public DER SHA-256 matches the checked-in production fingerprint
+`d83bee18c8410be46d7dccac3784ec0ecc1fdd516fa5b27b0de1fe15580348bf`, and it
+does not print private-key content or provider diagnostics.
+
+Release operators build and sign exact artifacts with the checked-in helpers:
+
+```bash
+python3 scripts/build_update_manifest.py \
+  --version X.Y.Z \
+  --archive artifacts/Lattice-Windows-win-x64.zip \
+  --published-at YYYY-MM-DDTHH:MM:SSZ \
+  --output update-manifest.json
+
+python3 scripts/sign_update_manifest.py \
+  --manifest update-manifest.json \
+  --private-key /secure/off-repository/lattice-release-private.pem \
+  --output update-manifest.json.sig
+```
+
+A planned signing-key rotation must first ship a reviewed client update that
+trusts the replacement public key, using a build and manifest still authorized
+by the current key. Only after that trusted transition build is available may
+new manifests be signed with the replacement key. If the current private key is
+lost or suspected compromised, freeze automatic releases and establish the new
+trust root through a separately authenticated manual distribution; do not use a
+possibly compromised key to authorize its own replacement.
+
 ### EPUB isolation
 
 - Book resources are served with a restrictive content security policy.
@@ -49,7 +121,8 @@ malicious document is required.
 
 ### Native files
 
-- Native file resolution accepts only relative paths under approved payload roots.
+- Native file resolution accepts only relative paths under the `books/`,
+  `papers/`, and `lectures/` payload roots.
 - Paths are canonicalized and symlinks are resolved before containment checks.
 - Only PDF, EPUB, and TXT files are accepted by the reader/import workflow.
 
@@ -67,6 +140,10 @@ malicious document is required.
   `gpt-5.6-luna` in an ephemeral temporary read-only context with execution,
   browser, app, image, and workspace tools disabled. Lattice does not read,
   copy, print, or synchronize Codex credential files.
+- The Codex executable must resolve from an absolute install or `PATH`
+  directory outside the selected library. Relative entries, the current
+  directory, library-owned executables, and symlinks into the synchronized
+  library are rejected before any subprocess is launched.
 - The model prompt contains the filename, selected material kind, extracted
   EPUB publication metadata, and allowed subject list—not the document bytes or
   full text. PDF requests are filename-only. Supplied fields are treated as
@@ -98,13 +175,17 @@ malicious document is required.
   authenticated session, model availability, and OpenAI service connectivity.
 - Ad-hoc signing verifies bundle consistency but is not Developer ID
   notarization.
+- Windows update-manifest signing verifies release authorization inside
+  Lattice but is not Authenticode signing or Microsoft reputation.
 - Imported books may have restrictive copyright or machine-processing terms;
   access rights are tracked separately from software security.
 
 ## Secure-development expectations
 
 Changes that affect path handling, EPUB parsing, native bridge messages,
-database migrations, uploads, sidecars, Codex invocation, or server lifecycle
-require tests. Do not weaken content security policy, host validation, catalog
-allowlisting, upload limits, archive limits, taxonomy validation, or native path
-containment to support a single malformed document.
+database migrations, uploads, sidecars, Codex invocation, server lifecycle,
+installer behavior, updater trust, release manifests, or key rotation require
+tests. Do not weaken content security policy, host validation, catalog
+allowlisting, upload limits, archive limits, taxonomy validation, native path
+containment, signed-manifest validation, candidate health gates, or rollback
+retention to support a single malformed document or release.

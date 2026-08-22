@@ -11,6 +11,13 @@ test("normalizes only local readable library paths", () => {
   }), {
     path: "books/example.epub", workId: "example", title: "Example", format: "epub", sha256: "abc",
   });
+  for (const extension of ["pdf", "epub", "txt"]) {
+    assert.equal(
+      workspace.normalizeDocument({ path: `lectures/session.${extension}` })?.path,
+      `lectures/session.${extension}`,
+    );
+  }
+  assert.equal(workspace.normalizeDocument({ path: "lectures/session.html" }), null);
   assert.equal(workspace.normalizeDocument({ path: "../outside.pdf" }), null);
   assert.equal(workspace.normalizeDocument({ path: "books/../outside.pdf" }), null);
   assert.equal(workspace.normalizeDocument({ path: "metadata/example.json" }), null);

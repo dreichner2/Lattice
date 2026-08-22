@@ -5,6 +5,7 @@
   "source": "User-supplied exact URL",
   "source_url": "https://jeffe.cs.illinois.edu/teaching/algorithms/book/Algorithms-JeffE.pdf",
   "license": "CC BY-NC-SA 4.0 (author's open textbook, verify in preface)",
+  "subject_ids": ["computer-science"],
   "sha256": "00295b82ff725c52a71351a0bb1ee1bdb1584e594a62395d3fb382aefd0f4d42",
   "bytes": 25055430,
   "downloaded_at": "2026-08-21T18:53:13.446381+00:00"

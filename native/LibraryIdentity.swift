@@ -2,9 +2,9 @@ import CryptoKit
 import Foundation
 
 enum LibraryIdentity {
-    static let protocolVersion = 2
+    static let protocolVersion = 3
     private static let readableExtensions = Set(["pdf", "epub", "txt"])
-    private static let readableRoots = Set(["books", "papers"])
+    private static let readableRoots = Set(["books", "papers", "lectures"])
 
     static func canonicalRoot(_ root: URL) -> URL {
         root.standardizedFileURL.resolvingSymlinksInPath()
@@ -35,13 +35,7 @@ enum LibraryIdentity {
 
     static func resolveLibraryFile(relativePath: String, root: URL) -> URL? {
         let normalized = normalizedRelativePath(relativePath)
-        guard !normalized.isEmpty, !normalized.hasPrefix("/"), !normalized.contains("\0") else { return nil }
-        let pieces = normalized.split(separator: "/", omittingEmptySubsequences: false)
-        guard
-            pieces.count >= 2,
-            pieces.allSatisfy({ !$0.isEmpty && $0 != "." && $0 != ".." }),
-            readableRoots.contains(String(pieces[0]))
-        else { return nil }
+        guard isReadableRelativePath(normalized) else { return nil }
 
         let canonical = canonicalRoot(root)
         let candidate = canonical.appendingPathComponent(normalized).standardizedFileURL.resolvingSymlinksInPath()
@@ -52,6 +46,16 @@ enum LibraryIdentity {
             FileManager.default.fileExists(atPath: candidate.path)
         else { return nil }
         return candidate
+    }
+
+    static func isReadableRelativePath(_ value: String) -> Bool {
+        let normalized = normalizedRelativePath(value)
+        guard !normalized.isEmpty, !normalized.hasPrefix("/"), !normalized.contains("\0") else { return false }
+        let pieces = normalized.split(separator: "/", omittingEmptySubsequences: false)
+        return pieces.count >= 2
+            && pieces.allSatisfy({ !$0.isEmpty && $0 != "." && $0 != ".." })
+            && readableRoots.contains(String(pieces[0]))
+            && readableExtensions.contains(URL(fileURLWithPath: normalized).pathExtension.lowercased())
     }
 
     static func relativePath(for file: URL, root: URL) -> String? {

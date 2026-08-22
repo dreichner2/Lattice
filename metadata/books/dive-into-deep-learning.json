@@ -5,6 +5,7 @@
   "source": "User-supplied exact URL",
   "source_url": "https://d2l.ai/d2l-en.pdf",
   "license": "CC BY-NC-SA 4.0 (verify in front matter)",
+  "subject_ids": ["computer-science", "statistics-data-science"],
   "sha256": "b3129f44c4a26b534176bb0f83d85e1ed26a6cdf93ebebacb20104eab2d6bc00",
   "bytes": 44685994,
   "downloaded_at": "2026-08-21T18:53:15.499708+00:00"

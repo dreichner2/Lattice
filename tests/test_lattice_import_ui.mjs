@@ -64,10 +64,15 @@ test("macOS queues file-open imports until the local service is ready", () => {
 });
 
 test("metadata editing sends the supported fields", () => {
-  for (const field of ["path", "title", "authors", "year", "edition", "subjectId", "topics"]) {
+  for (const field of ["path", "title", "authors", "year", "edition", "subjectIds", "topics"]) {
     assert.match(APP, new RegExp(`\\b${field}:`));
   }
   assert.match(APP, /state\.library\?\.subjects/);
+  assert.match(APP, /checkbox\.name\s*=\s*"subjectIds"/);
+  assert.match(APP, /formData\.getAll\("subjectIds"\)/);
+  assert.match(APP, /body\.subjectId\s*=\s*body\.subjectIds\[0\]/);
+  assert.match(APP, /subject\.known\s*===\s*false/);
+  assert.match(APP, /work\.subjectIds\.includes\(state\.subject\)/);
   assert.match(APP, /textField\("Topics",\s*"topics"/);
   assert.match(APP, /item\.draft\s*=\s*body/);
   assert.match(APP, /item\.draft\s*\|\|\s*item\.metadata/);
