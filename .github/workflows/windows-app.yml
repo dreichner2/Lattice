@@ -263,6 +263,139 @@ jobs:
             $env:APPDATA = $previousAppData
           }
 
+      - name: Prove a 2.0.1 update closes the superseded window
+        shell: pwsh
+        run: |
+          $legacyArchive = Join-Path $env:RUNNER_TEMP "Lattice-Windows-2.0.1.zip"
+          $legacyExtracted = Join-Path $env:RUNNER_TEMP "lattice-2.0.1-package"
+          $testLocalAppData = Join-Path $env:RUNNER_TEMP "lattice-update-localappdata"
+          $testAppData = Join-Path $env:RUNNER_TEMP "lattice-update-appdata"
+          $installDestination = Join-Path $testLocalAppData "Programs\Lattice"
+          $currentPackage = (Resolve-Path "windows/build/package-win-x64").Path
+          $libraryRoot = (Resolve-Path ".").Path
+          $previousLocalAppData = $env:LOCALAPPDATA
+          $previousAppData = $env:APPDATA
+          $legacy = $null
+          $candidate = $null
+          try {
+            Invoke-WebRequest `
+              -Uri "https://github.com/dreichner2/Lattice/releases/download/v2.0.1/Lattice-Windows-win-x64.zip" `
+              -OutFile $legacyArchive
+            $legacyDigest = (Get-FileHash -Algorithm SHA256 $legacyArchive).Hash.ToLowerInvariant()
+            if ($legacyDigest -ne "64ba1d4b099a90c4f05af14457596630e53bdd62e0cc0d58c96059c28783c960") {
+              throw "The pinned 2.0.1 regression package failed its SHA-256 check."
+            }
+            Expand-Archive -LiteralPath $legacyArchive -DestinationPath $legacyExtracted
+            $legacyInstallers = @(Get-ChildItem $legacyExtracted -Filter "Install Lattice.ps1" -File -Recurse)
+            if ($legacyInstallers.Count -ne 1) {
+              throw "The pinned 2.0.1 package did not contain exactly one installer."
+            }
+
+            $env:LOCALAPPDATA = $testLocalAppData
+            $env:APPDATA = $testAppData
+            & powershell.exe `
+              -NoLogo `
+              -NoProfile `
+              -ExecutionPolicy Bypass `
+              -File $legacyInstallers[0].FullName `
+              -Destination $installDestination `
+              -NoLaunch
+            if ($LASTEXITCODE -ne 0) { throw "The pinned 2.0.1 package did not install." }
+
+            $legacyExecutable = Join-Path $installDestination "versions\2.0.1\Lattice.exe"
+            $candidateDirectory = Join-Path $installDestination "versions\2.0.2"
+            New-Item $candidateDirectory -ItemType Directory -Force | Out-Null
+            Get-ChildItem $currentPackage -Force |
+              Copy-Item -Destination $candidateDirectory -Recurse -Force
+
+            $legacy = Start-Process `
+              -FilePath $legacyExecutable `
+              -ArgumentList "--library-root `"$libraryRoot`"" `
+              -PassThru
+            $legacyReadyDeadline = [DateTimeOffset]::UtcNow.AddSeconds(45)
+            do {
+              Start-Sleep -Milliseconds 250
+              $legacy.Refresh()
+            } while (
+              -not $legacy.HasExited -and
+              $legacy.MainWindowHandle -eq 0 -and
+              [DateTimeOffset]::UtcNow -lt $legacyReadyDeadline
+            )
+            if ($legacy.HasExited -or $legacy.MainWindowHandle -eq 0) {
+              throw "The pinned 2.0.1 window did not become ready for the update handoff."
+            }
+
+            # Deliberately omit launcherProcessId to reproduce the activation
+            # record written by the already-published 2.0.1 updater.
+            $activationId = [Guid]::NewGuid().ToString("N")
+            $token = (("11" * 32) -join "")
+            $tokenBytes = [Convert]::FromHexString($token)
+            $tokenHash = [Convert]::ToHexString(
+              [Security.Cryptography.SHA256]::HashData($tokenBytes)
+            ).ToLowerInvariant()
+            $pendingRoot = Join-Path $installDestination ".updates\pending"
+            New-Item $pendingRoot -ItemType Directory -Force | Out-Null
+            @{
+              schemaVersion = 1
+              activationId = $activationId
+              tokenSha256 = $tokenHash
+              createdAt = [DateTimeOffset]::UtcNow.ToString("O")
+              previousVersion = "2.0.1"
+              candidateVersion = "2.0.2"
+              candidateDirectory = $candidateDirectory
+            } | ConvertTo-Json -Compress |
+              Set-Content (Join-Path $pendingRoot "$activationId.json") -Encoding utf8
+
+            $candidateExecutable = Join-Path $candidateDirectory "Lattice.exe"
+            $candidate = Start-Process `
+              -FilePath $candidateExecutable `
+              -ArgumentList (
+                "--update-candidate $activationId --update-token $token " +
+                "--library-root `"$libraryRoot`""
+              ) `
+              -PassThru
+
+            $promotionDeadline = [DateTimeOffset]::UtcNow.AddSeconds(90)
+            $activeVersion = $null
+            do {
+              Start-Sleep -Milliseconds 250
+              $candidate.Refresh()
+              if ($candidate.HasExited) {
+                throw "The 2.0.2 update candidate exited before promotion."
+              }
+              $activePath = Join-Path $installDestination "active-version.json"
+              if (Test-Path $activePath) {
+                $activeVersion = (Get-Content $activePath -Raw | ConvertFrom-Json).version
+              }
+            } while (
+              $activeVersion -ne "2.0.2" -and
+              [DateTimeOffset]::UtcNow -lt $promotionDeadline
+            )
+            if ($activeVersion -ne "2.0.2") {
+              throw "The 2.0.2 candidate did not become active."
+            }
+            if (-not $legacy.WaitForExit(20000)) {
+              throw "The superseded 2.0.1 Lattice window remained open after verified promotion."
+            }
+            if (-not (Test-Path (Join-Path $installDestination ".updates\promoted\$activationId.json"))) {
+              throw "The verified update activation record was not archived."
+            }
+          } finally {
+            foreach ($process in @($candidate, $legacy)) {
+              if ($null -eq $process) { continue }
+              try {
+                $process.Refresh()
+                if (-not $process.HasExited) {
+                  Stop-Process -Id $process.Id -Force -ErrorAction SilentlyContinue
+                }
+              } finally {
+                $process.Dispose()
+              }
+            }
+            $env:LOCALAPPDATA = $previousLocalAppData
+            $env:APPDATA = $previousAppData
+          }
+
       - name: Launch packaged native shell and capture UI proof
         shell: pwsh
         run: |
