@@ -121,6 +121,8 @@ class ReconnectResult:
     syncthing_running: bool
     syncthing_started: bool
     resumed_by_lattice: bool
+    resumed_existing_pause: bool
+    folder_paused: bool
 
 
 def _same_path(left: Path | str, right: Path | str) -> bool:
@@ -1057,6 +1059,7 @@ def reconnect_library(
     folder_id: str = DEFAULT_FOLDER_ID,
     syncthing_config: Path | str | None = None,
     start_if_needed: bool = False,
+    resume_existing_pause: bool = False,
     sync_timeout: float = 120.0,
 ) -> ReconnectResult:
     source_input = Path(source_value).expanduser()
@@ -1088,7 +1091,7 @@ def reconnect_library(
         )
         started = True
     if not discovery.managed:
-        return ReconnectResult(False, False, False, False)
+        return ReconnectResult(False, False, False, False, False, False)
     if not discovery.running:
         raise LibraryMoveError(
             "Syncthing is stopped. Start it, then choose Reconnect library sync again."
@@ -1102,6 +1105,7 @@ def reconnect_library(
     if client.restart_required():
         raise LibraryMoveError("Syncthing has a pending restart. Restart it, then reconnect the library.")
     resumed = False
+    resumed_existing_pause = False
     if state is not None and state["resumeRequired"]:
         if bool(folder.get("paused", False)):
             client.patch_folder(folder_id, {"paused": False})
@@ -1111,7 +1115,23 @@ def reconnect_library(
         client.scan(folder_id)
         _wait_for_syncthing(client, folder_id, allow_paused=False, timeout=sync_timeout)
         _delete_disconnect_state(source, state_file)
-    return ReconnectResult(True, True, started, resumed)
+    elif bool(folder.get("paused", False)) and resume_existing_pause:
+        client.patch_folder(folder_id, {"paused": False})
+        if bool(client.folder(folder_id).get("paused", True)):
+            raise LibraryMoveError("Syncthing did not resume the Lattice folder.")
+        resumed_existing_pause = True
+        client.scan(folder_id)
+        _wait_for_syncthing(client, folder_id, allow_paused=False, timeout=sync_timeout)
+
+    folder_paused = bool(client.folder(folder_id).get("paused", False))
+    return ReconnectResult(
+        True,
+        True,
+        started,
+        resumed,
+        resumed_existing_pause,
+        folder_paused,
+    )
 
 
 def _remove_tree(path: Path) -> None:
@@ -1267,6 +1287,7 @@ def _parser() -> argparse.ArgumentParser:
     parser.add_argument("--destination", help="New, not-yet-existing library root")
     parser.add_argument("--state-file", help="Local reconnect record outside the library")
     parser.add_argument("--start-if-needed", action="store_true", help=argparse.SUPPRESS)
+    parser.add_argument("--resume-existing-pause", action="store_true", help=argparse.SUPPRESS)
     parser.add_argument("--shutdown-syncthing", action="store_true", help=argparse.SUPPRESS)
     parser.add_argument("--folder-id", default=DEFAULT_FOLDER_ID)
     parser.add_argument("--protected-path", action="append", default=[])
@@ -1332,6 +1353,7 @@ def main(argv: list[str] | None = None) -> int:
                 folder_id=arguments.folder_id,
                 syncthing_config=arguments.syncthing_config,
                 start_if_needed=arguments.start_if_needed,
+                resume_existing_pause=arguments.resume_existing_pause,
             )
             reporter(
                 "complete",
@@ -1340,8 +1362,12 @@ def main(argv: list[str] | None = None) -> int:
                 syncthingRunning=reconnected.syncthing_running,
                 syncthingStarted=reconnected.syncthing_started,
                 resumedByLattice=reconnected.resumed_by_lattice,
+                resumedExistingPause=reconnected.resumed_existing_pause,
+                folderPaused=reconnected.folder_paused,
                 message=(
-                    "The Lattice library and Syncthing are reconnected."
+                    "Syncthing is running, but the Lattice folder is paused."
+                    if reconnected.folder_paused
+                    else "The Lattice library and Syncthing are reconnected."
                     if reconnected.syncthing_managed
                     else "This library is not managed by Syncthing."
                 ),

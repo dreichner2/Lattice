@@ -166,8 +166,13 @@ recovery steps instead of deleting either one.
 Keep the external drive connected while Lattice is open. If it is disconnected,
 Syncthing's missing-folder marker protection stops that folder instead of
 announcing every book as deleted. Reconnect the drive before opening books or
-resuming synchronization. On macOS, install `Lattice.app` outside the library
-(normally in `/Applications`) before moving the library itself.
+resuming synchronization. Before ejecting it, choose **Disconnect library
+drive** from Lattice's three-dot menu and wait for Lattice to close. After
+mounting it again, choose **Reconnect library sync**. If the exact Lattice
+folder is still paused without a saved Lattice pause record, the app asks
+whether to resume it and verifies active synchronization before calling it
+connected. On macOS, install `Lattice.app` outside the library (normally in
+`/Applications`) before moving the library itself.
 
 ## Windows app
 
@@ -199,7 +204,7 @@ cd "$HOME\Lattice"
 & ".\windows\setup\Install Lattice and Connect.cmd"
 ```
 
-The setup downloads and installs the pinned Lattice `v2.2.5` release for the
+The setup downloads and installs the pinned Lattice `v2.2.6` release for the
 current user, installs official Syncthing `2.1.3` through WinGet when needed,
 selects this clone as the library, configures the Mac mini hub and shared folder
 on the Windows side, starts both apps, and copies the Windows Syncthing Device ID.

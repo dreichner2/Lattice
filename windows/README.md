@@ -32,7 +32,7 @@ You can also double-click `windows\setup\Install Lattice and Connect.cmd` after
 cloning. The script:
 
 1. validates the clone and its complete empty library scaffold;
-2. downloads the pinned public `v2.2.5` release and verifies its SHA-256;
+2. downloads the pinned public `v2.2.6` release and verifies its SHA-256;
 3. installs Lattice for the current user under
    `%LOCALAPPDATA%\Programs\Lattice`;
 4. installs official Syncthing `2.1.3` with WinGet when needed;
@@ -56,7 +56,7 @@ powershell.exe -NoProfile -ExecutionPolicy Bypass -File .\windows\setup\Setup-La
 ```
 
 The pinned release can also be downloaded directly from
-[`v2.2.5/Lattice-Windows-win-x64.zip`](https://github.com/dreichner2/Lattice/releases/download/v2.2.5/Lattice-Windows-win-x64.zip).
+[`v2.2.6/Lattice-Windows-win-x64.zip`](https://github.com/dreichner2/Lattice/releases/download/v2.2.6/Lattice-Windows-win-x64.zip).
 See [`windows/setup/README.md`](setup/README.md) for offline/test inputs and the
 full switch list.
 
@@ -162,8 +162,10 @@ For an external library SSD, use the in-app three-dot menu's **Disconnect
 library drive** command before Windows Eject. It waits for an Up to Date folder,
 pauses only Lattice's stable Syncthing folder ID, stops the local Lattice
 service, and closes the app. After reconnecting the SSD, use **Reconnect library
-sync**; it restarts the dedicated Syncthing instance when needed and never
-resumes a pause that Lattice did not create.
+sync**; it restarts the dedicated Syncthing instance when needed. A pause
+recorded by Lattice resumes automatically. If only an existing pause remains,
+Lattice asks before resuming that exact folder and verifies active sync before
+calling it connected.
 
 This release-manifest signature is an application update control, not a Windows
 Authenticode signature. The current executable is not Authenticode-signed, so

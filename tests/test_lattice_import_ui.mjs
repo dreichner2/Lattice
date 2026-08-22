@@ -80,6 +80,14 @@ test("macOS Move Library delegates to the verified shared storage helper", () =>
   assert.match(MAC_BUILD, /server\/move_library\.py/);
 });
 
+test("macOS reconnect distinguishes a running process from active library sync", () => {
+  assert.match(MAC_APP, /payload\["folderPaused"\] as\? Bool == true/);
+  assert.match(MAC_APP, /Resume this exact folder now\?/);
+  assert.match(MAC_APP, /choice\.addButton\(withTitle: "Resume Sync"\)/);
+  assert.match(MAC_APP, /arguments\.append\("--resume-existing-pause"\)/);
+  assert.match(MAC_APP, /Library sync remains paused/);
+});
+
 test("desktop apps expose native actions in the inline header menu", () => {
   assert.match(HTML, /id="nativeAppMenu"[^>]*hidden/);
   assert.match(HTML, /id="appMoreButton"[^>]*aria-label="Lattice options"/);

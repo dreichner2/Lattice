@@ -238,7 +238,9 @@ class MoveLibraryTests(unittest.TestCase):
                 )
                 self.assertTrue(reconnected.syncthing_running)
                 self.assertTrue(reconnected.resumed_by_lattice)
+                self.assertFalse(reconnected.resumed_existing_pause)
                 self.assertFalse(reconnected.syncthing_started)
+                self.assertFalse(reconnected.folder_paused)
                 self.assertFalse(fixture.state.folder["paused"])
                 self.assertFalse(state_file.exists())
                 self.assertGreaterEqual(fixture.state.scans, 1)
@@ -269,7 +271,22 @@ class MoveLibraryTests(unittest.TestCase):
                     sync_timeout=1,
                 )
                 self.assertFalse(reconnected.resumed_by_lattice)
+                self.assertFalse(reconnected.resumed_existing_pause)
+                self.assertTrue(reconnected.folder_paused)
                 self.assertTrue(fixture.state.folder["paused"])
+
+                resumed = move_library.reconnect_library(
+                    source,
+                    state_file,
+                    syncthing_config=config,
+                    resume_existing_pause=True,
+                    sync_timeout=1,
+                )
+                self.assertFalse(resumed.resumed_by_lattice)
+                self.assertTrue(resumed.resumed_existing_pause)
+                self.assertFalse(resumed.folder_paused)
+                self.assertFalse(fixture.state.folder["paused"])
+                self.assertGreaterEqual(fixture.state.scans, 1)
 
     def test_disconnect_accepts_syncthing_v2_empty_state_after_confirmed_pause(self) -> None:
         with tempfile.TemporaryDirectory() as temporary:
@@ -738,6 +755,8 @@ class MoveLibraryTests(unittest.TestCase):
                 self.assertEqual(exit_code, 0)
                 self.assertEqual(message["operation"], "reconnect")
                 self.assertTrue(message["resumedByLattice"])
+                self.assertFalse(message["resumedExistingPause"])
+                self.assertFalse(message["folderPaused"])
                 self.assertNotIn(API_KEY, output.getvalue())
 
 

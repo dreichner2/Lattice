@@ -22,7 +22,7 @@ cd "$HOME\Lattice"
 & ".\windows\setup\Install Lattice and Connect.cmd"
 ```
 
-The script validates the existing scaffold, installs the pinned Lattice `v2.2.5`
+The script validates the existing scaffold, installs the pinned Lattice `v2.2.6`
 package for the current user, installs official Syncthing `2.1.3` through
 WinGet when needed, saves the clone as Lattice's library, and configures this
 exact Syncthing folder on the Windows side:
@@ -116,9 +116,15 @@ Date, pauses only folder `cs-library-3b8290f24f15`, waits for Syncthing to
 confirm the paused state, stops its own drive-backed service, and closes. Eject
 the SSD through Windows or Finder only after that window closes. When the drive
 is mounted again, reopen Lattice and choose **Reconnect library sync**. Lattice
-resumes only a pause it recorded itself; an existing manual pause is preserved.
+automatically resumes only a pause it recorded itself; an existing manual pause
+is preserved unless the user explicitly chooses **Resume Sync**.
 On Windows, Reconnect can also restart the dedicated `%LOCALAPPDATA%\Syncthing`
 instance if it was stopped.
+
+If the exact Lattice folder is paused but no Lattice-owned reconnect record is
+available, Reconnect reports that distinction and asks whether to **Resume
+Sync** or **Keep Paused**. Choosing Resume changes only the stable Lattice
+folder, scans it, and waits for a healthy state before reporting it connected.
 
 ## What a clean clone already contains
 

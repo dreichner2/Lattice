@@ -2032,19 +2032,42 @@ public partial class MainWindow : Window
                 _libraryRoot,
                 LibraryDisconnectStatePath,
                 startIfNeeded: true);
+            if (outcome.SyncthingManaged && outcome.FolderPaused)
+            {
+                var resume = MessageBox.Show(
+                    this,
+                    "Syncthing is running, but the Lattice folder is still paused. "
+                    + "Resume this exact folder now?",
+                    "Library sync is paused",
+                    MessageBoxButton.YesNo,
+                    MessageBoxImage.Question);
+                if (resume == MessageBoxResult.Yes)
+                {
+                    SetShellStatus("Resuming library sync", ShellStatus.Loading);
+                    outcome = await LibraryMoveClient.ReconnectAsync(
+                        _libraryRoot,
+                        LibraryDisconnectStatePath,
+                        startIfNeeded: true,
+                        resumeExistingPause: true);
+                }
+            }
             var detail = !outcome.SyncthingManaged
                 ? "This library is not managed by Syncthing. No sync setting was changed."
-                : outcome.ResumedByLattice
-                    ? "Lattice resumed the folder pause it created. The library is synchronized again."
-                    : outcome.SyncthingStarted
-                        ? "The dedicated Lattice Syncthing instance is back online. Its existing folder pause setting was preserved."
-                        : "Syncthing is online. Its existing folder pause setting was preserved.";
+                : outcome.FolderPaused
+                    ? "Syncthing is running, but the Lattice folder remains paused. No library files are syncing."
+                    : outcome.ResumedByLattice || outcome.ResumedExistingPause
+                        ? "Lattice resumed the exact library folder and verified that synchronization is active again."
+                        : "Syncthing is online and the Lattice library is synchronized.";
             MessageBox.Show(
                 this,
                 detail,
-                "Library sync connected",
+                !outcome.SyncthingManaged
+                    ? "Library sync is unavailable"
+                    : outcome.FolderPaused
+                        ? "Library sync remains paused"
+                        : "Library sync connected",
                 MessageBoxButton.OK,
-                MessageBoxImage.Information);
+                outcome.FolderPaused ? MessageBoxImage.Warning : MessageBoxImage.Information);
         }
         catch (Exception error)
         {

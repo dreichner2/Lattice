@@ -153,7 +153,7 @@ jobs:
             $activePath = Join-Path $installDestination "active-version.json"
             if (-not (Test-Path $activePath)) { throw "Onboarding did not install Lattice." }
             $active = Get-Content $activePath -Raw | ConvertFrom-Json
-            if ($active.version -ne "2.2.5") { throw "Onboarding selected the wrong Lattice version." }
+            if ($active.version -ne "2.2.6") { throw "Onboarding selected the wrong Lattice version." }
             $startupShortcut = Join-Path $testAppData "Microsoft\Windows\Start Menu\Programs\Startup\Lattice Syncthing.lnk"
             if (-not (Test-Path $startupShortcut)) { throw "Onboarding did not create the Syncthing startup shortcut." }
             [xml]$configured = Get-Content $configPath -Raw
@@ -220,8 +220,61 @@ jobs:
               $reconnect.operation -ne "reconnect" -or
               $reconnect.syncthingStarted -ne $true -or
               $reconnect.resumedByLattice -ne $true -or
+              $reconnect.folderPaused -ne $false -or
               (Test-Path $disconnectState)
             ) { throw "Reconnect did not restart Syncthing and restore Lattice's pause." }
+
+            # A pause that predates the current reconnect marker must not be
+            # silently changed. Once the native UI has explicit consent, the
+            # same helper must resume only the exact Lattice folder and verify it.
+            $apiAddress = [string]$configured.configuration.gui.address
+            $apiKey = [string]$configured.configuration.gui.apikey
+            $folderEndpoint = "http://$apiAddress/rest/config/folders/cs-library-3b8290f24f15"
+            Invoke-RestMethod `
+              -Uri $folderEndpoint `
+              -Method Patch `
+              -Headers @{ "X-API-Key" = $apiKey } `
+              -ContentType "application/json" `
+              -Body '{"paused":true}' | Out-Null
+
+            $preservedMessages = @(
+              & $storageHelper `
+                --operation reconnect `
+                --source $libraryRoot `
+                --state-file $disconnectState `
+                --syncthing-config $configPath `
+                --start-if-needed
+            )
+            if ($LASTEXITCODE -ne 0) {
+              $preservedMessages | ForEach-Object { Write-Host ([string]$_) }
+              throw "Reconnect could not inspect an existing folder pause."
+            }
+            $preserved = $preservedMessages[-1] | ConvertFrom-Json
+            if (
+              $preserved.folderPaused -ne $true -or
+              $preserved.resumedByLattice -ne $false -or
+              $preserved.resumedExistingPause -ne $false
+            ) { throw "Reconnect silently changed an existing folder pause." }
+
+            $resumeMessages = @(
+              & $storageHelper `
+                --operation reconnect `
+                --source $libraryRoot `
+                --state-file $disconnectState `
+                --syncthing-config $configPath `
+                --start-if-needed `
+                --resume-existing-pause
+            )
+            if ($LASTEXITCODE -ne 0) {
+              $resumeMessages | ForEach-Object { Write-Host ([string]$_) }
+              throw "Reconnect could not resume the existing folder pause after consent."
+            }
+            $resumed = $resumeMessages[-1] | ConvertFrom-Json
+            if (
+              $resumed.folderPaused -ne $false -or
+              $resumed.resumedByLattice -ne $false -or
+              $resumed.resumedExistingPause -ne $true
+            ) { throw "Reconnect did not resume the exact existing folder pause after consent." }
           } finally {
             if (Test-Path (Join-Path $syncthingHome "config.xml")) {
               try {
@@ -308,7 +361,7 @@ jobs:
             $activePath = Join-Path $destination "active-version.json"
             if (-not (Test-Path $activePath)) { throw "Installer did not write active-version.json" }
             $active = Get-Content $activePath -Raw | ConvertFrom-Json
-            if ($active.schemaVersion -ne 1 -or $active.version -ne "2.2.5") {
+            if ($active.schemaVersion -ne 1 -or $active.version -ne "2.2.6") {
               throw "Installer selected an unexpected active version: $($active.version)"
             }
             $versionRoot = Join-Path (Join-Path $destination "versions") ([string]$active.version)
@@ -372,7 +425,7 @@ jobs:
             if ($LASTEXITCODE -ne 0) { throw "The pinned 2.0.1 package did not install." }
 
             $legacyExecutable = Join-Path $installDestination "versions\2.0.1\Lattice.exe"
-            $candidateDirectory = Join-Path $installDestination "versions\2.2.5"
+            $candidateDirectory = Join-Path $installDestination "versions\2.2.6"
             New-Item $candidateDirectory -ItemType Directory -Force | Out-Null
             Get-ChildItem $currentPackage -Force |
               Copy-Item -Destination $candidateDirectory -Recurse -Force
@@ -410,7 +463,7 @@ jobs:
               tokenSha256 = $tokenHash
               createdAt = [DateTimeOffset]::UtcNow.ToString("O")
               previousVersion = "2.0.1"
-              candidateVersion = "2.2.5"
+              candidateVersion = "2.2.6"
               candidateDirectory = $candidateDirectory
             } | ConvertTo-Json -Compress |
               Set-Content (Join-Path $pendingRoot "$activationId.json") -Encoding utf8
@@ -430,18 +483,18 @@ jobs:
               Start-Sleep -Milliseconds 250
               $candidate.Refresh()
               if ($candidate.HasExited) {
-                throw "The 2.2.5 update candidate exited before promotion."
+                throw "The 2.2.6 update candidate exited before promotion."
               }
               $activePath = Join-Path $installDestination "active-version.json"
               if (Test-Path $activePath) {
                 $activeVersion = (Get-Content $activePath -Raw | ConvertFrom-Json).version
               }
             } while (
-              $activeVersion -ne "2.2.5" -and
+              $activeVersion -ne "2.2.6" -and
               [DateTimeOffset]::UtcNow -lt $promotionDeadline
             )
-            if ($activeVersion -ne "2.2.5") {
-              throw "The 2.2.5 candidate did not become active."
+            if ($activeVersion -ne "2.2.6") {
+              throw "The 2.2.6 candidate did not become active."
             }
             if (-not $legacy.WaitForExit(20000)) {
               throw "The superseded 2.0.1 Lattice window remained open after verified promotion."

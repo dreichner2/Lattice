@@ -728,6 +728,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, WKNavigationDelegate, 
         helper: URL,
         source: URL,
         stateFile: URL,
+        resumeExistingPause: Bool = false,
         completion: @escaping (Result<[String: Any], Error>) -> Void
     ) {
         DispatchQueue.global(qos: .userInitiated).async {
@@ -735,7 +736,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, WKNavigationDelegate, 
             let output = Pipe()
             let errors = Pipe()
             process.executableURL = URL(fileURLWithPath: python)
-            process.arguments = [
+            var arguments = [
                 helper.path,
                 "--operation", operation,
                 "--source", source.path,
@@ -743,6 +744,10 @@ final class AppDelegate: NSObject, NSApplicationDelegate, WKNavigationDelegate, 
                 "--folder-id", "cs-library-3b8290f24f15",
                 "--protected-path", Bundle.main.bundleURL.path
             ]
+            if resumeExistingPause {
+                arguments.append("--resume-existing-pause")
+            }
+            process.arguments = arguments
             process.currentDirectoryURL = stateFile.deletingLastPathComponent()
             process.standardOutput = output
             process.standardError = errors
@@ -931,10 +936,28 @@ final class AppDelegate: NSObject, NSApplicationDelegate, WKNavigationDelegate, 
         }
 
         libraryDriveOperationInProgress = true
+        performLibraryReconnect(
+            python: python,
+            helper: helper,
+            stateFile: stateFile,
+            resumeExistingPause: false
+        )
+    }
+
+    private func performLibraryReconnect(
+        python: String,
+        helper: URL,
+        stateFile: URL,
+        resumeExistingPause: Bool
+    ) {
         let progress = NSAlert()
         progress.alertStyle = .informational
-        progress.messageText = "Reconnecting library sync…"
-        progress.informativeText = "Checking the exact Lattice Syncthing folder"
+        progress.messageText = resumeExistingPause
+            ? "Resuming library sync…"
+            : "Reconnecting library sync…"
+        progress.informativeText = resumeExistingPause
+            ? "Resuming and checking the exact Lattice Syncthing folder"
+            : "Checking the exact Lattice Syncthing folder"
         let indicator = NSProgressIndicator(frame: NSRect(x: 0, y: 0, width: 340, height: 18))
         indicator.style = .bar
         indicator.isIndeterminate = true
@@ -949,29 +972,57 @@ final class AppDelegate: NSObject, NSApplicationDelegate, WKNavigationDelegate, 
             python: python,
             helper: helper,
             source: libraryRoot,
-            stateFile: stateFile
+            stateFile: stateFile,
+            resumeExistingPause: resumeExistingPause
         ) { [weak self] result in
             guard let self else { return }
             self.window.endSheet(progress.window)
             progress.window.orderOut(nil)
-            self.libraryDriveOperationInProgress = false
             switch result {
             case .failure(let error):
+                self.libraryDriveOperationInProgress = false
                 self.showNonfatalError(
                     title: "Reconnect library sync",
                     message: "Lattice could not reconnect Syncthing. \(error.localizedDescription)"
                 )
             case .success(let payload):
                 let managed = payload["syncthingManaged"] as? Bool == true
+                let paused = payload["folderPaused"] as? Bool == true
+                if managed, paused, !resumeExistingPause {
+                    let choice = NSAlert()
+                    choice.alertStyle = .warning
+                    choice.messageText = "Library sync is paused"
+                    choice.informativeText = "Syncthing is running, but the Lattice folder is still paused. Resume this exact folder now?"
+                    choice.addButton(withTitle: "Resume Sync")
+                    choice.addButton(withTitle: "Keep Paused")
+                    if choice.runModal() == .alertFirstButtonReturn {
+                        self.performLibraryReconnect(
+                            python: python,
+                            helper: helper,
+                            stateFile: stateFile,
+                            resumeExistingPause: true
+                        )
+                        return
+                    }
+                }
+
+                self.libraryDriveOperationInProgress = false
                 let resumed = payload["resumedByLattice"] as? Bool == true
+                    || payload["resumedExistingPause"] as? Bool == true
                 let completed = NSAlert()
-                completed.alertStyle = .informational
-                completed.messageText = "Library sync connected"
+                completed.alertStyle = paused ? .warning : .informational
+                completed.messageText = !managed
+                    ? "Library sync is unavailable"
+                    : paused
+                        ? "Library sync remains paused"
+                        : "Library sync connected"
                 completed.informativeText = !managed
                     ? "This library is not managed by Syncthing. No sync setting was changed."
-                    : resumed
-                        ? "Lattice resumed the folder pause it created. The library is synchronized again."
-                        : "Syncthing is online. Its existing folder pause setting was preserved."
+                    : paused
+                        ? "Syncthing is running, but the Lattice folder remains paused. No library files are syncing."
+                        : resumed
+                            ? "Lattice resumed the exact library folder and verified that synchronization is active again."
+                            : "Syncthing is online and the Lattice library is synchronized."
                 completed.addButton(withTitle: "OK")
                 completed.runModal()
             }

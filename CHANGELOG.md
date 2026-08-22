@@ -1,5 +1,17 @@
 # Changelog
 
+## 2.2.6 — 2026-08-22
+
+### Fixed
+
+- **Reconnect library sync** now detects when Syncthing is running but the
+  stable Lattice folder is still paused, and offers to resume that exact folder
+  on both Windows and macOS.
+- Lattice preserves a pre-existing pause until the user explicitly chooses
+  **Resume Sync**, then scans the library and waits for a healthy Syncthing
+  state before reporting that synchronization is connected.
+- Reconnect status no longer calls a paused library connected or synchronized.
+
 ## 2.2.5 — 2026-08-22
 
 ### Fixed
