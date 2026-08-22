@@ -61,9 +61,16 @@ recoverable move to Trash and record what remains authoritative.
 ## 6. Remote policy
 
 Git tracks the catalog, study guide, rules, source metadata, provenance, hash
-manifests, and tooling. `/books/` and `/papers/` are local-only and ignored.
-This is deliberate: the shelf contains mixed rights and should not be
-republished merely because the repository is private.
+manifests, tooling, and hidden `.gitkeep` files that create the required
+`/books/`, `/papers/`, `/lectures/`, and nested collection directories. The
+payloads inside those directories remain local-only and ignored. This is
+deliberate: the shelf contains mixed rights and should not be republished merely
+because the repository is private.
+
+Syncthing is the private payload transport. Its repository-root `.stignore`
+allowlists only `books/`, `papers/`, and `lectures/`; catalog metadata and app
+source continue to come from GitHub. Syncthing must not be used to mirror
+`.git/`, build output, or a live SQLite database.
 
 Do not force-add a book or paper payload. If a separate content backup is ever
 needed, choose a storage system and rights policy explicitly rather than

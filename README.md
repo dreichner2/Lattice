@@ -100,6 +100,32 @@ The app creates daily local backups and supports complete JSON export/import plu
 human-readable Markdown export. Nothing is uploaded, and no telemetry or cloud
 synchronization is present.
 
+## Shared library with Syncthing
+
+The Git checkout is also the Syncthing folder. A fresh clone already contains
+the complete empty payload scaffold, including the known nested collections:
+
+```text
+books/
+├── art-of-hpc/
+└── software-foundations/
+papers/
+└── mit-6006/
+lectures/
+```
+
+When accepting the shared folder, choose the repository root—the folder that
+contains `CATALOG.md`—and use **Send & Receive**. Do not create separate
+Syncthing folders for `books/`, `papers/`, or `lectures/`. The checked-in
+`.stignore` shares only those private payload roots. GitHub remains the source
+for the catalog, metadata, and app; Git internals, build output, and private
+reader state stay local to each computer.
+
+The established hub folder is named **CS Library** with folder ID
+`cs-library-3b8290f24f15`. See the
+[clone-and-connect instructions](docs/SYNCTHING_SETUP.md) for the exact Windows,
+macOS, and Syncthing paths.
+
 ## Windows app
 
 The Windows package provides the same shelf, search, study documents, EPUB
@@ -109,8 +135,9 @@ installed on your cousin's computer.
 
 Download the `CS-Library-Windows-win-x64` artifact from a successful **Windows
 desktop app** workflow, extract it, and run `CS Library.exe`. On first launch,
-select the synchronized library folder. The app remembers that selection and
-can switch folders later from its toolbar.
+select the synchronized Git checkout—the same folder Syncthing uses and the one
+containing `CATALOG.md`. The app remembers that selection and can switch folders
+later from its toolbar.
 
 To build it on Windows:
 
@@ -120,8 +147,8 @@ To build it on Windows:
 
 Windows web-reader progress and preferences are mirrored to a private SQLite
 database under `%LOCALAPPDATA%\CS Library`. This database is local to that PC;
-Syncthing should synchronize `books/`, `papers/`, catalog metadata, and the app
-source—not a live SQLite database.
+Syncthing follows the payload-only scope in `library-layout.json`, not the
+catalog, app source, or a live SQLite database.
 
 See [Windows build, install, and data boundaries](windows/README.md).
 
@@ -134,8 +161,9 @@ app copies it into `books/` with a collision-safe filename. It immediately
 appears as a **New arrival** without requiring a restart. Add catalog metadata
 later when you want the work fully classified and source-traced.
 
-The repository intentionally ignores `books/` and `papers/`; the public remote
-contains no copyrighted payloads.
+The repository tracks hidden placeholders for `books/`, `papers/`, `lectures/`,
+and known nested collections, but ignores their payloads. A clone therefore has
+the right paths without putting copyrighted material on the public remote.
 
 ## Browser option
 
@@ -250,6 +278,8 @@ See [Architecture](ARCHITECTURE.md), [Security](SECURITY.md), and
 
 ```text
 cs-library/
+├── .stignore                  # data-only Syncthing allowlist
+├── library-layout.json        # required folders and shared-data contract
 ├── README.md
 ├── CATALOG.md
 ├── STUDY_GUIDE.md
@@ -258,7 +288,9 @@ cs-library/
 ├── SECURITY.md
 ├── CONTRIBUTING.md
 ├── CHANGELOG.md
-├── docs/READER_DATA.md
+├── docs/
+│   ├── READER_DATA.md
+│   └── SYNCTHING_SETUP.md
 ├── assets/
 ├── metadata/
 ├── manifests/
@@ -280,8 +312,12 @@ cs-library/
 │   └── build_readable_books.py
 ├── tests/
 ├── ui/
-├── books/                     # local and ignored
-└── papers/                    # local and ignored
+├── books/                     # tracked scaffold; payloads ignored
+│   ├── art-of-hpc/
+│   └── software-foundations/
+├── papers/                    # tracked scaffold; payloads ignored
+│   └── mit-6006/
+└── lectures/                  # tracked scaffold; payloads ignored
 ```
 
 ## Why the remote is metadata-first

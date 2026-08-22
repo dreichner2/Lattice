@@ -78,7 +78,7 @@ class CatalogTests(unittest.TestCase):
         cls.library = library_ui.build_library(ROOT)
 
     def test_catalog_shape(self) -> None:
-        if not (ROOT / "books").is_dir():
+        if self.library["stats"]["artifacts"] == 0:
             self.assertEqual(self.library["stats"]["works"], 83)
             self.assertEqual(self.library["stats"]["artifacts"], 0)
             self.assertEqual(self.library["stats"]["indexedArtifacts"], 112)
@@ -102,7 +102,7 @@ class CatalogTests(unittest.TestCase):
         )
 
     def test_every_artifact_is_present_and_unique(self) -> None:
-        if not (ROOT / "books").is_dir():
+        if self.library["stats"]["artifacts"] == 0:
             self.skipTest("local book payloads are intentionally not committed")
         files = [file for work in self.library["works"] for file in work["files"]]
         paths = [file["path"] for file in files]
@@ -207,7 +207,7 @@ class CatalogTests(unittest.TestCase):
         self.assertFalse(library["works"][0]["cataloged"])
 
     def test_study_guide_links_resolve_to_local_materials(self) -> None:
-        if not (ROOT / "books").is_dir():
+        if self.library["stats"]["artifacts"] == 0:
             self.skipTest("local book payloads are intentionally not committed")
         guide = (ROOT / "STUDY_GUIDE.md").read_text(encoding="utf-8")
         links = re.findall(r"\]\(((?:books|papers)/[^)]+)\)", guide)
@@ -247,7 +247,8 @@ class ServerTests(unittest.TestCase):
             self.assertEqual(response.headers["X-Frame-Options"], "DENY")
         with urllib.request.urlopen(self.base + "/api/library", timeout=3) as response:
             payload = json.loads(response.read())
-            self.assertEqual(payload["stats"]["works"], 96 if (ROOT / "books").is_dir() else 83)
+            expected_works = 83 if payload["stats"]["artifacts"] == 0 else 96
+            self.assertEqual(payload["stats"]["works"], expected_works)
             self.assertTrue(payload["actionToken"])
 
     def test_pdf_range_request(self) -> None:
