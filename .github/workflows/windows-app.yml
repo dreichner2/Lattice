@@ -131,11 +131,7 @@ jobs:
           $stdout = Join-Path $env:RUNNER_TEMP "lattice-server.stdout.log"
           $stderr = Join-Path $env:RUNNER_TEMP "lattice-server.stderr.log"
           $state = Join-Path $env:RUNNER_TEMP "lattice-reader-state.sqlite3"
-          $listener = [System.Net.Sockets.TcpListener]::new([System.Net.IPAddress]::Loopback, 0)
-          $listener.Start()
-          $port = ([System.Net.IPEndPoint]$listener.LocalEndpoint).Port
-          $listener.Stop()
-          $url = "http://127.0.0.1:$port"
+          $firstPort = 8766
           $parent = $null
           $server = $null
           try {
@@ -147,7 +143,7 @@ jobs:
                 "--root", $libraryRoot,
                 "--ui-root", (Join-Path $package "ui"),
                 "--state-db", $state,
-                "--port", $port.ToString(),
+                "--port", $firstPort.ToString(),
                 "--parent-pid", $parent.Id.ToString(),
                 "--no-browser"
               ) `
@@ -156,12 +152,27 @@ jobs:
               -PassThru
 
             $health = $null
-            for ($attempt = 0; $attempt -lt 80 -and -not $health; $attempt++) {
+            $url = $null
+            for ($attempt = 0; $attempt -lt 240 -and -not $health; $attempt++) {
               Start-Sleep -Milliseconds 250
-              try {
-                $health = Invoke-RestMethod "$url/api/health" -TimeoutSec 2
-              } catch {
-                $health = $null
+              for ($candidate = $firstPort; $candidate -lt ($firstPort + 20); $candidate++) {
+                $candidateUrl = "http://127.0.0.1:$candidate"
+                try {
+                  $candidateHealth = Invoke-RestMethod "$candidateUrl/api/health" -TimeoutSec 1
+                  $reportedRoot = [string]$candidateHealth.root
+                  $rootMatches = $reportedRoot -and [string]::Equals(
+                    [IO.Path]::GetFullPath($reportedRoot),
+                    [IO.Path]::GetFullPath($libraryRoot),
+                    [StringComparison]::OrdinalIgnoreCase
+                  )
+                  if ($candidateHealth.status -eq "ok" -and $rootMatches) {
+                    $health = $candidateHealth
+                    $url = $candidateUrl
+                    break
+                  }
+                } catch {
+                  continue
+                }
               }
               $server.Refresh()
               if ($server.HasExited -and -not $health) {
