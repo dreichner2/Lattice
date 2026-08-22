@@ -1,5 +1,14 @@
 # Changelog
 
+## 2.0.2 — 2026-08-21
+
+### Fixed
+
+- A successfully activated Windows update now closes the exact superseded
+  Lattice window automatically instead of leaving it stuck on “Verifying.”
+- Update handoffs bind new launchers to their process ID and executable path;
+  the first fixed release also safely handles legacy 2.0.1 activation records.
+
 ## 2.0.1 — 2026-08-21
 
 ### Fixed

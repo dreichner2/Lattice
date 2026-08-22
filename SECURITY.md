@@ -38,7 +38,7 @@ malicious document is required.
 
 ### Windows installer and updater
 
-- The one-click bootstrap downloads the pinned `v2.0.0` Windows release and
+- The one-click bootstrap downloads the pinned `v2.0.2` Windows release and
   compares it with its published SHA-256 companion before installation. It does
   not use a mutable GitHub Actions artifact or require a GitHub token.
 - Automatic updates are supported only from the per-user versioned installation
@@ -65,6 +65,10 @@ malicious document is required.
   authority at commit time. An older candidate that finishes after a newer one
   cannot roll the installation back, and stale cleanup never prunes a newer
   staged or active version.
+- Only after promotion succeeds does the candidate ask the superseded window
+  to close. Current handoffs bind that request to the recorded launcher PID
+  and exact previous-version executable path; the 2.0.1 compatibility path
+  still requires an exact canonical executable-path match.
 - The healthy active version is never overwritten in place. After successful
   promotion, the active version and one previous healthy version are retained;
   recognized older non-running versions may be pruned. Launching a stale older

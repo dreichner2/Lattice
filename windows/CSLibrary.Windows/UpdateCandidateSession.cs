@@ -204,6 +204,76 @@ internal sealed class UpdateCandidateSession
         {
             UpdateMaintenance.RecordIssue(_installation, "version-retention", error);
         }
+        try
+        {
+            RequestSupersededLauncherShutdown();
+        }
+        catch (Exception error) when (error is InvalidOperationException
+            or System.ComponentModel.Win32Exception
+            or NotSupportedException)
+        {
+            // Promotion is already durable. Failure to dismiss an older window
+            // is a recoverable maintenance issue, never a reason to roll back a
+            // healthy candidate.
+            UpdateMaintenance.RecordIssue(_installation, "superseded-window", error);
+        }
+    }
+
+    private void RequestSupersededLauncherShutdown()
+    {
+        if (!_promoted)
+            throw new InvalidOperationException(
+                "The previous Lattice window can close only after candidate promotion.");
+
+        var previousVersion = StableSemanticVersion.Parse(
+            _pending.PreviousVersion,
+            "previous version");
+        var expectedExecutable = Path.GetFullPath(Path.Combine(
+            _installation.VersionsRoot,
+            previousVersion.ToString(),
+            "Lattice.exe"));
+
+        if (_pending.LauncherProcessId is int launcherProcessId)
+        {
+            // Current launchers bind the handoff to one process. Validate the
+            // executable path as well so PID reuse can never close an unrelated
+            // application.
+            if (launcherProcessId == Environment.ProcessId) return;
+            try
+            {
+                using var launcher = Process.GetProcessById(launcherProcessId);
+                RequestShutdownIfExpected(launcher, expectedExecutable);
+            }
+            catch (ArgumentException)
+            {
+                // The launcher already exited.
+            }
+            return;
+        }
+
+        // Lattice 2.0.1 activation records predate launcherProcessId. The first
+        // fixed candidate therefore closes only same-user Lattice processes
+        // whose executable is the exact, canonical previous-version binary.
+        foreach (var process in Process.GetProcessesByName("Lattice"))
+        {
+            using (process)
+            {
+                if (process.Id == Environment.ProcessId) continue;
+                RequestShutdownIfExpected(process, expectedExecutable);
+            }
+        }
+    }
+
+    private static void RequestShutdownIfExpected(Process process, string expectedExecutable)
+    {
+        if (process.HasExited) return;
+        var executable = process.MainModule?.FileName;
+        if (string.IsNullOrWhiteSpace(executable)
+            || !string.Equals(
+                Path.GetFullPath(executable),
+                expectedExecutable,
+                StringComparison.OrdinalIgnoreCase)) return;
+        _ = process.CloseMainWindow();
     }
 
     private void ArchiveActivationRecord()
@@ -226,6 +296,7 @@ internal sealed class UpdateCandidateSession
         if (pending.SchemaVersion != 1
             || !string.Equals(pending.ActivationId, activationId, StringComparison.Ordinal)
             || !UpdateSecurity.IsLowerHexSha256(pending.TokenSha256)
+            || pending.LauncherProcessId is <= 0
             || !DateTimeOffset.TryParse(pending.CreatedAt, out var createdAt)
             || createdAt.Offset != TimeSpan.Zero
             || createdAt > now.AddMinutes(1)

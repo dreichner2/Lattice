@@ -28,7 +28,7 @@ You can also double-click `windows\setup\Install Lattice and Connect.cmd` after
 cloning. The script:
 
 1. validates the clone and its complete empty library scaffold;
-2. downloads the pinned public `v2.0.1` release and verifies its SHA-256;
+2. downloads the pinned public `v2.0.2` release and verifies its SHA-256;
 3. installs Lattice for the current user under
    `%LOCALAPPDATA%\Programs\Lattice`;
 4. installs official Syncthing `2.1.3` with WinGet when needed;
@@ -52,7 +52,7 @@ powershell.exe -NoProfile -ExecutionPolicy Bypass -File .\windows\setup\Setup-La
 ```
 
 The pinned release can also be downloaded directly from
-[`v2.0.1/Lattice-Windows-win-x64.zip`](https://github.com/dreichner2/Lattice/releases/download/v2.0.1/Lattice-Windows-win-x64.zip).
+[`v2.0.2/Lattice-Windows-win-x64.zip`](https://github.com/dreichner2/Lattice/releases/download/v2.0.2/Lattice-Windows-win-x64.zip).
 See [`windows/setup/README.md`](setup/README.md) for offline/test inputs and the
 full switch list.
 
@@ -125,8 +125,10 @@ version directory; it becomes active only after its own isolated loopback
 `active-version.json` replacements are atomic. Promotion re-reads the active
 authority under a cross-process lock, so a slower older candidate cannot
 replace a newer version. The authority is published first so a stale shortcut
-or old executable redirects to the healthy candidate. One previous healthy
-version is retained.
+or old executable redirects to the healthy candidate. Once promotion is
+durable, the candidate closes the exact superseded Lattice window; a failed
+candidate leaves the current version open. One previous healthy version is
+retained.
 
 This release-manifest signature is an application update control, not a Windows
 Authenticode signature. The current executable is not Authenticode-signed, so

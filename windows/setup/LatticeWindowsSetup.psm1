@@ -5,7 +5,7 @@ $script:FolderId = "cs-library-3b8290f24f15"
 $script:FolderLabel = "Lattice"
 $script:SyncthingPackageId = "Syncthing.Syncthing"
 $script:SyncthingPackageVersion = "2.1.3"
-$script:DefaultLatticeVersion = "v2.0.1"
+$script:DefaultLatticeVersion = "v2.0.2"
 $script:ReleaseRoot = "https://github.com/dreichner2/Lattice/releases/download"
 $script:LatticeAssetName = "Lattice-Windows-win-x64.zip"
 

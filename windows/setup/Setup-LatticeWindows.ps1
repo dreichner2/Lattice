@@ -2,7 +2,7 @@
 param(
     [string]$LibraryRoot,
     [string]$LatticePackagePath,
-    [string]$LatticeVersion = "v2.0.1",
+    [string]$LatticeVersion = "v2.0.2",
     [string]$InstallDestination,
     [string]$SyncthingExecutable,
     [string]$SyncthingHome,

@@ -1244,8 +1244,8 @@ public partial class MainWindow : Window
                 this,
                 $"Lattice {latestVersion} is available.\n\n"
                 + "Lattice will download the signed Windows package, verify its signature and SHA-256, "
-                + "then open it as an isolated candidate. This window stays open until the new version "
-                + "proves its local service and interface are healthy.\n\nDownload and open the update?",
+                + "then open it as an isolated candidate. This window closes automatically only after "
+                + "the new version proves its local service and interface are healthy.\n\nDownload and open the update?",
                 $"Update to Lattice {latestVersion}",
                 MessageBoxButton.YesNo,
                 MessageBoxImage.Information,
@@ -1288,7 +1288,7 @@ public partial class MainWindow : Window
             _candidateLaunched = true;
             UpdateMenuItem.Header = $"_Verifying Lattice {latestVersion}…";
             UpdateMenuItem.ToolTip =
-                "The current version remains open while the update candidate proves its health.";
+                "This version will close automatically after the update candidate proves its health.";
             SetShellStatus($"Verifying Lattice {latestVersion}", ShellStatus.Loading);
         }
         catch (OperationCanceledException) when (_lifetime.IsCancellationRequested)

@@ -280,6 +280,7 @@ internal sealed class UpdateService
             PreviousVersion = _installation.Version.ToString(),
             CandidateVersion = candidateVersion.ToString(),
             CandidateDirectory = expectedDirectory,
+            LauncherProcessId = Environment.ProcessId,
         };
         var pendingRoot = Path.Combine(_installation.UpdatesRoot, "pending");
         Directory.CreateDirectory(pendingRoot);

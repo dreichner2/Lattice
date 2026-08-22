@@ -100,6 +100,9 @@ internal sealed class PendingUpdateActivation
 
     [JsonPropertyName("candidateDirectory")]
     public string CandidateDirectory { get; init; } = "";
+
+    [JsonPropertyName("launcherProcessId")]
+    public int? LauncherProcessId { get; init; }
 }
 
 [JsonUnmappedMemberHandling(JsonUnmappedMemberHandling.Disallow)]

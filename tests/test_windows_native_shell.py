@@ -19,6 +19,9 @@ APP_XAML = WINDOWS / "App.xaml"
 APP_CODE = WINDOWS / "App.xaml.cs"
 WINDOW_XAML = WINDOWS / "MainWindow.xaml"
 WINDOW_CODE = WINDOWS / "MainWindow.xaml.cs"
+UPDATE_CANDIDATE_CODE = WINDOWS / "UpdateCandidateSession.cs"
+UPDATE_MODELS_CODE = WINDOWS / "UpdateModels.cs"
+UPDATE_SERVICE_CODE = WINDOWS / "UpdateService.cs"
 XAML_NAME = "{http://schemas.microsoft.com/winfx/2006/xaml}Name"
 XAML_KEY = "{http://schemas.microsoft.com/winfx/2006/xaml}Key"
 
@@ -39,6 +42,9 @@ class WindowsNativeShellTests(unittest.TestCase):
         cls.app_code = APP_CODE.read_text(encoding="utf-8")
         cls.window_xaml = WINDOW_XAML.read_text(encoding="utf-8")
         cls.window_code = WINDOW_CODE.read_text(encoding="utf-8")
+        cls.update_candidate_code = UPDATE_CANDIDATE_CODE.read_text(encoding="utf-8")
+        cls.update_models_code = UPDATE_MODELS_CODE.read_text(encoding="utf-8")
+        cls.update_service_code = UPDATE_SERVICE_CODE.read_text(encoding="utf-8")
 
     def test_native_palette_matches_shared_lattice_surface(self) -> None:
         keyed_values = {
@@ -178,8 +184,33 @@ class WindowsNativeShellTests(unittest.TestCase):
         launch = self.window_code.index("LaunchCandidate(staged, _libraryRoot)")
         self.assertLess(consent, download)
         self.assertLess(download, launch)
-        self.assertIn("The current version remains open", self.window_code)
+        self.assertIn("closes automatically only after", self.window_code)
         self.assertIn("UpdateProgress.Value = percent", self.window_code)
+
+        # The promoted candidate dismisses only the exact superseded Lattice
+        # executable. A launcher PID protects current handoffs, while the
+        # canonical-path fallback lets the first fixed release cleanly update
+        # from 2.0.1 activation records that do not contain that field.
+        self.assertIn("public int? LauncherProcessId", self.update_models_code)
+        self.assertIn(
+            "LauncherProcessId = Environment.ProcessId",
+            self.update_service_code,
+        )
+        promotion = self.update_candidate_code.index("_promoted = true;")
+        shutdown = self.update_candidate_code.index(
+            "RequestSupersededLauncherShutdown();"
+        )
+        self.assertLess(promotion, shutdown)
+        self.assertIn(
+            "Process.GetProcessById(launcherProcessId)",
+            self.update_candidate_code,
+        )
+        self.assertIn(
+            'Process.GetProcessesByName("Lattice")',
+            self.update_candidate_code,
+        )
+        self.assertIn("process.CloseMainWindow()", self.update_candidate_code)
+        self.assertIn("expectedExecutable", self.update_candidate_code)
 
         # A runtime failure after the candidate's health-gated commit must not
         # claim that the now-active version was rolled back or left unpromoted.
