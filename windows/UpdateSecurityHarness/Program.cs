@@ -50,7 +50,7 @@ static void AcceptsAuthenticManifest()
         key.ExportSubjectPublicKeyInfoPem());
     Equal("2.1.0", release.Version.ToString());
     Equal(
-        "https://github.com/dreichner2/cs-library/releases/download/v2.1.0/Lattice-Windows-win-x64.zip",
+        "https://github.com/dreichner2/Lattice/releases/download/v2.1.0/Lattice-Windows-win-x64.zip",
         release.Asset.Url);
 }
 
@@ -378,7 +378,7 @@ static void IgnoresCorruptObsoleteVersion()
 static byte[] BuildManifest(string version, string? assetUrl = null)
 {
     assetUrl ??=
-        $"https://github.com/dreichner2/cs-library/releases/download/v{version}/Lattice-Windows-win-x64.zip";
+        $"https://github.com/dreichner2/Lattice/releases/download/v{version}/Lattice-Windows-win-x64.zip";
     return JsonSerializer.SerializeToUtf8Bytes(new
     {
         schemaVersion = 2,

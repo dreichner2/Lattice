@@ -13,7 +13,7 @@ from pathlib import Path
 
 
 SEMVER_RE = re.compile(r"^(0|[1-9][0-9]*)\.(0|[1-9][0-9]*)\.(0|[1-9][0-9]*)$")
-REPOSITORY = "dreichner2/cs-library"
+REPOSITORY = "dreichner2/Lattice"
 PLATFORM = "windows-x64"
 ASSET_NAME = "Lattice-Windows-win-x64.zip"
 MAXIMUM_ASSET_SIZE = 1_073_741_824

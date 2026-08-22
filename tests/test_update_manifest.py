@@ -58,7 +58,7 @@ class UpdateManifestTests(unittest.TestCase):
         )
         self.assertEqual(
             asset["url"],
-            "https://github.com/dreichner2/cs-library/releases/download/"
+            "https://github.com/dreichner2/Lattice/releases/download/"
             "v2.1.0/Lattice-Windows-win-x64.zip",
         )
 

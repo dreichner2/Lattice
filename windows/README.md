@@ -19,7 +19,7 @@ winget install --id Git.Git -e --source winget
 If Git was just installed, close and reopen PowerShell once. Then run:
 
 ```powershell
-git clone https://github.com/dreichner2/cs-library.git "$HOME\Lattice"
+git clone https://github.com/dreichner2/Lattice.git "$HOME\Lattice"
 cd "$HOME\Lattice"
 & ".\windows\setup\Install Lattice and Connect.cmd"
 ```
@@ -52,7 +52,7 @@ powershell.exe -NoProfile -ExecutionPolicy Bypass -File .\windows\setup\Setup-La
 ```
 
 The pinned release can also be downloaded directly from
-[`v2.0.0/Lattice-Windows-win-x64.zip`](https://github.com/dreichner2/cs-library/releases/download/v2.0.0/Lattice-Windows-win-x64.zip).
+[`v2.0.0/Lattice-Windows-win-x64.zip`](https://github.com/dreichner2/Lattice/releases/download/v2.0.0/Lattice-Windows-win-x64.zip).
 See [`windows/setup/README.md`](setup/README.md) for offline/test inputs and the
 full switch list.
 

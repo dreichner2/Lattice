@@ -88,9 +88,9 @@ internal sealed record UpdateInstallation(
 internal sealed class UpdateService
 {
     internal static readonly Uri ManifestUrl = new(
-        "https://github.com/dreichner2/cs-library/releases/latest/download/update-manifest.json");
+        "https://github.com/dreichner2/Lattice/releases/latest/download/update-manifest.json");
     internal static readonly Uri SignatureUrl = new(
-        "https://github.com/dreichner2/cs-library/releases/latest/download/update-manifest.json.sig");
+        "https://github.com/dreichner2/Lattice/releases/latest/download/update-manifest.json.sig");
 
     private static readonly JsonSerializerOptions JsonOptions = new()
     {

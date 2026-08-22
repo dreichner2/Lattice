@@ -7,7 +7,7 @@ namespace CSLibrary.Windows;
 
 internal static class UpdateSecurity
 {
-    internal const string Repository = "dreichner2/cs-library";
+    internal const string Repository = "dreichner2/Lattice";
     internal const string Platform = "windows-x64";
     internal const long MaximumManifestSize = 64 * 1024;
     internal const long MaximumArchiveSize = 1_073_741_824;

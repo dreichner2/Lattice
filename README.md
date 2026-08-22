@@ -156,7 +156,7 @@ winget install --id Git.Git -e --source winget
 Close and reopen PowerShell if Git was just installed, then run:
 
 ```powershell
-git clone https://github.com/dreichner2/cs-library.git "$HOME\Lattice"
+git clone https://github.com/dreichner2/Lattice.git "$HOME\Lattice"
 cd "$HOME\Lattice"
 & ".\windows\setup\Install Lattice and Connect.cmd"
 ```

@@ -232,7 +232,7 @@ $ExpectedMetadataNames = @("platform", "repository", "schemaVersion", "version")
 if (Compare-Object $MetadataNames $ExpectedMetadataNames) { throw "The Lattice package metadata has unexpected fields." }
 if (
   $Metadata.schemaVersion -ne 1 -or
-  $Metadata.repository -cne "dreichner2/cs-library" -or
+  $Metadata.repository -cne "dreichner2/Lattice" -or
   $Metadata.platform -cne "windows-x64"
 ) { throw "The Lattice package metadata is invalid." }
 $Version = [string]$Metadata.version

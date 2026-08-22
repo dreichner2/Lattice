@@ -6,7 +6,7 @@ $script:FolderLabel = "Lattice"
 $script:SyncthingPackageId = "Syncthing.Syncthing"
 $script:SyncthingPackageVersion = "2.1.3"
 $script:DefaultLatticeVersion = "v2.0.0"
-$script:ReleaseRoot = "https://github.com/dreichner2/cs-library/releases/download"
+$script:ReleaseRoot = "https://github.com/dreichner2/Lattice/releases/download"
 $script:LatticeAssetName = "Lattice-Windows-win-x64.zip"
 
 function Resolve-SetupPath {
@@ -201,7 +201,7 @@ function Assert-LatticePackageDirectory {
     $packageVersion = [string]$metadata.PSObject.Properties["version"].Value
     if (
         [int]$metadata.PSObject.Properties["schemaVersion"].Value -ne 1 -or
-        [string]$metadata.PSObject.Properties["repository"].Value -ne "dreichner2/cs-library" -or
+        [string]$metadata.PSObject.Properties["repository"].Value -ne "dreichner2/Lattice" -or
         [string]$metadata.PSObject.Properties["platform"].Value -ne "windows-x64" -or
         $packageVersion -notmatch '^(?:0|[1-9][0-9]*)\.(?:0|[1-9][0-9]*)\.(?:0|[1-9][0-9]*)$'
     ) {

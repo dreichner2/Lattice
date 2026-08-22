@@ -158,7 +158,7 @@ try {
     $PackageMetadataPath,
     (([ordered]@{
       schemaVersion = 1
-      repository = "dreichner2/cs-library"
+      repository = "dreichner2/Lattice"
       platform = "windows-x64"
       version = $PackageVersion
     } | ConvertTo-Json -Compress) + [Environment]::NewLine),
