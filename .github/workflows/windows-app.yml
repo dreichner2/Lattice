@@ -185,7 +185,10 @@ jobs:
                 --syncthing-config $configPath `
                 --shutdown-syncthing
             )
-            if ($LASTEXITCODE -ne 0) { throw "Packaged drive disconnect failed." }
+            if ($LASTEXITCODE -ne 0) {
+              $disconnectMessages | ForEach-Object { Write-Host ([string]$_) }
+              throw "Packaged drive disconnect failed."
+            }
             $disconnect = $disconnectMessages[-1] | ConvertFrom-Json
             if (
               $disconnect.operation -ne "disconnect" -or
@@ -208,7 +211,10 @@ jobs:
                 --syncthing-config $configPath `
                 --start-if-needed
             )
-            if ($LASTEXITCODE -ne 0) { throw "Packaged library reconnect failed." }
+            if ($LASTEXITCODE -ne 0) {
+              $reconnectMessages | ForEach-Object { Write-Host ([string]$_) }
+              throw "Packaged library reconnect failed."
+            }
             $reconnect = $reconnectMessages[-1] | ConvertFrom-Json
             if (
               $reconnect.operation -ne "reconnect" -or
