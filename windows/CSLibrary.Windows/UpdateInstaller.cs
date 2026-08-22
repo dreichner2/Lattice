@@ -1,4 +1,5 @@
 using System.Diagnostics;
+using System.IO;
 using System.Text.Json;
 
 namespace CSLibrary.Windows;
@@ -26,7 +27,8 @@ internal static class UpdateInstaller
         catch (Exception error)
         {
             var message = $"The automatic update was rolled back.\n\n{error.Message}";
-            try { File.WriteAllText(UpdateService.InstallerErrorPath, message); } catch (IOException) { }
+            try { File.WriteAllText(UpdateService.InstallerErrorPath, message); }
+            catch (Exception writeError) when (writeError is IOException or UnauthorizedAccessException) { }
             Log($"Update failed: {error}");
             if (options is not null) TryLaunchPrevious(options.TargetPath);
             return 1;
@@ -222,7 +224,7 @@ internal static class UpdateInstaller
             var line = $"[{DateTimeOffset.UtcNow:O}] {message}{Environment.NewLine}";
             File.AppendAllText(Path.Combine(UpdateService.UpdatesRoot, "installer.log"), line);
         }
-        catch (IOException)
+        catch (Exception error) when (error is IOException or UnauthorizedAccessException)
         {
             // Logging is best-effort and must not affect rollback.
         }

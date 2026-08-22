@@ -5,8 +5,10 @@ import Foundation
 @main
 struct LatticeUpdateInstaller {
     static func main() {
+        var parsedArguments: InstallerArguments?
         do {
             let arguments = try InstallerArguments(CommandLine.arguments)
+            parsedArguments = arguments
             let logger = InstallerLogger(path: arguments.logPath)
             logger.write("Waiting for Lattice process \(arguments.parentPID) to exit")
             try waitForExit(pid: arguments.parentPID)
@@ -14,6 +16,12 @@ struct LatticeUpdateInstaller {
             logger.write("Update installed successfully")
         } catch {
             let message = "Lattice update failed: \(error.localizedDescription)"
+            if let arguments = parsedArguments {
+                let logger = InstallerLogger(path: arguments.logPath)
+                logger.write(message)
+                recordFailure(message, at: arguments.errorPath)
+                tryRelaunchExistingApplication(arguments, logger: logger)
+            }
             FileHandle.standardError.write(Data((message + "\n").utf8))
             exit(1)
         }
@@ -73,13 +81,30 @@ struct LatticeUpdateInstaller {
     }
 
     private static func validateApp(_ app: URL, expectedCommit: String) throws {
-        guard let bundle = Bundle(url: app),
+        let values = try app.resourceValues(forKeys: [.isDirectoryKey, .isSymbolicLinkKey])
+        guard values.isDirectory == true,
+              values.isSymbolicLink != true,
+              let bundle = Bundle(url: app),
               bundle.bundleIdentifier == "com.danny.cslibrary",
               bundle.object(forInfoDictionaryKey: "LatticeCommit") as? String == expectedCommit,
               FileManager.default.isExecutableFile(
                 atPath: app.appendingPathComponent("Contents/MacOS/Lattice").path
+              ),
+              FileManager.default.isExecutableFile(
+                atPath: app.appendingPathComponent("Contents/Resources/LatticeUpdateInstaller").path
               )
         else { throw InstallerError.invalidPendingApp }
+
+        if let enumerator = FileManager.default.enumerator(
+            at: app,
+            includingPropertiesForKeys: [.isSymbolicLinkKey]
+        ) {
+            for case let item as URL in enumerator {
+                if try item.resourceValues(forKeys: [.isSymbolicLinkKey]).isSymbolicLink == true {
+                    throw InstallerError.invalidPendingApp
+                }
+            }
+        }
 
         let verifier = Process()
         verifier.executableURL = URL(fileURLWithPath: "/usr/bin/codesign")
@@ -87,6 +112,38 @@ struct LatticeUpdateInstaller {
         try verifier.run()
         verifier.waitUntilExit()
         guard verifier.terminationStatus == 0 else { throw InstallerError.invalidPendingApp }
+    }
+
+    private static func recordFailure(_ message: String, at path: String) {
+        let bounded = String(message.prefix(12_000))
+        try? Data(bounded.utf8).write(to: URL(fileURLWithPath: path), options: .atomic)
+    }
+
+    private static func tryRelaunchExistingApplication(
+        _ arguments: InstallerArguments,
+        logger: InstallerLogger
+    ) {
+        if kill(arguments.parentPID, 0) == 0 || errno == EPERM {
+            logger.write("The original Lattice process is still running; no relaunch is needed")
+            return
+        }
+        let app = URL(fileURLWithPath: arguments.targetApp).standardizedFileURL
+        guard app.lastPathComponent == "Lattice.app",
+              let bundle = Bundle(url: app),
+              bundle.bundleIdentifier == "com.danny.cslibrary"
+        else {
+            logger.write("No validated Lattice app was available to relaunch")
+            return
+        }
+        let opener = Process()
+        opener.executableURL = URL(fileURLWithPath: "/usr/bin/open")
+        opener.arguments = ["-n", app.path]
+        do {
+            try opener.run()
+            logger.write("Relaunched the restored Lattice app")
+        } catch {
+            logger.write("The restored Lattice app could not relaunch: \(error.localizedDescription)")
+        }
     }
 }
 
@@ -96,6 +153,7 @@ private struct InstallerArguments {
     let targetApp: String
     let expectedCommit: String
     let logPath: String
+    let errorPath: String
 
     init(_ arguments: [String]) throws {
         var values: [String: String] = [:]
@@ -112,13 +170,16 @@ private struct InstallerArguments {
               let pending = values["--pending-app"],
               let target = values["--target-app"],
               let commit = values["--expected-commit"], DesktopUpdateManifest.isFullCommit(commit),
-              let log = values["--log"]
+              let log = values["--log"],
+              let error = values["--error"],
+              values.count == 6
         else { throw InstallerError.invalidArguments }
         parentPID = pid
         pendingApp = pending
         targetApp = target
         expectedCommit = commit
         logPath = log
+        errorPath = error
     }
 }
 

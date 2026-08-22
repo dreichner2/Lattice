@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Build the signed-build metadata consumed by both desktop updaters."""
+"""Build the verified-release metadata consumed by both desktop updaters."""
 
 from __future__ import annotations
 

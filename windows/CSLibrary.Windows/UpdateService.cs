@@ -1,5 +1,7 @@
 using System.Diagnostics;
+using System.IO;
 using System.IO.Compression;
+using System.Net.Http;
 using System.Net.Http.Headers;
 using System.Reflection;
 using System.Security.Cryptography;
@@ -240,9 +242,12 @@ internal sealed class UpdateService
         {
             if (!File.Exists(PendingCleanupPath)) return;
             var pending = ReadJsonFile<PendingUpdateCleanup>(PendingCleanupPath);
-            if (!string.Equals(pending.Commit, ReadCurrentCommit(), StringComparison.Ordinal)) return;
-            RemoveKnownUpdateDirectory(pending.BackupPath, "backup-");
-            RemoveKnownUpdateDirectory(pending.StagingPath, "staged-");
+            if (!IsFullCommit(pending.Commit)
+                || !string.Equals(pending.Commit, ReadCurrentCommit(), StringComparison.Ordinal)) return;
+            RemoveKnownUpdateDirectory(pending.BackupPath, $"backup-{pending.Commit}");
+            RemoveKnownUpdateDirectory(pending.StagingPath, $"staged-{pending.Commit}");
+            RemoveKnownUpdateFile($"Lattice-Windows-{pending.Commit}.zip");
+            RemoveKnownUpdateFile($"LatticeUpdateInstaller-{pending.Commit}.exe");
             File.Delete(PendingCleanupPath);
         }
         catch (Exception error) when (error is IOException or UnauthorizedAccessException or InvalidDataException or JsonException)
@@ -260,7 +265,7 @@ internal sealed class UpdateService
             File.Delete(InstallerErrorPath);
             return message.Length <= 4000 ? message : message[..4000];
         }
-        catch (IOException)
+        catch (Exception error) when (error is IOException or UnauthorizedAccessException)
         {
             return null;
         }
@@ -385,15 +390,21 @@ internal sealed class UpdateService
         }
     }
 
-    private static void RemoveKnownUpdateDirectory(string path, string expectedPrefix)
+    private static void RemoveKnownUpdateDirectory(string path, string expectedName)
     {
         if (string.IsNullOrWhiteSpace(path) || !Directory.Exists(path)) return;
         var full = Path.GetFullPath(path);
         var updatesPrefix = Path.GetFullPath(UpdatesRoot).TrimEnd(Path.DirectorySeparatorChar)
             + Path.DirectorySeparatorChar;
         if (!full.StartsWith(updatesPrefix, StringComparison.OrdinalIgnoreCase)
-            || !Path.GetFileName(full).StartsWith(expectedPrefix, StringComparison.Ordinal))
+            || !string.Equals(Path.GetFileName(full), expectedName, StringComparison.Ordinal))
             throw new InvalidDataException("Refusing to remove an unexpected updater directory.");
         Directory.Delete(full, recursive: true);
+    }
+
+    private static void RemoveKnownUpdateFile(string expectedName)
+    {
+        var path = Path.Combine(UpdatesRoot, expectedName);
+        if (File.Exists(path)) File.Delete(path);
     }
 }

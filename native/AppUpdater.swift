@@ -35,6 +35,7 @@ final class AppUpdater: NSObject {
     private var state: State = .idle
     private var checkTask: Task<Void, Never>?
     private var installTask: Task<Void, Never>?
+    private var checkGeneration = 0
 
     init(window: NSWindow) {
         self.window = window
@@ -72,13 +73,19 @@ final class AppUpdater: NSObject {
     func checkForUpdates(presentResult: Bool) {
         guard installTask == nil else { return }
         checkTask?.cancel()
+        checkGeneration &+= 1
+        let generation = checkGeneration
         state = .checking
         render()
 
         checkTask = Task { [weak self] in
             guard let self else { return }
+            defer {
+                if generation == checkGeneration { checkTask = nil }
+            }
             do {
                 let latest: GitHubBranchCommit = try await requestJSON(Self.latestCommitURL)
+                guard generation == checkGeneration else { return }
                 guard DesktopUpdateManifest.isFullCommit(latest.sha) else {
                     throw UpdateManifestError.invalidCommit
                 }
@@ -88,7 +95,6 @@ final class AppUpdater: NSObject {
                     state = .current(latest.sha)
                     render()
                     if presentResult { presentCurrentAlert(commit: latest.sha) }
-                    checkTask = nil
                     return
                 }
 
@@ -96,12 +102,13 @@ final class AppUpdater: NSObject {
                 do {
                     manifest = try await requestJSON(manifestURL())
                 } catch AppUpdateError.httpStatus(404) {
+                    guard generation == checkGeneration else { return }
                     state = .preparing(latest.sha)
                     render()
                     if presentResult { presentPreparingAlert(commit: latest.sha) }
-                    checkTask = nil
                     return
                 }
+                guard generation == checkGeneration else { return }
                 let asset = try manifest.validatedAsset(
                     platform: Self.platform,
                     expectedRepository: Self.repository,
@@ -122,12 +129,12 @@ final class AppUpdater: NSObject {
             } catch is CancellationError {
                 // A newer manual check replaced this one.
             } catch {
+                guard generation == checkGeneration else { return }
                 let message = error.localizedDescription
                 state = .failed(message)
                 render()
                 if presentResult { presentFailureAlert(message) }
             }
-            checkTask = nil
         }
     }
 
@@ -344,7 +351,8 @@ final class AppUpdater: NSObject {
             "--pending-app", pendingApp.path,
             "--target-app", Bundle.main.bundleURL.standardizedFileURL.path,
             "--expected-commit", expectedCommit,
-            "--log", updatesRoot.appendingPathComponent("installer.log").path
+            "--log", updatesRoot.appendingPathComponent("installer.log").path,
+            "--error", updatesRoot.appendingPathComponent("installer-error.txt").path
         ]
         try process.run()
     }
@@ -365,8 +373,7 @@ final class AppUpdater: NSObject {
 
         if let enumerator = FileManager.default.enumerator(
             at: app,
-            includingPropertiesForKeys: [.isSymbolicLinkKey],
-            options: [.skipsHiddenFiles]
+            includingPropertiesForKeys: [.isSymbolicLinkKey]
         ) {
             for case let item as URL in enumerator {
                 if try item.resourceValues(forKeys: [.isSymbolicLinkKey]).isSymbolicLink == true {
@@ -419,8 +426,36 @@ final class AppUpdater: NSObject {
         guard app.lastPathComponent == "Lattice.app" else { return }
         let previous = app.deletingLastPathComponent()
             .appendingPathComponent(".Lattice.previous-update.app", isDirectory: true)
-        guard let bundle = Bundle(url: previous), bundle.bundleIdentifier == "com.danny.cslibrary" else { return }
-        try? FileManager.default.removeItem(at: previous)
+        if let bundle = Bundle(url: previous), bundle.bundleIdentifier == "com.danny.cslibrary" {
+            try? FileManager.default.removeItem(at: previous)
+        }
+
+        guard let updatesRoot = try? Self.updatesRoot() else { return }
+        presentInstallerErrorIfNeeded(at: updatesRoot.appendingPathComponent("installer-error.txt"))
+        guard DesktopUpdateManifest.isFullCommit(currentCommit) else { return }
+        for artifact in [
+            updatesRoot.appendingPathComponent("Lattice-macOS-\(currentCommit).zip"),
+            updatesRoot.appendingPathComponent("staged-\(currentCommit)", isDirectory: true),
+            updatesRoot.appendingPathComponent("LatticeUpdateInstaller-\(currentCommit)")
+        ] {
+            try? Self.removeIfPresent(artifact)
+        }
+    }
+
+    private func presentInstallerErrorIfNeeded(at errorFile: URL) {
+        guard let data = try? Data(contentsOf: errorFile), data.count <= 16_384,
+              let message = String(data: data, encoding: .utf8), !message.isEmpty
+        else { return }
+        try? FileManager.default.removeItem(at: errorFile)
+        DispatchQueue.main.async { [weak self] in
+            guard self?.window != nil else { return }
+            let alert = NSAlert()
+            alert.alertStyle = .warning
+            alert.messageText = "The Lattice update was rolled back"
+            alert.informativeText = message
+            alert.addButton(withTitle: "OK")
+            alert.runModal()
+        }
     }
 
     private func shortCommit(_ commit: String) -> String {
