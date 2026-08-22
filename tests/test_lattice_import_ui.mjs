@@ -103,6 +103,15 @@ test("file drags cannot navigate the host and begin importing immediately", () =
   assert.match(APP, /!target\.closest\('\[aria-hidden="true"\], \[inert\]'\)/);
 });
 
+test("PDFs use the same embedded reader in native and web app modes", () => {
+  assert.match(
+    APP,
+    /function showPdfReader\(work, file\)[\s\S]*?readerShell\.classList\.add\("is-pdf-web"\)[\s\S]*?readerPdf\.src = `\/pdf-reader\.html\?\$\{params\}`/,
+  );
+  assert.doesNotMatch(APP, /csLibraryNativeCall\("document\.open"/);
+  assert.match(HTML, /id="pdfReader"[^>]*allow="fullscreen"[^>]*allowfullscreen/);
+});
+
 test("existing CS Library state keys remain stable for upgrades", () => {
   for (const key of [
     "favorites",

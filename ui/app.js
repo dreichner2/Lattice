@@ -1302,27 +1302,21 @@ function showPdfReader(work, file) {
   }
   recordOpen(work);
   showReaderShell(file.title, `${work.title} · PDF`, "pdf");
-  const descriptor = configureLocalReaderActions(work, file);
+  configureLocalReaderActions(work, file);
   elements.readerPdf.title = `${file.title} PDF reader`;
-  const useWebFallback = () => {
-    elements.readerShell.classList.add("is-pdf-web");
-    elements.readerPdf.hidden = false;
-    const params = new URLSearchParams({
-      file: file.path,
-      title: file.title || work.title,
-      work: work.title,
-      theme: document.documentElement.dataset.theme || "light",
-    });
-    elements.readerPdf.src = `/pdf-reader.html?${params}`;
-  };
-  if (IS_NATIVE_APP && typeof window.csLibraryNativeCall === "function") {
-    window.csLibraryNativeCall("document.upsert", descriptor)
-      .then(() => window.csLibraryNativeCall("document.open", { path: file.path }))
-      .then(result => { if (!result?.opened) useWebFallback(); })
-      .catch(useWebFallback);
-  } else {
-    useWebFallback();
-  }
+  // Keep PDF behavior and controls identical in the macOS and Windows apps.
+  // The native bridge still receives the document and reading-position events
+  // dispatched above/below; it no longer replaces this shared reader with a
+  // separate PDFKit window on macOS.
+  elements.readerShell.classList.add("is-pdf-web");
+  elements.readerPdf.hidden = false;
+  const params = new URLSearchParams({
+    file: file.path,
+    title: file.title || work.title,
+    work: work.title,
+    theme: document.documentElement.dataset.theme || "light",
+  });
+  elements.readerPdf.src = `/pdf-reader.html?${params}`;
   renderCards();
 }
 
