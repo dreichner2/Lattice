@@ -1,5 +1,17 @@
 # Changelog
 
+## 2.1.1 — 2026-08-22
+
+### Fixed
+
+- Left and right arrow keys now move between PDF pages in the ordinary
+  windowed reader, including continuous layout and the macOS native key bridge.
+- Returning to the Shelf from PDF fullscreen now exits the browser and native
+  fullscreen surfaces before removing the reader frame, preventing the black,
+  unclickable window left behind by WebKit.
+- The packaged Windows smoke test now proves windowed arrow navigation in
+  addition to rendering, two-page layout, and Shelf return.
+
 ## 2.1.0 — 2026-08-22
 
 ### Added

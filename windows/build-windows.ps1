@@ -26,6 +26,7 @@ $RequiredUiFiles = @(
   "pdf-reader.html",
   "pdf-reader.css",
   "pdf-reader.js",
+  "pdf-reader-lifecycle.mjs",
   "vendor/pdfjs/LICENSE",
   "vendor/pdfjs/build/pdf.min.mjs",
   "vendor/pdfjs/build/pdf.worker.min.mjs",

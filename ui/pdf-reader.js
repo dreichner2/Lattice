@@ -1,6 +1,10 @@
 "use strict";
 
 import * as pdfjsLib from "/vendor/pdfjs/build/pdf.min.mjs";
+import {
+  leaveFullscreenBeforeClose,
+  pageDirectionForKey,
+} from "/pdf-reader-lifecycle.mjs";
 
 globalThis.pdfjsLib = pdfjsLib;
 
@@ -95,6 +99,7 @@ let outlineLoaded = false;
 let thumbnailsCreated = false;
 let thumbnailObserver = null;
 let lastFindQuery = "";
+let closePending = false;
 
 document.documentElement.dataset.theme = requestedTheme;
 document.title = `${requestedTitle} — Lattice`;
@@ -473,12 +478,27 @@ async function toggleFullscreen() {
   }
 }
 
-function requestShelfAction(type) {
-  if (type === "close" && window.parent === window) {
-    window.location.assign("/");
+async function requestShelfAction(type) {
+  if (type !== "close") {
+    postToShelf(type, { path: documentPath });
     return;
   }
-  postToShelf(type, { path: documentPath });
+  if (closePending) return;
+
+  closePending = true;
+  elements.close.disabled = true;
+  elements.close.setAttribute("aria-busy", "true");
+  try {
+    const exited = await leaveFullscreenBeforeClose(document);
+    if (!exited) throw new Error("Fullscreen is still active");
+    if (window.parent === window) window.location.assign("/");
+    else postToShelf("close", { path: documentPath, fullscreen: false });
+  } catch {
+    closePending = false;
+    elements.close.disabled = false;
+    elements.close.removeAttribute("aria-busy");
+    elements.statusText.textContent = "Exit fullscreen before returning to the shelf";
+  }
 }
 
 function showPasswordPrompt(reason) {
@@ -559,10 +579,10 @@ eventBus.on("updatefindcontrolstate", (event) => {
   else if (total) elements.findCount.textContent = `${current || "—"} / ${total}`;
 });
 
-elements.close.addEventListener("click", () => requestShelfAction("close"));
-elements.open.addEventListener("click", () => requestShelfAction("open"));
-elements.errorOpen.addEventListener("click", () => requestShelfAction("open"));
-elements.reveal.addEventListener("click", () => requestShelfAction("reveal"));
+elements.close.addEventListener("click", () => void requestShelfAction("close"));
+elements.open.addEventListener("click", () => void requestShelfAction("open"));
+elements.errorOpen.addEventListener("click", () => void requestShelfAction("open"));
+elements.reveal.addEventListener("click", () => void requestShelfAction("reveal"));
 elements.retry.addEventListener("click", () => window.location.reload());
 elements.fullscreen.addEventListener("click", toggleFullscreen);
 elements.sidebarButton.addEventListener("click", () => setSidebar(!elements.app.classList.contains("sidebar-open")));
@@ -617,7 +637,16 @@ document.addEventListener("fullscreenchange", () => {
   elements.fullscreen.setAttribute("aria-label", active ? "Exit fullscreen" : "Enter fullscreen");
   elements.fullscreen.title = active ? "Exit fullscreen (F11)" : "Fullscreen (F11)";
   document.documentElement.dataset.fullscreen = String(active);
+  postToShelf("fullscreen", { path: documentPath, active });
 });
+
+function handlePageNavigationKey(key) {
+  const direction = pageDirectionForKey(key);
+  if (!direction) return false;
+  if (direction > 0) nextPage();
+  else previousPage();
+  return true;
+}
 
 document.addEventListener("keydown", (event) => {
   const editing = event.target instanceof HTMLInputElement || event.target instanceof HTMLSelectElement;
@@ -636,16 +665,12 @@ document.addEventListener("keydown", (event) => {
     if (elements.passwordDialog.open) return;
     if (document.fullscreenElement) document.exitFullscreen();
     else if (elements.app.classList.contains("sidebar-open")) setSidebar(false);
-    else requestShelfAction("close");
+    else void requestShelfAction("close");
     return;
   }
   if (editing || event.ctrlKey || event.metaKey || event.altKey) return;
-  if (event.key === "PageDown" || (layout !== "continuous" && event.key === "ArrowRight")) {
+  if (handlePageNavigationKey(event.key)) {
     event.preventDefault();
-    nextPage();
-  } else if (event.key === "PageUp" || (layout !== "continuous" && event.key === "ArrowLeft")) {
-    event.preventDefault();
-    previousPage();
   } else if (event.key === "+" || event.key === "=") {
     event.preventDefault();
     pdfViewer.increaseScale();
@@ -666,6 +691,12 @@ window.addEventListener("message", (event) => {
     document.documentElement.dataset.theme = message.theme === "dark" ? "dark" : "light";
   } else if (message.type === "initialize" && message.path === documentPath) {
     applyIncomingState(message.state);
+  } else if (message.type === "focus") {
+    elements.viewerContainer.focus({ preventScroll: true });
+  } else if (message.type === "shortcut") {
+    handlePageNavigationKey(message.key);
+  } else if (message.type === "prepare-close") {
+    void requestShelfAction("close");
   }
 });
 

@@ -454,6 +454,13 @@ class ServerTests(unittest.TestCase):
             self.assertIn("immutable", response.headers["Cache-Control"])
             self.assertIn(b"6.2.108", response.read())
 
+        with urllib.request.urlopen(
+            self.base + "/pdf-reader-lifecycle.mjs",
+            timeout=3,
+        ) as response:
+            self.assertTrue(response.headers["Content-Type"].startswith("text/javascript"))
+            self.assertIn(b"leaveFullscreenBeforeClose", response.read())
+
         script = (ROOT / "ui" / "pdf-reader.js").read_text(encoding="utf-8")
         self.assertIn("disableStream: true", script)
         self.assertIn("disableAutoFetch: true", script)

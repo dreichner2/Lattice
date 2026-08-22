@@ -22,6 +22,7 @@ WINDOW_CODE = WINDOWS / "MainWindow.xaml.cs"
 UPDATE_CANDIDATE_CODE = WINDOWS / "UpdateCandidateSession.cs"
 UPDATE_MODELS_CODE = WINDOWS / "UpdateModels.cs"
 UPDATE_SERVICE_CODE = WINDOWS / "UpdateService.cs"
+WINDOWS_BUILD = ROOT / "windows" / "build-windows.ps1"
 XAML_NAME = "{http://schemas.microsoft.com/winfx/2006/xaml}Name"
 XAML_KEY = "{http://schemas.microsoft.com/winfx/2006/xaml}Key"
 
@@ -45,6 +46,7 @@ class WindowsNativeShellTests(unittest.TestCase):
         cls.update_candidate_code = UPDATE_CANDIDATE_CODE.read_text(encoding="utf-8")
         cls.update_models_code = UPDATE_MODELS_CODE.read_text(encoding="utf-8")
         cls.update_service_code = UPDATE_SERVICE_CODE.read_text(encoding="utf-8")
+        cls.windows_build = WINDOWS_BUILD.read_text(encoding="utf-8")
 
     def test_native_palette_matches_shared_lattice_surface(self) -> None:
         keyed_values = {
@@ -154,6 +156,8 @@ class WindowsNativeShellTests(unittest.TestCase):
             "querySelector('button[data-layout=\"spread\"]')",
             self.window_code,
         )
+        self.assertIn('key: "ArrowRight"', self.window_code)
+        self.assertIn("arrowNavigationWorked", self.window_code)
         self.assertIn('getElementById("closeButton")', self.window_code)
         self.assertIn("ShelfReturnWorked", self.window_code)
         self.assertIn("Application.Current.Shutdown(exitCode);", self.window_code)
@@ -168,6 +172,7 @@ class WindowsNativeShellTests(unittest.TestCase):
         self.assertIn("WindowStyle = WindowStyle.None", self.window_code)
         self.assertIn("ResizeMode = ResizeMode.NoResize", self.window_code)
         self.assertIn("|| _webContentFullscreen", self.window_code)
+        self.assertIn('"pdf-reader-lifecycle.mjs"', self.windows_build)
 
     def test_native_caption_customization_keeps_high_contrast_system_chrome(self) -> None:
         self.assertIn("DwmSetWindowAttribute", self.app_code)

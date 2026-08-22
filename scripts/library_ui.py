@@ -3298,6 +3298,11 @@ class LibraryRequestHandler(BaseHTTPRequestHandler):
             "/pdf-reader.html": ("pdf-reader.html", "text/html; charset=utf-8", True),
             "/pdf-reader.css": ("pdf-reader.css", "text/css; charset=utf-8", False),
             "/pdf-reader.js": ("pdf-reader.js", "text/javascript; charset=utf-8", False),
+            "/pdf-reader-lifecycle.mjs": (
+                "pdf-reader-lifecycle.mjs",
+                "text/javascript; charset=utf-8",
+                False,
+            ),
         }
         if request_path == "/favicon.ico":
             self._send_bytes(HTTPStatus.NO_CONTENT, b"", "image/x-icon", head_only=head_only)

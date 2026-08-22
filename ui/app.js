@@ -76,6 +76,8 @@ const state = {
   epubProgress: readStorage(STORAGE.epubProgress, {}) || {},
   epubBookmarks: readStorage(STORAGE.epubBookmarks, {}) || {},
   pdfState: readStorage(STORAGE.pdfState, {}) || {},
+  pdfClosePending: false,
+  pdfCloseTimer: 0,
   videoCatalog: null,
   videoLibrary: null,
   imports: [],
@@ -1132,7 +1134,10 @@ function showReaderShell(title, kicker, mode) {
   closeMobileMenu();
 }
 
-function closeReader() {
+function finishReaderClose() {
+  window.clearTimeout(state.pdfCloseTimer);
+  state.pdfClosePending = false;
+  state.pdfCloseTimer = 0;
   saveEpubPosition();
   window.dispatchEvent(new CustomEvent("cs-library-reader-closed"));
   window.clearTimeout(state.epubSaveTimer);
@@ -1175,6 +1180,38 @@ function closeReader() {
   elements.epubFrame.classList.remove("is-page-turning");
   if (state.readerLastFocus && document.contains(state.readerLastFocus)) state.readerLastFocus.focus();
   state.readerLastFocus = null;
+}
+
+function closeReader() {
+  const activePdf = state.readerMode === "pdf"
+    && document.body.classList.contains("reader-open")
+    && elements.readerPdf.src !== "about:blank";
+  if (!activePdf) {
+    finishReaderClose();
+    return;
+  }
+  if (state.pdfClosePending) return;
+
+  state.pdfClosePending = true;
+  sendPdfReaderMessage("prepare-close");
+  state.pdfCloseTimer = window.setTimeout(async () => {
+    if (!state.pdfClosePending) return;
+    try {
+      if (document.fullscreenElement) await document.exitFullscreen();
+    } catch {
+      // The iframe normally owns fullscreen exit. Keep the reader intact if the
+      // host still reports a fullscreen element instead of tearing it down.
+    }
+    if (document.fullscreenElement) {
+      state.pdfClosePending = false;
+      state.pdfCloseTimer = 0;
+      announce("Exit fullscreen before returning to the shelf", true);
+      return;
+    }
+    await new Promise((resolve) => window.requestAnimationFrame(resolve));
+    await new Promise((resolve) => window.requestAnimationFrame(resolve));
+    finishReaderClose();
+  }, 1500);
 }
 
 window.csLibraryCloseReader = closeReader;
@@ -1277,10 +1314,13 @@ function handlePdfReaderMessage(event) {
     initializePdfReaderFrame();
   } else if (message.type === "rendered") {
     elements.readerLoading.hidden = true;
+    elements.readerPdf.focus({ preventScroll: true });
+    sendPdfReaderMessage("focus");
   } else if (message.type === "state") {
     persistPdfReaderState(message.path, message.state);
   } else if (message.type === "close") {
-    closeReader();
+    if (message.fullscreen === false) finishReaderClose();
+    else sendPdfReaderMessage("prepare-close");
   } else if (message.type === "open") {
     const work = state.workById.get(state.readerWorkId);
     const file = work?.files.find((item) => item.path === state.readerPath);
@@ -1873,19 +1913,24 @@ function handleEpubKeydown(event) {
 }
 
 function handleNativeReaderArrow(direction) {
-  if (!IS_NATIVE_APP || state.readerMode !== "epub" || !document.body.classList.contains("reader-open")) return false;
+  if (!IS_NATIVE_APP || !document.body.classList.contains("reader-open")) return false;
   const active = document.activeElement;
   const tag = active?.tagName?.toLowerCase();
   if (["input", "textarea", "select"].includes(tag) || active?.isContentEditable) return false;
-  if (active === elements.epubFrame) {
+  if (active === elements.epubFrame || active === elements.readerPdf) {
     try {
-      const frameActive = elements.epubFrame.contentDocument?.activeElement;
+      const frameActive = active.contentDocument?.activeElement;
       const frameTag = frameActive?.tagName?.toLowerCase();
       if (["input", "textarea", "select"].includes(frameTag) || frameActive?.isContentEditable) return false;
     } catch {
-      // Same-origin EPUB chapters normally expose their active element.
+      // Same-origin reader frames normally expose their active element.
     }
   }
+  if (state.readerMode === "pdf") {
+    sendPdfReaderMessage("shortcut", { key: Number(direction) < 0 ? "ArrowLeft" : "ArrowRight" });
+    return true;
+  }
+  if (state.readerMode !== "epub") return false;
   turnEpubPage(Number(direction) < 0 ? -1 : 1);
   return true;
 }
@@ -2786,6 +2831,21 @@ function bindEvents() {
   elements.menuButton.addEventListener("click", openMobileMenu);
   elements.mobileScrim.addEventListener("click", closeMobileMenu);
   document.addEventListener("keydown", (event) => {
+    if (
+      state.readerMode === "pdf"
+      && document.body.classList.contains("reader-open")
+      && !event.ctrlKey
+      && !event.metaKey
+      && !event.altKey
+      && (event.key === "ArrowLeft" || event.key === "ArrowRight")
+    ) {
+      const tag = event.target?.tagName?.toLowerCase();
+      if (!["input", "textarea", "select"].includes(tag) && !event.target?.isContentEditable) {
+        event.preventDefault();
+        sendPdfReaderMessage("shortcut", { key: event.key });
+        return;
+      }
+    }
     if (state.readerMode === "epub" && document.body.classList.contains("reader-open") && event.key !== "Escape") handleEpubKeydown(event);
     if (event.key === "/" && !document.body.classList.contains("reader-open") && !state.videoLibrary?.isPlayerOpen && document.activeElement !== elements.search) {
       event.preventDefault();

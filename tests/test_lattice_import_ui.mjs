@@ -6,6 +6,7 @@ const HTML = fs.readFileSync(new URL("../ui/index.html", import.meta.url), "utf8
 const APP = fs.readFileSync(new URL("../ui/app.js", import.meta.url), "utf8");
 const STYLES = fs.readFileSync(new URL("../ui/styles.css", import.meta.url), "utf8");
 const MAC_APP = fs.readFileSync(new URL("../native/CSLibraryApp.swift", import.meta.url), "utf8");
+const PDF_READER = fs.readFileSync(new URL("../ui/pdf-reader.js", import.meta.url), "utf8");
 
 test("every UI element binding resolves to one unique markup id", () => {
   const markupIds = [...HTML.matchAll(/\sid="([^"]+)"/g)].map((match) => match[1]);
@@ -110,6 +111,14 @@ test("PDFs use the same embedded reader in native and web app modes", () => {
   );
   assert.doesNotMatch(APP, /csLibraryNativeCall\("document\.open"/);
   assert.match(HTML, /id="pdfReader"[^>]*allow="fullscreen"[^>]*allowfullscreen/);
+  assert.match(PDF_READER, /leaveFullscreenBeforeClose\(document\)/);
+  assert.match(PDF_READER, /message\.type === "prepare-close"/);
+  assert.match(APP, /message\.fullscreen === false\) finishReaderClose\(\)/);
+  assert.match(APP, /sendPdfReaderMessage\("shortcut", \{ key: event\.key \}\)/);
+  assert.match(
+    APP,
+    /state\.readerMode === "pdf"[\s\S]*?sendPdfReaderMessage\("shortcut", \{ key: Number\(direction\) < 0 \? "ArrowLeft" : "ArrowRight" \}\)/,
+  );
 });
 
 test("existing CS Library state keys remain stable for upgrades", () => {

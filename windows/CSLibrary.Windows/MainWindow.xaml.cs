@@ -1257,8 +1257,27 @@ public partial class MainWindow : Window
               // Be specific: once spread mode is active the document root also
               // has data-layout="spread", but only the toolbar button exposes
               // aria-pressed and accepts the mode-selection click.
+              const single = frameDocument.querySelector('button[data-layout="single"]');
               const spread = frameDocument.querySelector('button[data-layout="spread"]');
-              if (app?.dataset.ready === "true" && frame.dataset.smokeSpread !== "true") {
+              const pageInput = frameDocument.getElementById("pageNumberInput");
+              if (app?.dataset.ready === "true" && !frame.dataset.smokeArrow) {
+                single?.click();
+                pageInput.value = "1";
+                pageInput.dispatchEvent(new Event("change", { bubbles: true }));
+                frameDocument.dispatchEvent(new KeyboardEvent("keydown", {
+                  key: "ArrowRight",
+                  bubbles: true
+                }));
+                frame.dataset.smokeArrow = String(Number(pageInput.value) === 2);
+                frameDocument.dispatchEvent(new KeyboardEvent("keydown", {
+                  key: "ArrowLeft",
+                  bubbles: true
+                }));
+              }
+              const arrowNavigationWorked = frame.dataset.smokeArrow === "true";
+              if (app?.dataset.ready === "true"
+                  && arrowNavigationWorked
+                  && frame.dataset.smokeSpread !== "true") {
                 frame.dataset.smokeSpread = "true";
                 spread?.click();
               }
@@ -1273,12 +1292,14 @@ public partial class MainWindow : Window
               return {
                 ready: app?.dataset.ready === "true"
                   && pageCount === 2
+                  && arrowNavigationWorked
                   && spreadActive
                   && visibleCanvases === 2
                   && (frameRect?.height || 0) > 300,
                 error: "",
                 pageCount,
                 layout: frameDocument.documentElement.dataset.layout || "",
+                arrowNavigationWorked,
                 spreadActive,
                 visibleCanvases,
                 frameHeight: Math.round(frameRect?.height || 0),
@@ -1318,6 +1339,7 @@ public partial class MainWindow : Window
             detail = lastProbe is null
                 ? lastError?.Message ?? "No PDF reader state was returned."
                 : $"pages={lastProbe.PageCount}, layout={lastProbe.Layout}, "
+                    + $"arrows={lastProbe.ArrowNavigationWorked}, "
                     + $"spread={lastProbe.SpreadActive}, canvases={lastProbe.VisibleCanvases}, "
                     + $"height={lastProbe.FrameHeight}";
         }
@@ -1688,6 +1710,7 @@ public partial class MainWindow : Window
         public string Error { get; init; } = "";
         public int PageCount { get; init; }
         public string Layout { get; init; } = "";
+        public bool ArrowNavigationWorked { get; init; }
         public bool SpreadActive { get; init; }
         public int VisibleCanvases { get; init; }
         public int FrameHeight { get; init; }

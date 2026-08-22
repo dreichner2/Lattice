@@ -50,6 +50,7 @@ for resource in \
   "$ui_root/pdf-reader.html" \
   "$ui_root/pdf-reader.css" \
   "$ui_root/pdf-reader.js" \
+  "$ui_root/pdf-reader-lifecycle.mjs" \
   "$ui_root/vendor/pdfjs/LICENSE" \
   "$ui_root/vendor/pdfjs/build/pdf.min.mjs" \
   "$ui_root/vendor/pdfjs/build/pdf.worker.min.mjs" \
@@ -119,6 +120,7 @@ for bundled in \
   "$staged_app/Contents/Resources/ui/app.js" \
   "$staged_app/Contents/Resources/ui/pdf-reader.html" \
   "$staged_app/Contents/Resources/ui/pdf-reader.js" \
+  "$staged_app/Contents/Resources/ui/pdf-reader-lifecycle.mjs" \
   "$staged_app/Contents/Resources/ui/vendor/pdfjs/build/pdf.min.mjs" \
   "$staged_app/Contents/Resources/server/library_ui.py" \
   "$staged_app/Contents/Resources/ImmersiveEPUB.js" \
