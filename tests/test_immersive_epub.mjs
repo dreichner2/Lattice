@@ -8,6 +8,10 @@ const SOURCE = fs.readFileSync(
   new URL("../native/ImmersiveEPUB.js", import.meta.url),
   "utf8",
 );
+const STYLES = fs.readFileSync(
+  new URL("../ui/styles.css", import.meta.url),
+  "utf8",
+);
 
 
 function loadReaderScript() {
@@ -86,4 +90,21 @@ test("note storage reports success and failure", () => {
   assert.equal(writeNotes({ book: [] }), true);
   reader.failStorage();
   assert.equal(writeNotes({ book: [{ note: "keep this draft" }] }), false);
+});
+
+
+test("native notes use CSP-compatible stacked controls", () => {
+  assert.doesNotMatch(SOURCE, /style\("cs-native-reader-ui"/);
+  assert.match(
+    STYLES,
+    /html\.cs-native-reader \.native-note-compose\s*\{[^}]*display:\s*grid\s*!important;[^}]*grid-template-columns:\s*minmax\(0,\s*1fr\)\s*!important;/s,
+  );
+  assert.match(
+    STYLES,
+    /html\.cs-native-reader \.native-note-input\s*\{[^}]*width:\s*100%\s*!important;[^}]*min-height:\s*132px;/s,
+  );
+  assert.match(
+    STYLES,
+    /html\.cs-native-reader \.native-note-save\s*\{[^}]*width:\s*100%;[^}]*min-height:\s*42px;/s,
+  );
 });

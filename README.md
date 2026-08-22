@@ -182,6 +182,12 @@ The service binds only to `127.0.0.1`. It validates the Host header, selected
 library identity, catalog allowlist, paths, origins, EPUB archive limits, and
 token-protected local file actions.
 
+The interface also includes a dedicated **Video lectures** hall with 58 course
+tracks and 1,452 searchable lectures. Video stays with its official publisher;
+the repository stores only source metadata and video IDs. See the
+[video-catalog provenance note](notes/provenance/free-video-lectures-2026-08-21.md)
+for inclusion rules and licensing boundaries.
+
 ## Start here
 
 Choose one lane and begin building things immediately:

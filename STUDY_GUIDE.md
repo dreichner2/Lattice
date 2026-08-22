@@ -256,28 +256,32 @@ milestones are ray/shape intersections, BVH acceleration, materials, direct
 lighting, Monte Carlo integration, importance sampling, and image-quality
 tests.
 
-## Video lectures (free, link-first)
+## Video lectures (free, in-app)
 
-Full courses watched online rather than shelved as files. Every URL verified
-serving on 2026-08-21.
+Choose **Video lectures** in the app sidebar to browse **58 complete course
+tracks and 1,452 unique lectures** across 12 subjects. Search reaches individual
+lecture titles, not just course names. Use the **Source** filter to narrow the
+hall to MIT, Harvard, Carnegie Mellon, or an individual instructor. Select a
+course to open its searchable queue in the in-app player; completion marks and
+the last position in each course stay locally on this Mac.
 
-| Course | Fits stage | Access |
+Good curriculum pairings include:
+
+| Course track | Fits stage | Pair with |
 | --- | --- | --- |
-| [MIT OCW 6.006 — Introduction to Algorithms (Spring 2020)](https://ocw.mit.edu/courses/6-006-introduction-to-algorithms-spring-2020/) | 3 | OCW, CC BY-NC-SA |
-| [CMU 15-445 — Database Systems (Fall 2024)](https://15445.courses.cs.cmu.edu/fall2024/) | 4 | Public course site + YouTube lectures |
-| [MIT 6.824 — Distributed Systems](https://pdos.csail.mit.edu/6.824/) | 4 | Public course site (PDOS) |
-| [Berkeley CS61C — Great Ideas in Computer Architecture](https://cs61c.org/) | 4 | Public course site |
-| [Nand2Tetris — From Nand to Tetris](https://www.nand2tetris.org/) | 5 | Open courseware; project software GPL-2.0+ (shelved) |
-| [SICP 6.001 (Spring 2005)](https://ocw.mit.edu/courses/6-001-structure-and-interpretation-of-computer-programs-spring-2005/) | 5 | OCW, CC BY-NC-SA |
-| [Karpathy — Neural Networks: Zero to Hero](https://karpathy.ai/zero-to-hero.html) | 8 | YouTube + MIT-licensed code |
+| MIT OCW 6.006 — Introduction to Algorithms | 3 | [6.006 notes](papers/mit-6006/) and CLRS |
+| CMU 15-445 — Database Systems | 4 | the database projects and papers shelf |
+| MIT 6.S081 — Operating System Engineering | 4 | [OSTEP](books/ostep.pdf) |
+| MIT 6.824 — Distributed Systems | 4 | [Distributed Systems](books/distributed-systems-4e.pdf) |
+| MIT 6.001 — SICP | 5 | [SICP](books/sicp.pdf) |
+| Harvard CS50's Introduction to Cybersecurity | 7 | systems and security papers |
+| Karpathy — Neural Networks: Zero to Hero | 8 | the ML and foundational-papers shelves |
 
-Pair each course with the shelved text when one exists: 6.006 with its shelved
-[lecture notes](papers/mit-6006/) and CLRS, 15-445 as the database
-lecture track (no free primary text yet), 6.824 with
-[Distributed Systems](books/distributed-systems-4e.pdf), Nand2Tetris with its
-shelved Nand2Tetris project suite, SICP with the free
-[online edition](books/sicp.pdf), Zero to Hero with the papers shelf
-(ResNet, attention, DDPM, VAE, GAN all shelved).
+The full collection also includes programming, mathematics, software practice,
+computer engineering, programming languages, AI/ML, graphics, computer vision,
+robotics, and computing ethics. Streams remain on their official publisher;
+the app stores only a link catalog and provides both exact-YouTube and official
+course-page fallbacks. See the [source and licensing record](notes/provenance/free-video-lectures-2026-08-21.md).
 
 ## Known shelf gaps
 

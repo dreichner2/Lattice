@@ -72,10 +72,50 @@ def write_test_epub(path: Path) -> None:
         )
 
 
+def write_test_lecture_catalog(root: Path) -> None:
+    lectures = root / "lectures"
+    lectures.mkdir(exist_ok=True)
+    (lectures / "catalog.json").write_text(
+        json.dumps(
+            {
+                "version": 1,
+                "verifiedAt": "2026-08-21",
+                "scope": "Test fixture",
+                "courses": [
+                    {
+                        "id": "fixture-course",
+                        "title": "Fixture Course",
+                        "institution": "Fixture University",
+                        "sourceUrl": "https://example.com/course",
+                        "lectures": [
+                            {
+                                "id": "abcdefghijk",
+                                "title": "Fixture Lecture",
+                                "sourceUrl": "https://www.youtube.com/watch?v=abcdefghijk",
+                            }
+                        ],
+                    }
+                ],
+                "subjects": ["Programming"],
+                "institutions": ["Fixture University"],
+                "stats": {
+                    "courses": 1,
+                    "lectures": 1,
+                    "subjects": 1,
+                    "institutions": 1,
+                    "duplicatesRemoved": 0,
+                },
+            }
+        ),
+        encoding="utf-8",
+    )
+
+
 class CatalogTests(unittest.TestCase):
     @classmethod
     def setUpClass(cls) -> None:
         cls.library = library_ui.build_library(ROOT)
+        cls.lecture_catalog = library_ui.load_lecture_catalog(ROOT)
 
     def test_catalog_shape(self) -> None:
         if self.library["stats"]["artifacts"] == 0:
@@ -113,6 +153,77 @@ class CatalogTests(unittest.TestCase):
         by_id = {work["id"]: work for work in self.library["works"]}
         self.assertEqual(by_id["mit-6006"]["fileCount"], 20)
         self.assertEqual(by_id["software-foundations"]["fileCount"], 7)
+
+    def test_video_catalog_is_large_source_traced_and_globally_deduplicated(self) -> None:
+        catalog = self.lecture_catalog
+        self.assertEqual(
+            catalog["stats"],
+            {
+                "courses": 58,
+                "lectures": 1452,
+                "subjects": 12,
+                "institutions": 5,
+                "duplicatesRemoved": 3,
+                "sources": 4,
+            },
+        )
+        self.assertEqual(
+            catalog["sources"],
+            [
+                {"id": "mit", "label": "MIT", "courseCount": 49},
+                {"id": "harvard", "label": "Harvard", "courseCount": 6},
+                {"id": "carnegie-mellon", "label": "Carnegie Mellon", "courseCount": 2},
+                {"id": "andrej-karpathy", "label": "Andrej Karpathy", "courseCount": 1},
+            ],
+        )
+        self.assertEqual(len(catalog["subjects"]), 12)
+        course_ids = [course["id"] for course in catalog["courses"]]
+        video_ids = [
+            lecture["id"]
+            for course in catalog["courses"]
+            for lecture in course["lectures"]
+        ]
+        self.assertEqual(len(course_ids), len(set(course_ids)))
+        self.assertEqual(len(video_ids), len(set(video_ids)))
+        self.assertTrue(all(course["sourceUrl"].startswith("https://") for course in catalog["courses"]))
+        self.assertTrue(all(course["lectureCount"] == len(course["lectures"]) for course in catalog["courses"]))
+        mit_institutions = {"MIT", "MIT OpenCourseWare"}
+        self.assertTrue(
+            all(course["source"] == {"id": "mit", "label": "MIT"} for course in catalog["courses"] if course["institution"] in mit_institutions)
+        )
+
+    def test_video_catalog_includes_core_full_course_tracks(self) -> None:
+        by_id = {course["id"]: course for course in self.lecture_catalog["courses"]}
+        expected_counts = {
+            "mit-6-006-spring-2020": 32,
+            "mit-6-s081-fall-2020": 24,
+            "mit-6-824-spring-2020": 20,
+            "cmu-15-445-fall-2024": 26,
+            "harvard-cs50x-2026": 13,
+            "karpathy-zero-to-hero": 8,
+        }
+        for course_id, expected in expected_counts.items():
+            self.assertIn(course_id, by_id)
+            self.assertEqual(by_id[course_id]["lectureCount"], expected)
+
+        cs50_lecture_zero = by_id["harvard-cs50x-2026"]["lectures"][1]
+        self.assertEqual(cs50_lecture_zero["id"], "UuIEbpQms8o")
+        self.assertEqual(cs50_lecture_zero["embedUrl"], "https://video.cs50.io/UuIEbpQms8o")
+
+    def test_video_directory_contains_metadata_not_media(self) -> None:
+        paths = [path.relative_to(ROOT / "lectures").as_posix() for path in (ROOT / "lectures").rglob("*") if path.is_file()]
+        self.assertEqual(paths, ["catalog.json"])
+
+    def test_video_ui_uses_privacy_enhanced_embeds_and_local_progress(self) -> None:
+        markup = (ROOT / "ui" / "index.html").read_text(encoding="utf-8")
+        controller = (ROOT / "ui" / "videos.js").read_text(encoding="utf-8")
+        for element_id in ("videoSection", "videoPlayerShell", "videoFrame", "videoQueueList", "videoSourceSelect"):
+            self.assertIn(f'id="{element_id}"', markup)
+        self.assertIn("www.youtube-nocookie.com/embed/", controller)
+        self.assertIn("localStorage", controller)
+        self.assertIn("/api/lectures", controller)
+        self.assertIn("course.source.id", controller)
+        self.assertIn("All sources", controller)
 
     def test_source_bundles_are_readable_editions(self) -> None:
         by_id = {work["id"]: work for work in self.library["works"]}
@@ -243,13 +354,31 @@ class ServerTests(unittest.TestCase):
     def test_home_and_api(self) -> None:
         with urllib.request.urlopen(self.base + "/", timeout=3) as response:
             self.assertEqual(response.status, 200)
-            self.assertIn(b"Your computer science library", response.read())
+            markup = response.read()
+            self.assertIn(b"Your computer science library", markup)
+            self.assertIn(b"Video lectures", markup)
             self.assertEqual(response.headers["X-Frame-Options"], "DENY")
+            self.assertEqual(response.headers["Referrer-Policy"], "strict-origin-when-cross-origin")
+            self.assertIn(
+                "frame-src 'self' https://www.youtube-nocookie.com https://video.cs50.io",
+                response.headers["Content-Security-Policy"],
+            )
         with urllib.request.urlopen(self.base + "/api/library", timeout=3) as response:
             payload = json.loads(response.read())
             expected_works = 83 if payload["stats"]["artifacts"] == 0 else 96
             self.assertEqual(payload["stats"]["works"], expected_works)
             self.assertTrue(payload["actionToken"])
+
+    def test_lecture_api_and_controller(self) -> None:
+        with urllib.request.urlopen(self.base + "/api/lectures", timeout=3) as response:
+            payload = json.loads(response.read())
+            self.assertEqual(payload["stats"]["courses"], 58)
+            self.assertEqual(payload["stats"]["lectures"], 1452)
+            self.assertEqual(payload["stats"]["sources"], 4)
+            self.assertEqual(payload["sources"][0], {"id": "mit", "label": "MIT", "courseCount": 49})
+        with urllib.request.urlopen(self.base + "/videos.js", timeout=3) as response:
+            self.assertTrue(response.headers["Content-Type"].startswith("text/javascript"))
+            self.assertIn(b"youtube-nocookie.com", response.read())
 
     def test_pdf_range_request(self) -> None:
         if not (ROOT / "books" / "sicp.pdf").is_file():
@@ -332,6 +461,7 @@ class EpubReaderTests(unittest.TestCase):
             ),
             encoding="utf-8",
         )
+        write_test_lecture_catalog(self.root)
         self.server = library_ui.create_server(0, root=self.root)
         self.port = int(self.server.server_address[1])
         self.base = f"http://127.0.0.1:{self.port}"
@@ -422,6 +552,7 @@ class LiveRefreshTests(unittest.TestCase):
             ),
             encoding="utf-8",
         )
+        write_test_lecture_catalog(self.root)
         self.server = library_ui.create_server(0, root=self.root)
         self.port = int(self.server.server_address[1])
         self.base = f"http://127.0.0.1:{self.port}"

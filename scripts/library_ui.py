@@ -51,6 +51,7 @@ ALLOWED_DOCUMENTS = frozenset(
         "notes/provenance/cs-books-import-2026-08-20.md",
         "notes/provenance/free-study-expansion-2026-08-20.md",
         "notes/provenance/readable-editions-2026-08-21.md",
+        "notes/provenance/free-video-lectures-2026-08-21.md",
     }
 )
 WORK_CELL = re.compile(
@@ -79,6 +80,13 @@ EPUB_COMPRESSION_RATIO_LIMIT = 200
 EPUB_ACTIVE_SUFFIXES = frozenset({".js", ".mjs", ".wasm"})
 EPUB_DOCUMENT_TYPES = frozenset({"application/xhtml+xml", "text/html"})
 EPUB_OPS_NAMESPACE = "http://www.idpf.org/2007/ops"
+YOUTUBE_VIDEO_ID = re.compile(r"^[A-Za-z0-9_-]{11}$")
+LECTURE_SOURCE_ALIASES = {
+    "MIT": ("mit", "MIT"),
+    "MIT OpenCourseWare": ("mit", "MIT"),
+    "Harvard University": ("harvard", "Harvard"),
+    "Carnegie Mellon University": ("carnegie-mellon", "Carnegie Mellon"),
+}
 
 
 def library_identity(root: Path) -> str:
@@ -90,6 +98,15 @@ def library_identity(root: Path) -> str:
 def slugify(value: str) -> str:
     """Return a compact URL/CSS-safe shelf identifier."""
     return re.sub(r"[^a-z0-9]+", "-", value.lower()).strip("-") or "shelf"
+
+
+def lecture_source(institution: str) -> dict[str, str]:
+    """Collapse institution variants into useful lecture-source filters."""
+    source_id, label = LECTURE_SOURCE_ALIASES.get(
+        institution,
+        (slugify(institution), institution.removesuffix(" University")),
+    )
+    return {"id": source_id, "label": label}
 
 
 def _read_metadata(root: Path) -> dict[str, dict[str, Any]]:
@@ -193,6 +210,94 @@ def _classify_work(work_id: str, local_path: str) -> str:
     if local_path.startswith("papers/"):
         return "paper"
     return "book"
+
+
+def load_lecture_catalog(root: Path = REPO_ROOT) -> dict[str, Any]:
+    """Load and validate the checked-in, link-only video lecture catalog."""
+    path = root / "lectures" / "catalog.json"
+    try:
+        catalog = json.loads(path.read_text(encoding="utf-8"))
+    except (OSError, json.JSONDecodeError) as exc:
+        raise ValueError(f"Invalid lecture catalog {path}: {exc}") from exc
+    courses = catalog.get("courses")
+    if not isinstance(courses, list) or not courses:
+        raise ValueError("Lecture catalog has no courses")
+    course_ids: set[str] = set()
+    video_ids: set[str] = set()
+    source_counts: dict[str, dict[str, Any]] = {}
+    for course in courses:
+        if not isinstance(course, dict):
+            raise ValueError("Lecture catalog course is not an object")
+        course_id = course.get("id")
+        if not isinstance(course_id, str) or not course_id or course_id in course_ids:
+            raise ValueError(f"Duplicate or invalid lecture course id: {course_id}")
+        course_ids.add(course_id)
+        institution = course.get("institution")
+        if not isinstance(institution, str) or not institution.strip():
+            raise ValueError(f"Lecture course has no institution: {course_id}")
+        source = lecture_source(institution)
+        course["source"] = source
+        source_entry = source_counts.setdefault(
+            source["id"],
+            {**source, "courseCount": 0},
+        )
+        source_entry["courseCount"] += 1
+        source_url = course.get("sourceUrl")
+        if not isinstance(source_url, str) or urllib.parse.urlsplit(source_url).scheme != "https":
+            raise ValueError(f"Lecture course source must use HTTPS: {course_id}")
+        lectures = course.get("lectures")
+        if not isinstance(lectures, list) or not lectures:
+            raise ValueError(f"Lecture course has no videos: {course_id}")
+        if course.get("lectureCount") not in (None, len(lectures)):
+            raise ValueError(f"Lecture count does not match course contents: {course_id}")
+        for lecture in lectures:
+            video_id = lecture.get("id") if isinstance(lecture, dict) else None
+            if (
+                not isinstance(video_id, str)
+                or not YOUTUBE_VIDEO_ID.fullmatch(video_id)
+                or video_id in video_ids
+            ):
+                raise ValueError(f"Duplicate or invalid YouTube id: {video_id}")
+            title = lecture.get("title")
+            source_url = lecture.get("sourceUrl")
+            parsed_source = urllib.parse.urlsplit(source_url) if isinstance(source_url, str) else None
+            source_query = urllib.parse.parse_qs(parsed_source.query) if parsed_source else {}
+            if (
+                not isinstance(title, str)
+                or not title.strip()
+                or parsed_source is None
+                or parsed_source.scheme != "https"
+                or parsed_source.hostname not in {"youtube.com", "www.youtube.com"}
+                or parsed_source.path != "/watch"
+                or source_query.get("v") != [video_id]
+            ):
+                raise ValueError(f"Invalid YouTube source metadata: {video_id}")
+            embed_url = lecture.get("embedUrl")
+            if embed_url is not None:
+                parsed_embed = urllib.parse.urlsplit(embed_url) if isinstance(embed_url, str) else None
+                if (
+                    parsed_embed is None
+                    or parsed_embed.scheme != "https"
+                    or parsed_embed.hostname != "video.cs50.io"
+                    or parsed_embed.path != f"/{video_id}"
+                    or parsed_embed.query
+                    or parsed_embed.fragment
+                ):
+                    raise ValueError(f"Invalid official embed override: {video_id}")
+            video_ids.add(video_id)
+    stats = catalog.get("stats")
+    if (
+        not isinstance(stats, dict)
+        or stats.get("courses") != len(courses)
+        or stats.get("lectures") != len(video_ids)
+    ):
+        raise ValueError("Lecture catalog statistics do not match its contents")
+    catalog["sources"] = sorted(
+        source_counts.values(),
+        key=lambda source: (-source["courseCount"], source["label"]),
+    )
+    stats["sources"] = len(catalog["sources"])
+    return catalog
 
 
 def build_library(root: Path = REPO_ROOT) -> dict[str, Any]:
@@ -381,7 +486,11 @@ def build_library(root: Path = REPO_ROOT) -> dict[str, Any]:
 
 def library_snapshot(root: Path) -> tuple[tuple[str, int, int], ...]:
     """Return a cheap filesystem fingerprint used by the live shelf watcher."""
-    candidates: set[Path] = {root / "CATALOG.md", root / "manifests" / "library.sha256"}
+    candidates: set[Path] = {
+        root / "CATALOG.md",
+        root / "lectures" / "catalog.json",
+        root / "manifests" / "library.sha256",
+    }
     for relative in ALLOWED_DOCUMENTS:
         candidates.add(root / relative)
     metadata_root = root / "metadata"
@@ -840,6 +949,7 @@ class LibraryHTTPServer(ThreadingHTTPServer):
         self.library_id = library_identity(self.root)
         self.parent_pid = parent_pid
         self.library = build_library(self.root)
+        self.lecture_catalog = load_lecture_catalog(self.root)
         self.allowed_paths = frozenset(file["path"] for file in self.library["materials"])
         self._epub_cache: dict[
             str,
@@ -938,6 +1048,7 @@ class LibraryHTTPServer(ThreadingHTTPServer):
                 continue
             try:
                 refreshed = build_library(self.root)
+                refreshed_lectures = load_lecture_catalog(self.root)
             except (OSError, ValueError) as exc:
                 with self._state_condition:
                     self.last_refresh_error = str(exc)
@@ -957,6 +1068,7 @@ class LibraryHTTPServer(ThreadingHTTPServer):
                     != (current[path].get("bytes"), current[path].get("modifiedNs"))
                 )
                 self.library = refreshed
+                self.lecture_catalog = refreshed_lectures
                 self.allowed_paths = frozenset(current)
                 self.last_change = {
                     "revision": self.revision,
@@ -1001,7 +1113,9 @@ class LibraryRequestHandler(BaseHTTPRequestHandler):
 
     def _security_headers(self, *, frame_policy: str = "DENY") -> None:
         self.send_header("X-Content-Type-Options", "nosniff")
-        self.send_header("Referrer-Policy", "no-referrer")
+        # YouTube requires an embedding client origin. Cross-origin requests
+        # receive only this loopback origin, never the local route or query.
+        self.send_header("Referrer-Policy", "strict-origin-when-cross-origin")
         self.send_header("X-Frame-Options", frame_policy)
 
     def _send_bytes(
@@ -1020,7 +1134,9 @@ class LibraryRequestHandler(BaseHTTPRequestHandler):
             self.send_header(
                 "Content-Security-Policy",
                 "default-src 'self'; script-src 'self'; style-src 'self'; "
-                "img-src 'self' data:; connect-src 'self'; frame-src 'self'; object-src 'none'; "
+                "img-src 'self' data:; connect-src 'self'; "
+                "frame-src 'self' https://www.youtube-nocookie.com https://video.cs50.io; "
+                "object-src 'none'; "
                 "frame-ancestors 'none'; base-uri 'none'; form-action 'none'",
             )
         self.send_header("Cache-Control", cache)
@@ -1065,6 +1181,9 @@ class LibraryRequestHandler(BaseHTTPRequestHandler):
             return
         if request_path == "/api/library":
             self._send_json(HTTPStatus.OK, self.server.library_payload(), head_only=head_only)
+            return
+        if request_path == "/api/lectures":
+            self._send_json(HTTPStatus.OK, self.server.lecture_catalog, head_only=head_only)
             return
         if request_path == "/api/epub":
             query = urllib.parse.parse_qs(urllib.parse.urlsplit(self.path).query)
@@ -1115,6 +1234,8 @@ class LibraryRequestHandler(BaseHTTPRequestHandler):
             "/": ("index.html", "text/html; charset=utf-8"),
             "/index.html": ("index.html", "text/html; charset=utf-8"),
             "/styles.css": ("styles.css", "text/css; charset=utf-8"),
+            "/video-styles.css": ("video-styles.css", "text/css; charset=utf-8"),
+            "/videos.js": ("videos.js", "text/javascript; charset=utf-8"),
             "/app.js": ("app.js", "text/javascript; charset=utf-8"),
         }
         if request_path == "/favicon.ico":
