@@ -128,13 +128,15 @@ internal sealed class UpdateService
             cancellationToken);
         var signatureTask = DownloadBoundedBytesAsync(SignatureUrl, 4096, cancellationToken);
         await Task.WhenAll(manifestTask, signatureTask);
+        var manifestBytes = await manifestTask;
+        var signatureBytes = await signatureTask;
 
         ValidatedDesktopRelease release;
         try
         {
             release = UpdateSecurity.VerifyAndValidateManifest(
-                await manifestTask,
-                await signatureTask,
+                manifestBytes,
+                signatureBytes,
                 _installation.Version);
         }
         catch (UpdateVersionRejectedException error)
