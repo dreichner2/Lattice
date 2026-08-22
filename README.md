@@ -65,6 +65,10 @@ has exited. macOS also verifies the downloaded bundle's code signature. The
 previous application is kept until the replacement starts successfully, and a
 failed installation is rolled back.
 
+The checked-in pipeline uses an ad-hoc macOS signature and does not Authenticode-
+sign Windows builds. Add Developer ID signing/notarization and an Authenticode
+certificate before distributing Lattice outside a trusted personal workflow.
+
 Updates replace packaged application files only. They never modify `books/`,
 `papers/`, `lectures/`, the selected Git checkout, Syncthing state, or either
 platform's private reading database. If a new `main` commit is still building,
