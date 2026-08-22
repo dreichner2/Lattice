@@ -50,6 +50,27 @@ choose a folder containing `CATALOG.md` and `library-taxonomy.json`. That
 location is saved, so the app does not have to remain beside the repository.
 Python 3 is currently required to run the loopback library service.
 
+### Automatic desktop updates
+
+Both desktop apps record the exact Git commit used to build them and check the
+public GitHub `main` branch after launch. Their native chrome reports **Up to
+date**, **Update available**, **Update preparing**, or an offline/error state.
+Use **Lattice → Check for Updates…** on macOS or the update-status button on
+Windows to check again manually.
+
+**Update & Relaunch** downloads the rolling `latest-main` package, verifies its
+published byte size and SHA-256 digest, confirms that the package identifies the
+same commit, and installs it through an external helper after the running app
+has exited. macOS also verifies the downloaded bundle's code signature. The
+previous application is kept until the replacement starts successfully, and a
+failed installation is rolled back.
+
+Updates replace packaged application files only. They never modify `books/`,
+`papers/`, `lectures/`, the selected Git checkout, Syncthing state, or either
+platform's private reading database. If a new `main` commit is still building,
+the apps report **Update preparing** until both verified platform packages have
+been published.
+
 ### Native PDF reading
 
 PDFs open in a PDFKit workspace with:

@@ -26,6 +26,8 @@
           <Button x:Name="ReloadButton" Content="↻" Width="38" Padding="0" ToolTip="Reload" AutomationProperties.Name="Reload" IsEnabled="False" Click="Reload_Click" />
         </StackPanel>
         <StackPanel DockPanel.Dock="Right" Orientation="Horizontal" HorizontalAlignment="Right">
+          <Button x:Name="UpdateButton" Content="Checking for updates…" IsEnabled="False"
+                  AutomationProperties.Name="Check for updates" Click="UpdateButton_Click" />
           <Button x:Name="AddMaterialsButton" Content="Add materials…" ToolTip="Add PDF, EPUB, or text materials"
                   AutomationProperties.Name="Add materials" IsEnabled="False" Click="AddMaterials_Click" />
           <Button Content="Open folder" Click="OpenFolder_Click" />

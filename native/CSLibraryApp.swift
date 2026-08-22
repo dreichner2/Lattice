@@ -20,6 +20,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, WKNavigationDelegate, 
     private var immersiveReader: ImmersiveReaderCoordinator!
     private var readerStore: ReaderStore!
     private var readerBridge: ReaderBridge!
+    private var appUpdater: AppUpdater!
     private var currentServerURL: URL?
     private var pendingOpenURLs: [URL] = []
     private var webInterfaceReady = false
@@ -50,6 +51,8 @@ final class AppDelegate: NSObject, NSApplicationDelegate, WKNavigationDelegate, 
         healthSession = URLSession(configuration: sessionConfiguration)
 
         buildWindow()
+        appUpdater = AppUpdater(window: window)
+        appUpdater.startAutomaticCheck()
         installReaderKeyMonitor()
         connectToLibrary()
     }
@@ -684,6 +687,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, WKNavigationDelegate, 
         let appItem = NSMenuItem()
         let appMenu = NSMenu()
         appMenu.addItem(withTitle: "About Lattice", action: #selector(NSApplication.orderFrontStandardAboutPanel(_:)), keyEquivalent: "")
+        addMenuItem(appMenu, "Check for Updates…", #selector(checkForUpdates(_:)))
         appMenu.addItem(.separator())
         appMenu.addItem(withTitle: "Hide Lattice", action: #selector(NSApplication.hide(_:)), keyEquivalent: "h")
         appMenu.addItem(.separator())
@@ -732,6 +736,10 @@ final class AppDelegate: NSObject, NSApplicationDelegate, WKNavigationDelegate, 
         helpItem.submenu = helpMenu
         mainMenu.addItem(helpItem)
         NSApp.mainMenu = mainMenu
+    }
+
+    @objc private func checkForUpdates(_ sender: Any?) {
+        appUpdater?.checkForUpdates(presentResult: true)
     }
 
     private func addMenuItem(

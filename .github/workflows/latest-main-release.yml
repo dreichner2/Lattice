@@ -1,0 +1,99 @@
+name: Latest main desktop release
+
+on:
+  push:
+    branches:
+      - main
+  workflow_dispatch:
+
+concurrency:
+  group: latest-main-desktop-release
+  cancel-in-progress: true
+
+permissions:
+  contents: write
+
+jobs:
+  macos:
+    uses: ./.github/workflows/native-macos.yml
+    permissions:
+      contents: read
+
+  windows:
+    uses: ./.github/workflows/windows-app.yml
+    permissions:
+      contents: read
+
+  publish:
+    name: Publish verified latest-main assets
+    needs:
+      - macos
+      - windows
+    runs-on: ubuntu-24.04
+    timeout-minutes: 15
+    steps:
+      - name: Check out publication source
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Confirm this commit is still main
+        run: |
+          git fetch origin main
+          test "$(git rev-parse origin/main)" = "$GITHUB_SHA"
+
+      - name: Download verified macOS package
+        uses: actions/download-artifact@v4
+        with:
+          name: Lattice-macOS-${{ github.sha }}
+          path: release-assets/macos
+
+      - name: Download verified Windows package
+        uses: actions/download-artifact@v4
+        with:
+          name: Lattice-Windows-win-x64
+          path: release-assets/windows
+
+      - name: Build commit-pinned update manifest
+        run: |
+          python3 scripts/build_update_manifest.py \
+            --commit "$GITHUB_SHA" \
+            --repository "$GITHUB_REPOSITORY" \
+            --tag latest-main \
+            --channel main \
+            --asset macos-universal=release-assets/macos/Lattice-macOS.zip \
+            --asset windows-x64=release-assets/windows/Lattice-Windows-win-x64.zip \
+            --output release-assets/update-manifest.json
+          python3 -m json.tool release-assets/update-manifest.json >/dev/null
+
+      - name: Publish rolling latest-main release
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          if ! gh release view latest-main --repo "$GITHUB_REPOSITORY" >/dev/null 2>&1; then
+            gh release create latest-main \
+              --repo "$GITHUB_REPOSITORY" \
+              --target "$GITHUB_SHA" \
+              --title "Latest main · ${GITHUB_SHA:0:12}" \
+              --notes "Verified Lattice automatic-update packages built from main commit $GITHUB_SHA." \
+              --prerelease
+          fi
+          gh release upload latest-main \
+            release-assets/macos/Lattice-macOS.zip \
+            release-assets/windows/Lattice-Windows-win-x64.zip \
+            --repo "$GITHUB_REPOSITORY" \
+            --clobber
+          gh release upload latest-main \
+            release-assets/update-manifest.json \
+            --repo "$GITHUB_REPOSITORY" \
+            --clobber
+          gh api \
+            --method PATCH \
+            "repos/$GITHUB_REPOSITORY/git/refs/tags/latest-main" \
+            -f sha="$GITHUB_SHA" \
+            -F force=true
+          gh release edit latest-main \
+            --repo "$GITHUB_REPOSITORY" \
+            --title "Latest main · ${GITHUB_SHA:0:12}" \
+            --notes "Verified Lattice automatic-update packages built from main commit $GITHUB_SHA." \
+            --prerelease

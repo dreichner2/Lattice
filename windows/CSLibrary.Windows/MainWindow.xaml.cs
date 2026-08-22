@@ -18,10 +18,13 @@ public partial class MainWindow : Window
     private static readonly string SavedLibraryPath = Path.Combine(SettingsRoot, "library-root.txt");
 
     private readonly CancellationTokenSource _lifetime = new();
+    private readonly UpdateService _updateService = new();
     private Process? _serverProcess;
     private string? _serverUrl;
     private string? _libraryRoot;
     private bool _webViewConfigured;
+    private bool _installingUpdate;
+    private DesktopUpdateCheck? _updateCheck;
 
     public MainWindow()
     {
@@ -37,6 +40,7 @@ public partial class MainWindow : Window
             return;
         }
         await OpenLibraryAsync(root);
+        await CheckForUpdatesAsync(presentResult: false);
     }
 
     private static bool IsLibrary(string? path)
@@ -470,6 +474,132 @@ public partial class MainWindow : Window
         var root = ChooseLibrary();
         if (root is not null) await OpenLibraryAsync(root);
     }
+
+    private async void UpdateButton_Click(object sender, RoutedEventArgs e)
+    {
+        if (_installingUpdate) return;
+        if (_updateCheck?.State == DesktopUpdateState.Available)
+            await ConfirmAndInstallUpdateAsync(_updateCheck);
+        else
+            await CheckForUpdatesAsync(presentResult: true);
+    }
+
+    private async Task CheckForUpdatesAsync(bool presentResult)
+    {
+        if (_installingUpdate) return;
+        UpdateButton.Content = "Checking for updates…";
+        UpdateButton.IsEnabled = false;
+        try
+        {
+            _updateCheck = await _updateService.CheckAsync(_lifetime.Token);
+            switch (_updateCheck.State)
+            {
+                case DesktopUpdateState.Current:
+                    UpdateButton.Content = "Up to date";
+                    UpdateButton.IsEnabled = true;
+                    if (presentResult)
+                    {
+                        MessageBox.Show(
+                            this,
+                            $"This app was built from the latest main commit, {ShortCommit(_updateCheck.LatestCommit)}.",
+                            "Lattice is up to date",
+                            MessageBoxButton.OK,
+                            MessageBoxImage.Information);
+                    }
+                    break;
+                case DesktopUpdateState.Available:
+                    UpdateButton.Content = "Update available";
+                    UpdateButton.IsEnabled = true;
+                    if (presentResult) await ConfirmAndInstallUpdateAsync(_updateCheck);
+                    break;
+                case DesktopUpdateState.Preparing:
+                    UpdateButton.Content = "Update preparing…";
+                    UpdateButton.IsEnabled = true;
+                    if (presentResult)
+                    {
+                        MessageBox.Show(
+                            this,
+                            $"GitHub main is at {ShortCommit(_updateCheck.LatestCommit)}, but its verified macOS and Windows packages are not both published yet. Try again after the build finishes.",
+                            "The latest update is still being prepared",
+                            MessageBoxButton.OK,
+                            MessageBoxImage.Information);
+                    }
+                    break;
+            }
+        }
+        catch (OperationCanceledException) when (_lifetime.IsCancellationRequested)
+        {
+            // The window is closing.
+        }
+        catch (Exception error)
+        {
+            _updateCheck = null;
+            UpdateButton.Content = "Updates offline";
+            UpdateButton.IsEnabled = true;
+            if (presentResult)
+            {
+                MessageBox.Show(
+                    this,
+                    error.Message,
+                    "Lattice could not check for updates",
+                    MessageBoxButton.OK,
+                    MessageBoxImage.Warning);
+            }
+        }
+    }
+
+    private async Task ConfirmAndInstallUpdateAsync(DesktopUpdateCheck update)
+    {
+        if (_installingUpdate || update.State != DesktopUpdateState.Available) return;
+        var answer = MessageBox.Show(
+            this,
+            $"Installed: {ShortCommit(update.InstalledCommit)}\n"
+                + $"Latest main: {ShortCommit(update.LatestCommit)}\n\n"
+                + "Lattice will verify the download, replace only packaged application files, and reopen. "
+                + "Books, papers, lectures, Syncthing content, and reading data are not changed.",
+            "Install Lattice update?",
+            MessageBoxButton.YesNo,
+            MessageBoxImage.Question,
+            MessageBoxResult.Yes);
+        if (answer != MessageBoxResult.Yes) return;
+
+        _installingUpdate = true;
+        UpdateButton.IsEnabled = false;
+        UpdateButton.Content = "Downloading update…";
+        var progress = new Progress<int>(percentage =>
+        {
+            UpdateButton.Content = $"Downloading update… {percentage}%";
+        });
+        try
+        {
+            var stagingPath = await _updateService.DownloadAndStageAsync(
+                update,
+                progress,
+                _lifetime.Token);
+            UpdateButton.Content = "Installing update…";
+            _updateService.LaunchInstaller(stagingPath, update.LatestCommit);
+            Application.Current.Shutdown();
+        }
+        catch (OperationCanceledException) when (_lifetime.IsCancellationRequested)
+        {
+            // The app is already closing.
+        }
+        catch (Exception error)
+        {
+            _installingUpdate = false;
+            UpdateButton.Content = "Update failed";
+            UpdateButton.IsEnabled = true;
+            MessageBox.Show(
+                this,
+                $"Nothing was installed.\n\n{error.Message}",
+                "Lattice update failed",
+                MessageBoxButton.OK,
+                MessageBoxImage.Warning);
+        }
+    }
+
+    private static string ShortCommit(string commit) =>
+        commit == "development" ? "development build" : commit[..Math.Min(12, commit.Length)];
 
     private void Window_Closing(object? sender, CancelEventArgs e)
     {

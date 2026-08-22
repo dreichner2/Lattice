@@ -1,30 +1,8 @@
 name: Lattice Windows desktop app
 
 on:
+  workflow_call:
   pull_request:
-    paths:
-      - "windows/**"
-      - "native/*.js"
-      - "scripts/**"
-      - "tests/**"
-      - "ui/**"
-      - "assets/**"
-      - "manifests/**"
-      - "metadata/**"
-      - ".stignore"
-      - "CATALOG.md"
-      - "LIBRARY_RULES.md"
-      - "README.md"
-      - "STUDY_GUIDE.md"
-      - "library-layout.json"
-      - "library-taxonomy.json"
-      - "books/**"
-      - "papers/**"
-      - "lectures/**"
-      - ".github/workflows/windows-app.yml"
-  push:
-    branches:
-      - main
     paths:
       - "windows/**"
       - "native/*.js"
@@ -74,6 +52,8 @@ jobs:
           dotnet-version: "8.0.x"
 
       - name: Build and test portable app
+        env:
+          LATTICE_BUILD_COMMIT: ${{ github.sha }}
         shell: pwsh
         run: ./windows/build-windows.ps1 -Runtime win-x64
 
@@ -95,6 +75,16 @@ jobs:
           foreach ($file in @("index.html", "app.js", "styles.css", "video-styles.css", "videos.js")) {
             if (-not (Test-Path (Join-Path "windows/build/package-win-x64/ui" $file))) {
               throw "Bundled interface file missing: $file"
+            }
+          }
+          if (-not (Test-Path "windows/build/package-win-x64/update-build.json")) { throw "Build revision metadata missing" }
+          if (-not (Test-Path "windows/build/package-win-x64/update-files.json")) { throw "Updater-owned file metadata missing" }
+          $buildInfo = Get-Content "windows/build/package-win-x64/update-build.json" -Raw | ConvertFrom-Json
+          if ($buildInfo.commit -ne $env:GITHUB_SHA) { throw "Packaged commit does not match the workflow commit" }
+          $owned = Get-Content "windows/build/package-win-x64/update-files.json" -Raw | ConvertFrom-Json
+          foreach ($privateRoot in @("books/", "papers/", "lectures/")) {
+            if (@($owned.files | Where-Object { $_.StartsWith($privateRoot, [StringComparison]::OrdinalIgnoreCase) }).Count -ne 0) {
+              throw "Private payload path is updater-owned: $privateRoot"
             }
           }
           $layout = Get-Content "library-layout.json" -Raw | ConvertFrom-Json
@@ -206,7 +196,6 @@ jobs:
         uses: actions/upload-artifact@v4
         with:
           name: Lattice-Windows-win-x64
-          path: windows/build/package-win-x64
-          include-hidden-files: true
+          path: artifacts/Lattice-Windows-win-x64.zip
           if-no-files-found: error
           retention-days: 14

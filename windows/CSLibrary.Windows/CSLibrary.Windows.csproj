@@ -13,7 +13,11 @@
     <Title>Lattice</Title>
     <Description>A shared knowledge library</Description>
     <Company>Lattice</Company>
+    <SourceRevisionId Condition="'$(SourceRevisionId)' == ''">development</SourceRevisionId>
   </PropertyGroup>
+  <ItemGroup>
+    <AssemblyMetadata Include="LatticeCommit" Value="$(SourceRevisionId)" />
+  </ItemGroup>
   <ItemGroup>
     <PackageReference Include="Microsoft.Web.WebView2" Version="1.0.4129.50" />
   </ItemGroup>

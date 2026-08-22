@@ -23,6 +23,21 @@ from Explorer. If the Codex CLI is installed and signed in for the current
 Windows account, Lattice asks `gpt-5.6-luna` to suggest editable metadata;
 file import still completes with local fallback details when Codex is unavailable.
 
+## Automatic updates
+
+The top-right status button compares the packaged commit with GitHub `main`.
+When a verified `latest-main` package is ready, press **Update available**, then
+confirm **Install**. The app downloads and verifies the Windows ZIP, exits, and
+uses a copied helper executable to replace its application-owned files before
+relaunching.
+
+The transaction backs up every file it may replace and restores them if any
+copy, validation, or relaunch step fails. Its owned-file manifest explicitly
+excludes `books/`, `papers/`, and `lectures/`; the updater also leaves the
+selected Git checkout, `%LOCALAPPDATA%\CS Library` reader state, and Syncthing
+content untouched. Install under the default per-user location so the updater
+has write access without administrator privileges.
+
 ## Source build
 
 From a PowerShell terminal in the repository root:

@@ -33,6 +33,11 @@ function Assert-NativeSuccess([string]$Action) {
     throw "$Action failed with exit code $LASTEXITCODE"
   }
 }
+$BuildCommit = $env:LATTICE_BUILD_COMMIT
+if ([string]::IsNullOrWhiteSpace($BuildCommit)) {
+  $BuildCommit = (& git -C $RepoRoot rev-parse HEAD 2>$null)
+}
+if ($BuildCommit -notmatch "^[0-9a-f]{40}$") { $BuildCommit = "development" }
 
 if (-not (Test-Path $LayoutPath)) { throw "library-layout.json is missing" }
 if (-not (Test-Path $IconGenerator)) { throw "Lattice icon generator is missing" }
@@ -110,7 +115,8 @@ try {
     -p:PublishSingleFile=true `
     -p:IncludeNativeLibrariesForSelfExtract=true `
     -p:DebugType=None `
-    -p:DebugSymbols=false
+    -p:DebugSymbols=false `
+    "-p:SourceRevisionId=$BuildCommit"
   Assert-NativeSuccess "Windows desktop application build"
 
   New-Item (Join-Path $PublishRoot "Server") -ItemType Directory -Force | Out-Null
@@ -149,6 +155,38 @@ try {
   Copy-Item (Join-Path $ScriptRoot "install.ps1") (Join-Path $PackageRoot "Install Lattice.ps1") -Force
   Copy-Item $IconPath (Join-Path $PackageRoot "Lattice.ico") -Force
 
+  $BuildInfo = [ordered]@{
+    schemaVersion = 1
+    repository = "dreichner2/cs-library"
+    channel = "main"
+    commit = $BuildCommit
+  }
+  $Utf8NoBom = [System.Text.UTF8Encoding]::new($false)
+  [IO.File]::WriteAllText(
+    (Join-Path $PackageRoot "update-build.json"),
+    (($BuildInfo | ConvertTo-Json -Depth 3) + [Environment]::NewLine),
+    $Utf8NoBom)
+
+  $MutableRoots = @($Layout.content_directories | ForEach-Object {
+    (([string]$_) -split "[/\\]")[0]
+  } | Sort-Object -Unique)
+  $OwnedFiles = @(Get-ChildItem $PackageRoot -Recurse -File -Force | ForEach-Object {
+    [IO.Path]::GetRelativePath($PackageRoot, $_.FullName).Replace("\", "/")
+  } | Where-Object {
+    $TopLevel = ($_ -split "/")[0]
+    $TopLevel -notin $MutableRoots -and $_ -ne "update-files.json"
+  })
+  $OwnedFiles += "update-files.json"
+  $OwnedFiles = @($OwnedFiles | Sort-Object -Unique)
+  $OwnedManifest = [ordered]@{
+    schemaVersion = 1
+    files = $OwnedFiles
+  }
+  [IO.File]::WriteAllText(
+    (Join-Path $PackageRoot "update-files.json"),
+    (($OwnedManifest | ConvertTo-Json -Depth 4) + [Environment]::NewLine),
+    $Utf8NoBom)
+
   New-Item $ArtifactsRoot -ItemType Directory -Force | Out-Null
   $Archive = Join-Path $ArtifactsRoot "Lattice-Windows-$Runtime.zip"
   Remove-Item $Archive -Force -ErrorAction SilentlyContinue
@@ -167,6 +205,8 @@ try {
   foreach ($file in $RequiredNativeFiles) {
     if (-not (Test-Path (Join-Path $PackageRoot "native\$file"))) { throw "Native file is missing: native/$file" }
   }
+  if (-not (Test-Path (Join-Path $PackageRoot "update-build.json"))) { throw "Build revision metadata was not bundled" }
+  if (-not (Test-Path (Join-Path $PackageRoot "update-files.json"))) { throw "Updater-owned file metadata was not bundled" }
   foreach ($directory in @($Layout.content_directories)) {
     $packageDirectory = Join-Path $PackageRoot ([string]$directory)
     if (-not (Test-Path (Join-Path $packageDirectory ".gitkeep"))) {
@@ -194,6 +234,8 @@ try {
     foreach ($entry in @("Lattice.exe", "Lattice.ico", "Server/LatticeServer.exe", "Install Lattice.ps1")) {
       if ($EntryNames -notcontains $entry) { throw "Runtime file is missing from the archive: $entry" }
     }
+    if ($EntryNames -notcontains "update-build.json") { throw "Build revision metadata is missing from the archive" }
+    if ($EntryNames -notcontains "update-files.json") { throw "Updater-owned file metadata is missing from the archive" }
     foreach ($directory in @($Layout.content_directories)) {
       $entry = (([string]$directory).TrimEnd("/") + "/.gitkeep")
       if ($EntryNames -notcontains $entry) { throw "Scaffold is missing from the archive: $entry" }
@@ -201,7 +243,7 @@ try {
   } finally {
     $Zip.Dispose()
   }
-  Write-Host "Built $Archive"
+  Write-Host "Built $Archive at $BuildCommit"
 } finally {
   Pop-Location
 }

@@ -27,11 +27,14 @@ required_sources=(
   LibraryIdentity.swift
   ReaderStore.swift
   ReaderBridge.swift
+  UpdateManifest.swift
+  AppUpdater.swift
   CSLibraryApp.swift
   ImmersiveReaderCoordinator.swift
   NativePDFReaderController.swift
   NativePDFReaderUI.swift
   NativePDFReaderState.swift
+  UpdateInstaller.swift
 )
 for source in $required_sources; do
   if [[ ! -f "$native_root/$source" ]]; then
@@ -53,25 +56,83 @@ done
 /bin/cp "$native_root/ImmersiveEPUB.js" "$staged_app/Contents/Resources/ImmersiveEPUB.js"
 /bin/cp "$native_root/LibraryWorkspace.js" "$staged_app/Contents/Resources/LibraryWorkspace.js"
 
-target_arch=$(/usr/bin/uname -m)
-/usr/bin/swiftc \
-  -O \
-  -target "${target_arch}-apple-macosx13.0" \
-  -framework AppKit \
-  -framework CryptoKit \
-  -framework PDFKit \
-  -framework WebKit \
-  -lsqlite3 \
-  "$native_root/ReaderModels.swift" \
-  "$native_root/LibraryIdentity.swift" \
-  "$native_root/ReaderStore.swift" \
-  "$native_root/ReaderBridge.swift" \
-  "$native_root/CSLibraryApp.swift" \
-  "$native_root/ImmersiveReaderCoordinator.swift" \
-  "$native_root/NativePDFReaderController.swift" \
-  "$native_root/NativePDFReaderUI.swift" \
-  "$native_root/NativePDFReaderState.swift" \
-  -o "$staged_app/Contents/MacOS/Lattice"
+build_commit=${LATTICE_BUILD_COMMIT:-}
+if [[ -z "$build_commit" ]]; then
+  build_commit=$(/usr/bin/git -C "$library_root" rev-parse HEAD 2>/dev/null || true)
+fi
+if [[ ${#build_commit} -ne 40 || "$build_commit" == *[^0-9a-f]* ]]; then
+  build_commit=development
+fi
+
+set_plist_string() {
+  local key=$1
+  local value=$2
+  /usr/libexec/PlistBuddy -c "Set :$key $value" "$staged_app/Contents/Info.plist" >/dev/null 2>&1 \
+    || /usr/libexec/PlistBuddy -c "Add :$key string $value" "$staged_app/Contents/Info.plist"
+}
+set_plist_string LatticeCommit "$build_commit"
+set_plist_string LatticeUpdateChannel main
+set_plist_string LatticeUpdateManifestURL \
+  "https://github.com/dreichner2/cs-library/releases/download/latest-main/update-manifest.json"
+
+if [[ -n "${LATTICE_BUILD_ARCHS:-}" ]]; then
+  build_arches=(${=LATTICE_BUILD_ARCHS})
+else
+  build_arches=($(/usr/bin/uname -m))
+fi
+if (( ${#build_arches} == 0 )); then
+  print -u2 "No macOS build architectures were requested"
+  exit 1
+fi
+
+main_binaries=()
+installer_binaries=()
+for target_arch in $build_arches; do
+  if [[ "$target_arch" != arm64 && "$target_arch" != x86_64 ]]; then
+    print -u2 "Unsupported macOS architecture: $target_arch"
+    exit 1
+  fi
+  main_binary="$build_root/Lattice-$target_arch"
+  installer_binary="$build_root/LatticeUpdateInstaller-$target_arch"
+  /usr/bin/swiftc \
+    -O \
+    -target "${target_arch}-apple-macosx13.0" \
+    -framework AppKit \
+    -framework CryptoKit \
+    -framework PDFKit \
+    -framework WebKit \
+    -lsqlite3 \
+    "$native_root/ReaderModels.swift" \
+    "$native_root/LibraryIdentity.swift" \
+    "$native_root/ReaderStore.swift" \
+    "$native_root/ReaderBridge.swift" \
+    "$native_root/UpdateManifest.swift" \
+    "$native_root/AppUpdater.swift" \
+    "$native_root/CSLibraryApp.swift" \
+    "$native_root/ImmersiveReaderCoordinator.swift" \
+    "$native_root/NativePDFReaderController.swift" \
+    "$native_root/NativePDFReaderUI.swift" \
+    "$native_root/NativePDFReaderState.swift" \
+    -o "$main_binary"
+  /usr/bin/swiftc \
+    -O \
+    -target "${target_arch}-apple-macosx13.0" \
+    -framework AppKit \
+    "$native_root/UpdateManifest.swift" \
+    "$native_root/UpdateInstaller.swift" \
+    -o "$installer_binary"
+  main_binaries+=("$main_binary")
+  installer_binaries+=("$installer_binary")
+done
+
+if (( ${#main_binaries} == 1 )); then
+  /bin/cp "${main_binaries[1]}" "$staged_app/Contents/MacOS/Lattice"
+  /bin/cp "${installer_binaries[1]}" "$staged_app/Contents/Resources/LatticeUpdateInstaller"
+else
+  /usr/bin/lipo -create $main_binaries -output "$staged_app/Contents/MacOS/Lattice"
+  /usr/bin/lipo -create $installer_binaries -output "$staged_app/Contents/Resources/LatticeUpdateInstaller"
+fi
+/bin/chmod 755 "$staged_app/Contents/MacOS/Lattice" "$staged_app/Contents/Resources/LatticeUpdateInstaller"
 
 iconset="$build_root/AppIcon.iconset"
 base_icon="$build_root/AppIcon.png"
@@ -104,7 +165,8 @@ for bundled in \
   "$staged_app/Contents/Resources/ui/app.js" \
   "$staged_app/Contents/Resources/server/library_ui.py" \
   "$staged_app/Contents/Resources/ImmersiveEPUB.js" \
-  "$staged_app/Contents/Resources/LibraryWorkspace.js"; do
+  "$staged_app/Contents/Resources/LibraryWorkspace.js" \
+  "$staged_app/Contents/Resources/LatticeUpdateInstaller"; do
   [[ -f "$bundled" ]] || { print -u2 "Staged app is incomplete: $bundled"; exit 1; }
 done
 
@@ -118,4 +180,4 @@ if ! /bin/mv "$staged_app" "$app_path"; then
 fi
 /bin/rm -rf "$previous_app"
 /usr/bin/touch "$app_path"
-print "Built and verified $app_path"
+print "Built and verified $app_path at $build_commit for ${build_arches[*]}"
