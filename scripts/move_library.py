@@ -611,7 +611,10 @@ def _validate_syncthing_status(status: dict[str, Any], allow_paused: bool) -> bo
     state = status.get("state")
     allowed_states = {"idle"}
     if allow_paused:
-        allowed_states.add("paused")
+        # Syncthing v2 may expose either ``paused`` or an empty database-model
+        # state after the folder configuration has independently confirmed its
+        # paused flag. Callers pass allow_paused only after that confirmation.
+        allowed_states.update(("paused", ""))
     return (
         state in allowed_states
         and status.get("needTotalItems", 0) == 0
@@ -634,7 +637,15 @@ def _wait_for_syncthing(
         last_status = client.status(folder_id)
         if (
             _validate_syncthing_status(last_status, allow_paused)
-            and (required_state is None or last_status.get("state") == required_state)
+            and (
+                required_state is None
+                or last_status.get("state") == required_state
+                or (
+                    required_state == "paused"
+                    and allow_paused
+                    and last_status.get("state") == ""
+                )
+            )
         ):
             return
         time.sleep(0.4)

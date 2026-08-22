@@ -55,6 +55,7 @@ class FakeSyncthingState:
         }
         self.scans = 0
         self.shutdowns = 0
+        self.paused_status_state = "paused"
         self.fail_after_redirect = False
         self.fail_pause_response_once = False
         self.fail_redirect_response_once = False
@@ -110,7 +111,11 @@ class FakeSyncthingHandler(BaseHTTPRequestHandler):
             blocked = redirected and self.server.state.fail_after_redirect
             self._json(
                 {
-                    "state": "paused" if self.server.state.folder["paused"] else "idle",
+                    "state": (
+                        self.server.state.paused_status_state
+                        if self.server.state.folder["paused"]
+                        else "idle"
+                    ),
                     "needTotalItems": 1 if blocked else 0,
                     "pullErrors": 0,
                     "invalid": "",
@@ -264,6 +269,26 @@ class MoveLibraryTests(unittest.TestCase):
                     sync_timeout=1,
                 )
                 self.assertFalse(reconnected.resumed_by_lattice)
+                self.assertTrue(fixture.state.folder["paused"])
+
+    def test_disconnect_accepts_syncthing_v2_empty_state_after_confirmed_pause(self) -> None:
+        with tempfile.TemporaryDirectory() as temporary:
+            base = Path(temporary)
+            source = base / "external" / "Lattice"
+            state_file = base / "local-state" / "external-drive.json"
+            config = base / "syncthing" / "config.xml"
+            source.parent.mkdir()
+            make_library(source, synced=True)
+            with running_syncthing(source) as fixture:
+                fixture.state.paused_status_state = ""
+                write_syncthing_config(config, fixture.port, source)
+                disconnected = move_library.prepare_library_disconnect(
+                    source,
+                    state_file,
+                    syncthing_config=config,
+                    sync_timeout=1,
+                )
+                self.assertTrue(disconnected.paused_by_lattice)
                 self.assertTrue(fixture.state.folder["paused"])
 
     def test_windows_disconnect_stops_the_dedicated_syncthing_process(self) -> None:

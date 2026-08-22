@@ -10,6 +10,8 @@
   folder alone did not reliably release Syncthing's Windows volume handle.
 - **Reconnect library sync** continues to restart that same dedicated instance
   and resumes only a pause that Lattice created.
+- Disconnect recognizes Syncthing v2's empty database-model state for a folder
+  whose configuration has separately confirmed that it is paused.
 
 ## 2.2.4 — 2026-08-22
 
