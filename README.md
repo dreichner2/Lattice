@@ -3,8 +3,8 @@
 </p>
 
 <p align="center">
-  <strong>47 works</strong> · <strong>72 verified artifacts</strong> ·
-  <strong>0 exact duplicates</strong> · <strong>9 subject shelves</strong>
+  <strong>93 works</strong> · <strong>122 verified artifacts</strong> ·
+  <strong>0 exact duplicates</strong> · <strong>12 subject shelves</strong>
 </p>
 
 <p align="center">
@@ -52,8 +52,14 @@ You can also launch it from Terminal:
 The interface provides:
 
 - instant search across titles, authors, subjects, formats, and filenames;
-- first-class views for 39 books, 20 lecture PDFs, seven course volumes, two
+- first-class views for 58 books, 20 lecture PDFs, seven course volumes, 33
   papers, two specifications, and two professional/technical standards;
+- a dedicated **Video lectures** hall with 58 complete course tracks and 1,452
+  unique, searchable lectures, filterable by source such as MIT, Harvard, and
+  Carnegie Mellon;
+- in-app, privacy-enhanced video playback with a searchable lecture queue,
+  previous/next controls, exact-source fallbacks, and course progress stored
+  only on this Mac;
 - subject shelves plus favorites, currently-reading, and finished views;
 - a responsive grid/list layout and light/dark themes;
 - an in-app EPUB reader with chapter navigation, searchable contents, bookmarks,
@@ -68,6 +74,12 @@ The interface provides:
 - expandable access to all 20 MIT 6.006 lectures and all seven readable
   Software Foundations volumes;
 - reading status and recent activity stored only in the local interface.
+
+Video media is streamed from its official publisher when you press play. The
+repository stores only source metadata and video IDs—not copied video, audio,
+captions, thumbnails, or tracking cookies. See the
+[video-catalog provenance note](notes/provenance/free-video-lectures-2026-08-21.md)
+for the inclusion rules, source list, licensing boundary, and refresh command.
 
 The server binds only to `127.0.0.1`. It has no upload feature, does not expose
 a network-facing listener, and only permits file actions for readable files
@@ -102,6 +114,9 @@ sequence with projects and exit criteria.
 | Languages & formal methods | 7 | Crafting Interpreters |
 | Computer graphics & vision | 2 | PBRT 4e or Szeliski |
 | Ethics & professional practice | 1 | ACM Code of Ethics |
+| Open textbooks & reference | 10 | Algorithms by Jeff Erickson |
+| Research papers | 26 | Attention Is All You Need or Paxos Made Simple |
+| New arrivals | 10 | Dive into Deep Learning |
 
 ## Everyday commands
 

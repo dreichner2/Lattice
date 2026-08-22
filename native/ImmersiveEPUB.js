@@ -50,28 +50,8 @@
 
   document.documentElement.classList.add("cs-native-reader");
   window.csLibraryFocusEpubSearch = () => focusContentsSearch(document);
-  style("cs-native-reader-ui", `
-    html.cs-native-reader .reader-shell.is-epub .reader-panel{inset:0!important;border:0!important;border-radius:0!important;background:#111318!important}
-    html.cs-native-reader .reader-shell.is-epub .reader-toolbar{min-height:56px!important;background:color-mix(in srgb,var(--panel-solid) 86%,transparent)!important;box-shadow:0 8px 30px rgba(0,0,0,.08)!important}
-    html.cs-native-reader .reader-shell.is-epub .epub-frame-wrap{padding:clamp(12px,2.3vh,28px) clamp(18px,3vw,50px) 8px!important}
-    html.cs-native-reader .reader-shell.is-epub .epub-frame{border-radius:10px!important;box-shadow:0 28px 80px rgba(23,25,31,.22),0 4px 12px rgba(23,25,31,.1)!important}
-    html.cs-native-reader .reader-shell.is-epub .epub-footer{min-height:64px!important;padding-bottom:10px!important}
-    html.cs-native-reader .reader-shell.is-focused .epub-frame-wrap{padding:8px!important}
-    html.cs-native-reader .reader-shell.is-focused .epub-frame{border:0!important;border-radius:0!important;box-shadow:none!important}
-    #nativeReadingSession{display:inline-flex;min-height:30px;align-items:center;gap:6px;padding:0 10px;border:1px solid var(--line);border-radius:999px;background:var(--panel);color:var(--muted);font-size:8px;font-weight:760;white-space:nowrap}
-    #nativeReadingSession:before{content:"";width:5px;height:5px;border-radius:50%;background:var(--success);box-shadow:0 0 0 3px color-mix(in srgb,var(--success) 13%,transparent)}
-    #nativeReaderNotesButton{font-size:14px!important}#nativeReaderNotesButton.has-selection{border-color:color-mix(in srgb,var(--accent) 46%,var(--line))!important;background:var(--accent-soft)!important;color:var(--accent-ink)!important}
-    .native-notes{position:absolute;z-index:42;inset:0 0 0 auto;display:flex;width:min(390px,90vw);flex-direction:column;overflow:hidden;border-left:1px solid var(--line);background:color-mix(in srgb,var(--panel-solid) 96%,transparent);color:var(--ink);box-shadow:-24px 0 70px rgba(0,0,0,.22);backdrop-filter:blur(24px);transform:translateX(103%);transition:transform .25s cubic-bezier(.2,.75,.25,1)}
-    .native-notes.is-open{transform:translateX(0)}.native-notes header{display:flex;min-height:68px;align-items:center;justify-content:space-between;padding:12px 16px;border-bottom:1px solid var(--line)}
-    .native-notes header span,.native-notes header strong{display:block}.native-notes header span{color:var(--faint);font-size:7px;font-weight:840;letter-spacing:.13em;text-transform:uppercase}.native-notes header strong{margin-top:3px;font-family:Georgia,serif;font-size:18px}
-    .native-notes-close,.native-note-delete{display:grid;place-items:center;border:1px solid var(--line);border-radius:9px;background:var(--panel);color:var(--ink);cursor:pointer}.native-notes-close{width:32px;height:32px;font-size:18px}
-    .native-note-compose{display:grid;gap:9px;padding:14px;border-bottom:1px solid var(--line)}.native-note-quote{display:none;max-height:92px;overflow:auto;padding:10px 11px;border-left:3px solid var(--accent);border-radius:0 9px 9px 0;background:var(--accent-soft);color:var(--accent-ink);font:11px/1.5 Georgia,serif}.native-note-quote.has-selection{display:block}
-    .native-note-input{min-height:88px;resize:vertical;padding:10px 11px;border:1px solid var(--line);border-radius:10px;outline:0;background:var(--panel);color:var(--ink);font:11px/1.5 -apple-system,BlinkMacSystemFont,sans-serif}.native-note-input:focus{border-color:color-mix(in srgb,var(--accent) 48%,var(--line))}
-    .native-note-save{min-height:36px;border:1px solid var(--accent-deep);border-radius:9px;background:var(--accent-deep);color:#fff;cursor:pointer;font-size:9px;font-weight:760}.native-note-list{min-height:0;overflow-y:auto;padding:12px}.native-note-empty{padding:36px 15px;color:var(--muted);font-size:10px;line-height:1.55;text-align:center}
-    .native-note-card{display:grid;grid-template-columns:minmax(0,1fr) auto;gap:8px;padding:11px;border:1px solid var(--line);border-radius:11px;background:var(--panel)}.native-note-card+.native-note-card{margin-top:8px}.native-note-card blockquote{margin:0 0 7px;color:var(--muted);font:10px/1.45 Georgia,serif}.native-note-card p{margin:0;font-size:10px;line-height:1.5}.native-note-card small{display:block;margin-top:8px;color:var(--faint);font-size:7px}.native-note-delete{width:27px;height:27px;font-size:14px}
-    .native-reader-shortcuts{position:absolute;z-index:12;right:18px;bottom:72px;padding:7px 10px;border:1px solid rgba(255,255,255,.1);border-radius:999px;background:rgba(17,19,24,.62);color:rgba(255,255,255,.72);font-size:7px;font-weight:720;pointer-events:none;backdrop-filter:blur(12px)}
-    .reader-shell.is-focused .native-reader-shortcuts,.reader-shell.is-focused #nativeReadingSession,.reader-shell.is-focused #nativeReaderNotesButton{opacity:0!important;pointer-events:none!important}@media(max-width:760px){#nativeReadingSession,.native-reader-shortcuts{display:none!important}}
-  `);
+  // Native-reader chrome is declared in ui/styles.css. The main page CSP only
+  // permits same-origin stylesheets, so an injected inline <style> is blocked.
 
   const key = "cs-library:native-reader-notes";
   let started = 0;

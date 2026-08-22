@@ -58,6 +58,8 @@ const state = {
   epubSettings: { ...DEFAULT_EPUB_SETTINGS, ...readStorage(STORAGE.epubSettings, {}) },
   epubProgress: readStorage(STORAGE.epubProgress, {}) || {},
   epubBookmarks: readStorage(STORAGE.epubBookmarks, {}) || {},
+  videoCatalog: null,
+  videoLibrary: null,
 };
 
 const elements = {
@@ -74,11 +76,18 @@ const elements = {
   favoriteCount: $("#favoriteCount"),
   finishedCount: $("#finishedCount"),
   focusSearch: $("#focusSearchButton"),
+  heroDescription: $("#heroDescription"),
+  heroEyebrow: $("#heroEyebrow"),
+  heroTrust: $("#heroTrust"),
   grid: $("#libraryGrid"),
   integrityStat: $("#integrityStat"),
+  integrityStatLabel: $("#integrityStatLabel"),
+  integrityStatNote: $("#integrityStatNote"),
+  librarySection: $("#librarySection"),
   menuButton: $("#menuButton"),
   materialNav: $("#materialNav"),
   mobileScrim: $("#mobileScrim"),
+  pageTitle: $("#pageTitle"),
   random: $("#randomButton"),
   readerBack: $("#readerBackButton"),
   readerBackdrop: $("#readerBackdrop"),
@@ -107,6 +116,8 @@ const elements = {
   sidebarStatusDot: $("#sidebarStatusDot"),
   sidebarStatusText: $("#sidebarStatusText"),
   sizeStat: $("#sizeStat"),
+  sizeStatLabel: $("#sizeStatLabel"),
+  sizeStatNote: $("#sizeStatNote"),
   sort: $("#sortSelect"),
   subjectChips: $("#subjectChips"),
   theme: $("#themeButton"),
@@ -115,6 +126,10 @@ const elements = {
   toastRegion: $("#toastRegion"),
   viewButton: $("#viewButton"),
   workStat: $("#workStat"),
+  workStatLabel: $("#workStatLabel"),
+  workStatNote: $("#workStatNote"),
+  artifactStatLabel: $("#artifactStatLabel"),
+  artifactStatNote: $("#artifactStatNote"),
   epubBookmarkList: $("#epubBookmarkList"),
   epubBookmarks: $("#epubBookmarks"),
   epubChapterLabel: $("#epubChapterLabel"),
@@ -189,6 +204,13 @@ function humanBytes(value) {
     unit += 1;
   } while (size >= 1024 && unit < units.length - 1);
   return `${size >= 100 ? size.toFixed(0) : size.toFixed(1)} ${units[unit]}`;
+}
+
+function humanDate(value) {
+  const date = new Date(`${value}T12:00:00`);
+  return Number.isNaN(date.valueOf())
+    ? String(value || "—")
+    : new Intl.DateTimeFormat(undefined, { month: "short", day: "numeric" }).format(date);
 }
 
 function monogram(title) {
@@ -1465,12 +1487,92 @@ function renderNavigationCounts() {
   elements.finishedCount.textContent = state.library.works.filter((work) => workStatus(work.id) === "finished").length;
 }
 
+function replaceHeroEyebrow(text) {
+  const dot = node("span");
+  dot.setAttribute("aria-hidden", "true");
+  elements.heroEyebrow.replaceChildren(dot, document.createTextNode(` ${text}`));
+}
+
+function replaceHeroTrust(items) {
+  elements.heroTrust.replaceChildren(...items.map((label) => {
+    const item = node("span");
+    const dot = node("i");
+    dot.setAttribute("aria-hidden", "true");
+    item.append(dot, document.createTextNode(` ${label}`));
+    return item;
+  }));
+}
+
+function renderHero() {
+  const isVideos = state.view === "videos";
+  if (isVideos) {
+    const catalog = state.videoCatalog;
+    replaceHeroEyebrow("Free · source-traceable · in-app playback");
+    elements.pageTitle.textContent = "Your computer science lecture hall";
+    elements.heroDescription.textContent = "A broad, searchable archive of complete university courses and individual lectures—streamed from official publishers inside one focused study workspace.";
+    elements.random.firstChild.textContent = "Choose a lecture for me ";
+    elements.focusSearch.textContent = "Search the lectures";
+    replaceHeroTrust(["Official course sources", "Privacy-enhanced embeds", "Completion stays on Mac"]);
+    elements.workStatLabel.textContent = "Courses";
+    elements.workStat.textContent = catalog ? new Intl.NumberFormat().format(catalog.stats.courses) : "—";
+    elements.workStatNote.textContent = "complete course tracks";
+    elements.artifactStatLabel.textContent = "Lectures";
+    elements.artifactStat.textContent = catalog ? new Intl.NumberFormat().format(catalog.stats.lectures) : "—";
+    elements.artifactStatNote.textContent = "searchable videos";
+    elements.sizeStatLabel.textContent = "Publishers";
+    elements.sizeStat.textContent = catalog ? (catalog.stats.sources ?? catalog.stats.institutions) : "—";
+    elements.sizeStatNote.textContent = "official sources";
+    elements.integrityStatLabel.textContent = "Verified";
+    elements.integrityStat.textContent = catalog ? humanDate(catalog.verifiedAt) : "—";
+    elements.integrityStatNote.textContent = catalog ? `${String(catalog.verifiedAt).slice(0, 4)} source check` : "public and embeddable";
+    return;
+  }
+  replaceHeroEyebrow("Private · local · searchable");
+  elements.pageTitle.textContent = "Your computer science library";
+  elements.heroDescription.textContent = "A focused workspace for books, papers, specifications, and course notes—with reading progress, native EPUB and PDF access, and live sync from this Mac.";
+  elements.random.firstChild.textContent = "Choose my next read ";
+  elements.focusSearch.textContent = "Search the shelf";
+  replaceHeroTrust(["Loopback only", "Files stay on Mac", "No account required"]);
+  elements.workStatLabel.textContent = "Collection";
+  elements.workStat.textContent = state.library?.stats.works ?? "—";
+  elements.workStatNote.textContent = "logical works";
+  elements.artifactStatLabel.textContent = "Materials";
+  elements.artifactStat.textContent = state.library?.stats.artifacts ?? "—";
+  elements.artifactStatNote.textContent = "files on Mac";
+  elements.sizeStatLabel.textContent = "Footprint";
+  elements.sizeStat.textContent = state.library ? humanBytes(state.library.stats.bytes) : "—";
+  elements.sizeStatNote.textContent = "local shelf";
+  elements.integrityStatLabel.textContent = "Integrity";
+  elements.integrityStat.textContent = state.library ? `${state.library.stats.present}/${state.library.stats.indexedArtifacts || state.library.stats.artifacts}` : "—";
+  elements.integrityStatNote.textContent = "files available";
+}
+
+function renderViewMode() {
+  const isVideos = state.view === "videos";
+  const lectureTotal = state.videoCatalog
+    ? new Intl.NumberFormat().format(state.videoCatalog.stats.lectures)
+    : "all";
+  elements.librarySection.hidden = isVideos;
+  if (isVideos) elements.recentSection.hidden = true;
+  else renderRecent();
+  elements.search.placeholder = isVideos
+    ? `Search courses, instructors, topics, or ${lectureTotal} lectures…`
+    : "Search title, author, topic, or file…";
+  state.videoLibrary?.setQuery(state.query);
+  state.videoLibrary?.setActive(isVideos);
+  if (isVideos) closeDrawer();
+  renderHero();
+}
+
 function setView(view) {
   state.view = view;
   state.subject = "all";
   syncNavigation();
-  renderSubjectChips();
-  renderCards();
+  if (view !== "videos") {
+    renderSubjectChips();
+    renderCards();
+  }
+  renderViewMode();
   closeMobileMenu();
 }
 
@@ -1480,6 +1582,7 @@ function setSubject(subjectId, preserveView = false) {
   syncNavigation();
   renderSubjectChips();
   renderCards();
+  renderViewMode();
   closeMobileMenu();
 }
 
@@ -1695,7 +1798,8 @@ function bindEvents() {
   $$("[data-document]").forEach((item) => item.addEventListener("click", () => openDocument(item.dataset.document, item.dataset.title)));
   elements.search.addEventListener("input", () => {
     state.query = elements.search.value;
-    renderCards();
+    if (state.view === "videos") state.videoLibrary?.setQuery(state.query);
+    else renderCards();
   });
   elements.sort.addEventListener("change", () => {
     state.sort = elements.sort.value;
@@ -1714,6 +1818,10 @@ function bindEvents() {
     applyTheme(theme);
   });
   elements.random.addEventListener("click", () => {
+    if (state.view === "videos") {
+      state.videoLibrary?.randomLecture();
+      return;
+    }
     const choices = isMaterialView() ? filteredMaterials() : filteredWorks();
     if (!choices.length) return;
     const choice = choices[Math.floor(Math.random() * choices.length)];
@@ -1792,11 +1900,12 @@ function bindEvents() {
   elements.mobileScrim.addEventListener("click", closeMobileMenu);
   document.addEventListener("keydown", (event) => {
     if (state.readerMode === "epub" && document.body.classList.contains("reader-open") && event.key !== "Escape") handleEpubKeydown(event);
-    if (event.key === "/" && !document.body.classList.contains("reader-open") && document.activeElement !== elements.search) {
+    if (event.key === "/" && !document.body.classList.contains("reader-open") && !state.videoLibrary?.isPlayerOpen && document.activeElement !== elements.search) {
       event.preventDefault();
       elements.search.focus();
     }
     if (event.key === "Escape") {
+      if (state.videoLibrary?.handleEscape()) return;
       if (state.readerMode === "epub" && (elements.epubReader.classList.contains("toc-open") || elements.epubReader.classList.contains("settings-open"))) closeEpubPanels();
       else if (state.readerMode === "epub" && state.epubFocused) setEpubFocus(false);
       else if (document.body.classList.contains("reader-open")) closeReader();
@@ -1804,7 +1913,10 @@ function bindEvents() {
       else closeMobileMenu();
     }
   });
-  window.addEventListener("beforeunload", () => state.eventSource?.close());
+  window.addEventListener("beforeunload", () => {
+    state.eventSource?.close();
+    state.videoLibrary?.closePlayer();
+  });
 }
 
 function initializeLibrary(payload) {
@@ -1832,6 +1944,7 @@ function initializeLibrary(payload) {
     closeReader();
     announce("The open file was removed from your local shelf", true);
   }
+  renderViewMode();
 }
 
 function describeShelfChange(change) {
@@ -1898,6 +2011,21 @@ function connectLiveUpdates() {
 
 async function start() {
   initializeTheme();
+  state.videoLibrary = window.CSVideoLibrary?.create({
+    announce,
+    onCatalog: (catalog) => {
+      state.videoCatalog = catalog;
+      if (state.view === "videos") renderViewMode();
+    },
+    onClearQuery: () => {
+      state.query = "";
+      elements.search.value = "";
+    },
+    openSources: () => openDocument(
+      "notes/provenance/free-video-lectures-2026-08-21.md",
+      "Video lecture sources",
+    ),
+  }) || null;
   bindEvents();
   setLiveStatus("waiting", "Connecting…");
   try {

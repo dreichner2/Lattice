@@ -648,3 +648,30 @@ linked here so the catalog remains the only navigation page you need.
 - Local path: `papers/byzantine-generals-toplas82.pdf`
 - Source: [official page](https://lamport.azurewebsites.net/pubs/byz.pdf)
 - License: Author-hosted copy (Lamport publications site)
+
+<!-- work: url:5de3d24deb279f5bc7669a90742876d2807200eabc9195bb6e8714b400b0532a -->
+### [Handbook of Applied Cryptography, Chapter 1](papers/chap1.pdf)
+
+- Type: paper
+- Authors: Alfred J. Menezes, Paul C. van Oorschot, Scott A. Vanstone
+- Local path: `papers/chap1.pdf`
+- Source: [official page](https://cacr.uwaterloo.ca/hac/about/chap1.pdf)
+- License: Freely available from authors' official site
+
+<!-- work: url:8ab9d339a2c2781382e6aa4c3c472a94edfcc05d10e3eedf63cbaac9530e9932 -->
+### [Reflections on Trusting Trust](papers/Thompson_1984_ReflectionsonTrustingTrust.pdf)
+
+- Type: paper
+- Authors: Ken Thompson
+- Local path: `papers/Thompson_1984_ReflectionsonTrustingTrust.pdf`
+- Source: [official page](https://www.cs.cmu.edu/~rdriley/487/papers/Thompson_1984_ReflectionsonTrustingTrust.pdf)
+- License: Freely available (author-hosted copies; CACM 1984)
+
+<!-- work: url:d9d788538f999a0320da8f115edc3d4cf8f39aacbd6d8fe0ed9fedf82b395647 -->
+### [Scaling Memcache at Facebook](papers/nsdi13-final170_update.pdf)
+
+- Type: paper
+- Authors: Nishtala et al.
+- Local path: `papers/nsdi13-final170_update.pdf`
+- Source: [official page](https://www.usenix.org/system/files/conference/nsdi13/nsdi13-final170_update.pdf)
+- License: Freely available from USENIX (NSDI '13)
