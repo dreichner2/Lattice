@@ -38,7 +38,7 @@ class WindowsOnboardingSetupTests(unittest.TestCase):
             self.entry,
         )
         self.assertIn('-LibraryRoot "%~dp0..\\.."', self.launcher)
-        self.assertRegex(self.entry, r'\$LatticeVersion\s*=\s*"v2\.2\.4"')
+        self.assertRegex(self.entry, r'\$LatticeVersion\s*=\s*"v2\.2\.5"')
         self.assertIn("-PlanOnly", self.guide)
         self.assertIn("Lattice-Windows-win-x64.zip", self.module)
         self.assertIn(".sha256", self.module)
@@ -115,6 +115,10 @@ class WindowsOnboardingSetupTests(unittest.TestCase):
         self.assertGreaterEqual(self.workflow.count("& powershell.exe @arguments"), 2)
         self.assertIn('"globalAnnounceEnabled"', self.workflow)
         self.assertIn('"crashReportingEnabled"', self.workflow)
+        self.assertIn("--shutdown-syncthing", self.workflow)
+        self.assertIn("$disconnect.syncthingStopped -ne $true", self.workflow)
+        self.assertIn("$reconnect.syncthingStarted -ne $true", self.workflow)
+        self.assertIn("The dedicated Lattice Syncthing process still exists", self.workflow)
 
     def test_no_obvious_hard_coded_secret_assignment(self) -> None:
         secret_assignment = re.compile(

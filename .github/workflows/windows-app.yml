@@ -153,7 +153,7 @@ jobs:
             $activePath = Join-Path $installDestination "active-version.json"
             if (-not (Test-Path $activePath)) { throw "Onboarding did not install Lattice." }
             $active = Get-Content $activePath -Raw | ConvertFrom-Json
-            if ($active.version -ne "2.2.4") { throw "Onboarding selected the wrong Lattice version." }
+            if ($active.version -ne "2.2.5") { throw "Onboarding selected the wrong Lattice version." }
             $startupShortcut = Join-Path $testAppData "Microsoft\Windows\Start Menu\Programs\Startup\Lattice Syncthing.lnk"
             if (-not (Test-Path $startupShortcut)) { throw "Onboarding did not create the Syncthing startup shortcut." }
             [xml]$configured = Get-Content $configPath -Raw
@@ -171,6 +171,51 @@ jobs:
               $folderDeviceIds -notcontains $localDeviceId -or
               $folderDeviceIds -notcontains "MTECQEG-YI6OB3G-LI5UG6T-VTGJGQ2-MBBUWW2-G4VVCNS-3DGDGL6-AV4JJAQ"
             ) { throw "Onboarding did not share the folder with both exact devices." }
+
+            # Exercise the packaged operation against real Syncthing on Windows:
+            # pause, shut down, prove the process exited, restart, and resume.
+            $storageHelper = Join-Path $package "Tools\LatticeStorage.exe"
+            $disconnectState = Join-Path $env:RUNNER_TEMP "lattice-drive-reconnect.json"
+            $env:PATH = $syncthing.Directory.FullName + ";" + $env:PATH
+            $disconnectMessages = @(
+              & $storageHelper `
+                --operation disconnect `
+                --source $libraryRoot `
+                --state-file $disconnectState `
+                --syncthing-config $configPath `
+                --shutdown-syncthing
+            )
+            if ($LASTEXITCODE -ne 0) { throw "Packaged drive disconnect failed." }
+            $disconnect = $disconnectMessages[-1] | ConvertFrom-Json
+            if (
+              $disconnect.operation -ne "disconnect" -or
+              $disconnect.syncthingStopped -ne $true -or
+              $disconnect.pausedByLattice -ne $true
+            ) { throw "Drive disconnect did not prove Syncthing shutdown and Lattice pause ownership." }
+            $remainingSyncthing = @(
+              Get-CimInstance Win32_Process -Filter "Name = 'syncthing.exe'" |
+                Where-Object { $_.CommandLine -like "*$syncthingHome*" }
+            )
+            if ($remainingSyncthing.Count -ne 0) {
+              throw "The dedicated Lattice Syncthing process still exists after drive disconnect."
+            }
+
+            $reconnectMessages = @(
+              & $storageHelper `
+                --operation reconnect `
+                --source $libraryRoot `
+                --state-file $disconnectState `
+                --syncthing-config $configPath `
+                --start-if-needed
+            )
+            if ($LASTEXITCODE -ne 0) { throw "Packaged library reconnect failed." }
+            $reconnect = $reconnectMessages[-1] | ConvertFrom-Json
+            if (
+              $reconnect.operation -ne "reconnect" -or
+              $reconnect.syncthingStarted -ne $true -or
+              $reconnect.resumedByLattice -ne $true -or
+              (Test-Path $disconnectState)
+            ) { throw "Reconnect did not restart Syncthing and restore Lattice's pause." }
           } finally {
             if (Test-Path (Join-Path $syncthingHome "config.xml")) {
               try {
@@ -257,7 +302,7 @@ jobs:
             $activePath = Join-Path $destination "active-version.json"
             if (-not (Test-Path $activePath)) { throw "Installer did not write active-version.json" }
             $active = Get-Content $activePath -Raw | ConvertFrom-Json
-            if ($active.schemaVersion -ne 1 -or $active.version -ne "2.2.4") {
+            if ($active.schemaVersion -ne 1 -or $active.version -ne "2.2.5") {
               throw "Installer selected an unexpected active version: $($active.version)"
             }
             $versionRoot = Join-Path (Join-Path $destination "versions") ([string]$active.version)
@@ -321,7 +366,7 @@ jobs:
             if ($LASTEXITCODE -ne 0) { throw "The pinned 2.0.1 package did not install." }
 
             $legacyExecutable = Join-Path $installDestination "versions\2.0.1\Lattice.exe"
-            $candidateDirectory = Join-Path $installDestination "versions\2.2.4"
+            $candidateDirectory = Join-Path $installDestination "versions\2.2.5"
             New-Item $candidateDirectory -ItemType Directory -Force | Out-Null
             Get-ChildItem $currentPackage -Force |
               Copy-Item -Destination $candidateDirectory -Recurse -Force
@@ -359,7 +404,7 @@ jobs:
               tokenSha256 = $tokenHash
               createdAt = [DateTimeOffset]::UtcNow.ToString("O")
               previousVersion = "2.0.1"
-              candidateVersion = "2.2.4"
+              candidateVersion = "2.2.5"
               candidateDirectory = $candidateDirectory
             } | ConvertTo-Json -Compress |
               Set-Content (Join-Path $pendingRoot "$activationId.json") -Encoding utf8
@@ -379,18 +424,18 @@ jobs:
               Start-Sleep -Milliseconds 250
               $candidate.Refresh()
               if ($candidate.HasExited) {
-                throw "The 2.2.4 update candidate exited before promotion."
+                throw "The 2.2.5 update candidate exited before promotion."
               }
               $activePath = Join-Path $installDestination "active-version.json"
               if (Test-Path $activePath) {
                 $activeVersion = (Get-Content $activePath -Raw | ConvertFrom-Json).version
               }
             } while (
-              $activeVersion -ne "2.2.4" -and
+              $activeVersion -ne "2.2.5" -and
               [DateTimeOffset]::UtcNow -lt $promotionDeadline
             )
-            if ($activeVersion -ne "2.2.4") {
-              throw "The 2.2.4 candidate did not become active."
+            if ($activeVersion -ne "2.2.5") {
+              throw "The 2.2.5 candidate did not become active."
             }
             if (-not $legacy.WaitForExit(20000)) {
               throw "The superseded 2.0.1 Lattice window remained open after verified promotion."

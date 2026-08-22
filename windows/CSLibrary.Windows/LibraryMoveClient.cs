@@ -15,7 +15,8 @@ internal sealed record LibraryMoveOutcome(
 internal sealed record LibraryDisconnectOutcome(
     bool SyncthingManaged,
     bool SyncthingRunning,
-    bool PausedByLattice);
+    bool PausedByLattice,
+    bool SyncthingStopped);
 
 internal sealed record LibraryReconnectOutcome(
     bool SyncthingManaged,
@@ -71,7 +72,8 @@ internal static class LibraryMoveClient
         return new LibraryDisconnectOutcome(
             RequiredBoolean(completed, "syncthingManaged"),
             RequiredBoolean(completed, "syncthingRunning"),
-            RequiredBoolean(completed, "pausedByLattice"));
+            RequiredBoolean(completed, "pausedByLattice"),
+            RequiredBoolean(completed, "syncthingStopped"));
     }
 
     internal static async Task<LibraryReconnectOutcome> ReconnectAsync(
@@ -214,6 +216,8 @@ internal static class LibraryMoveClient
             start.ArgumentList.Add(stateFile);
         }
         if (startIfNeeded) start.ArgumentList.Add("--start-if-needed");
+        if (string.Equals(operation, "disconnect", StringComparison.Ordinal))
+            start.ArgumentList.Add("--shutdown-syncthing");
         start.ArgumentList.Add("--folder-id");
         start.ArgumentList.Add(FolderId);
         start.ArgumentList.Add("--protected-path");

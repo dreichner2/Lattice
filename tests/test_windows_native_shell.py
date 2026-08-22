@@ -189,6 +189,8 @@ class WindowsNativeShellTests(unittest.TestCase):
         self.assertIn('"disconnect"', self.library_move_code)
         self.assertIn('"reconnect"', self.library_move_code)
         self.assertIn('"--start-if-needed"', self.library_move_code)
+        self.assertIn('"--shutdown-syncthing"', self.library_move_code)
+        self.assertIn("SyncthingStopped", self.window_code)
 
     def test_bounded_packaged_smoke_mode_emits_proof_contract(self) -> None:
         for option in ("--smoke-test", "--library-root", "--smoke-output", "--smoke-pdf"):

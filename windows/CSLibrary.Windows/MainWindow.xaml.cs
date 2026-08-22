@@ -1921,8 +1921,9 @@ public partial class MainWindow : Window
         var consent = MessageBox.Show(
             this,
             "Prepare this library drive for safe eject?\n\n"
-            + "Lattice will stop its private local service, require Syncthing to be Up to Date, and pause only "
-            + "the Lattice folder. This window will close when both programs have released the drive. "
+            + "Lattice will stop its private local service, require Syncthing to be Up to Date, pause the Lattice "
+            + "folder, and shut down its dedicated Syncthing instance. This window will close only after both "
+            + "processes have released the drive. "
             + "Then use Eject in Windows.\n\n"
             + "When the drive is connected again, open Lattice and choose Reconnect library sync.",
             "Disconnect library drive",
@@ -1937,7 +1938,7 @@ public partial class MainWindow : Window
         SetLibrarySwitchingEnabled(false);
         SetLoading(
             "Releasing the library drive…",
-            "Stopping Lattice's local service and pausing its Syncthing folder",
+            "Stopping Lattice's local service and dedicated Syncthing instance",
             chooseFolder: false,
             busy: true);
         SetShellStatus("Releasing library drive", ShellStatus.Loading);
@@ -1989,8 +1990,8 @@ public partial class MainWindow : Window
         }
 
         var detail = outcome.SyncthingManaged
-            ? (outcome.SyncthingRunning
-                ? "Syncthing has released the Lattice folder and Lattice's local service is stopped."
+            ? (outcome.SyncthingStopped
+                ? "The dedicated Lattice Syncthing instance and Lattice's local service are stopped."
                 : "Syncthing was already stopped, and Lattice's local service is now stopped.")
             : "Lattice's local service is stopped. This library is not managed by Syncthing.";
         detail += "\n\nAfter this window closes, eject the drive from Windows before unplugging it.";

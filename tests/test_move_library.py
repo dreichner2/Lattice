@@ -54,6 +54,7 @@ class FakeSyncthingState:
             "paused": False,
         }
         self.scans = 0
+        self.shutdowns = 0
         self.fail_after_redirect = False
         self.fail_pause_response_once = False
         self.fail_redirect_response_once = False
@@ -146,6 +147,9 @@ class FakeSyncthingHandler(BaseHTTPRequestHandler):
         parsed = urllib.parse.urlsplit(self.path)
         if parsed.path == "/rest/db/scan":
             self.server.state.scans += 1
+            self._empty()
+        elif parsed.path == "/rest/system/shutdown":
+            self.server.state.shutdowns += 1
             self._empty()
         else:
             self._json({"error": "not found"}, 404)
@@ -261,6 +265,124 @@ class MoveLibraryTests(unittest.TestCase):
                 )
                 self.assertFalse(reconnected.resumed_by_lattice)
                 self.assertTrue(fixture.state.folder["paused"])
+
+    def test_windows_disconnect_stops_the_dedicated_syncthing_process(self) -> None:
+        with tempfile.TemporaryDirectory() as temporary:
+            base = Path(temporary)
+            source = base / "external" / "Lattice"
+            state_file = base / "local-state" / "external-drive.json"
+            config = base / "syncthing" / "config.xml"
+            source.parent.mkdir()
+            make_library(source, synced=True)
+            with running_syncthing(source) as fixture:
+                write_syncthing_config(config, fixture.port, source)
+                with (
+                    mock.patch.object(
+                        move_library,
+                        "_windows_syncthing_listener_process_id",
+                        return_value=4321,
+                    ),
+                    mock.patch.object(move_library, "_wait_for_syncthing_shutdown") as wait,
+                ):
+                    disconnected = move_library.prepare_library_disconnect(
+                        source,
+                        state_file,
+                        syncthing_config=config,
+                        shutdown_syncthing=True,
+                        sync_timeout=1,
+                    )
+                self.assertEqual(fixture.state.shutdowns, 1)
+                self.assertTrue(disconnected.syncthing_stopped)
+                self.assertTrue(disconnected.paused_by_lattice)
+                wait.assert_called_once()
+                self.assertEqual(wait.call_args.args[1:], (1, 4321))
+
+    def test_windows_disconnect_stops_syncthing_without_resuming_a_manual_pause(self) -> None:
+        with tempfile.TemporaryDirectory() as temporary:
+            base = Path(temporary)
+            source = base / "external" / "Lattice"
+            state_file = base / "local-state" / "external-drive.json"
+            config = base / "syncthing" / "config.xml"
+            source.parent.mkdir()
+            make_library(source, synced=True)
+            with running_syncthing(source) as fixture:
+                fixture.state.folder["paused"] = True
+                write_syncthing_config(config, fixture.port, source)
+                with mock.patch.object(move_library, "_wait_for_syncthing_shutdown"):
+                    disconnected = move_library.prepare_library_disconnect(
+                        source,
+                        state_file,
+                        syncthing_config=config,
+                        shutdown_syncthing=True,
+                        sync_timeout=1,
+                    )
+                self.assertEqual(fixture.state.shutdowns, 1)
+                self.assertTrue(disconnected.syncthing_stopped)
+                self.assertFalse(disconnected.paused_by_lattice)
+                self.assertFalse(state_file.exists())
+                self.assertTrue(fixture.state.folder["paused"])
+
+    def test_windows_disconnect_finishes_a_previous_folder_only_disconnect(self) -> None:
+        with tempfile.TemporaryDirectory() as temporary:
+            base = Path(temporary)
+            source = base / "external" / "Lattice"
+            state_file = base / "local-state" / "external-drive.json"
+            config = base / "syncthing" / "config.xml"
+            source.parent.mkdir()
+            make_library(source, synced=True)
+            with running_syncthing(source) as fixture:
+                write_syncthing_config(config, fixture.port, source)
+                first = move_library.prepare_library_disconnect(
+                    source,
+                    state_file,
+                    syncthing_config=config,
+                    sync_timeout=1,
+                )
+                self.assertTrue(first.paused_by_lattice)
+                self.assertTrue(state_file.exists())
+
+                with mock.patch.object(move_library, "_wait_for_syncthing_shutdown"):
+                    finished = move_library.prepare_library_disconnect(
+                        source,
+                        state_file,
+                        syncthing_config=config,
+                        shutdown_syncthing=True,
+                        sync_timeout=1,
+                    )
+                self.assertTrue(finished.syncthing_stopped)
+                self.assertFalse(finished.paused_by_lattice)
+                self.assertTrue(state_file.exists())
+
+                reconnected = move_library.reconnect_library(
+                    source,
+                    state_file,
+                    syncthing_config=config,
+                    sync_timeout=1,
+                )
+                self.assertTrue(reconnected.resumed_by_lattice)
+                self.assertFalse(state_file.exists())
+                self.assertFalse(fixture.state.folder["paused"])
+
+    def test_shutdown_wait_requires_both_api_and_process_to_stop(self) -> None:
+        client = mock.Mock()
+        client._request.side_effect = move_library.SyncthingUnavailableError("stopped")
+        with mock.patch.object(
+            move_library,
+            "_syncthing_process_may_be_running",
+            return_value=False,
+        ):
+            move_library._wait_for_syncthing_shutdown(client, timeout=0.1)
+
+        with (
+            mock.patch.object(
+                move_library,
+                "_syncthing_process_may_be_running",
+                return_value=True,
+            ),
+            mock.patch.object(move_library.time, "sleep", return_value=None),
+        ):
+            with self.assertRaisesRegex(move_library.LibraryMoveError, "still running"):
+                move_library._wait_for_syncthing_shutdown(client, timeout=0.001)
 
     def test_disconnect_accepts_verified_stopped_syncthing_as_already_released(self) -> None:
         with tempfile.TemporaryDirectory() as temporary:
@@ -575,6 +697,7 @@ class MoveLibraryTests(unittest.TestCase):
                 self.assertEqual(exit_code, 0)
                 self.assertEqual(message["operation"], "disconnect")
                 self.assertTrue(message["pausedByLattice"])
+                self.assertFalse(message["syncthingStopped"])
 
                 output = io.StringIO()
                 with contextlib.redirect_stdout(output):

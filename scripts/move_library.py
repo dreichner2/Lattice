@@ -112,6 +112,7 @@ class DisconnectResult:
     syncthing_managed: bool
     syncthing_running: bool
     paused_by_lattice: bool
+    syncthing_stopped: bool
 
 
 @dataclass(frozen=True)
@@ -519,6 +520,9 @@ class SyncthingClient:
         query = urllib.parse.urlencode({"folder": folder_id})
         self._request("POST", f"/rest/db/scan?{query}")
 
+    def shutdown(self) -> None:
+        self._request("POST", "/rest/system/shutdown")
+
 
 def _configuration_claims_library(config_path: Path, source: Path, folder_id: str) -> bool:
     if not config_path.is_file() or config_path.is_symlink():
@@ -794,6 +798,102 @@ def _syncthing_process_may_be_running() -> bool:
         return True
 
 
+def _windows_syncthing_listener_process_id(client: SyncthingClient) -> int | None:
+    if os.name != "nt":
+        return None
+    try:
+        port = urllib.parse.urlsplit(client.connection.base_uri).port
+        if port is None:
+            return None
+        result = subprocess.run(
+            ["netstat.exe", "-ano", "-p", "TCP"],
+            stdin=subprocess.DEVNULL,
+            stdout=subprocess.PIPE,
+            stderr=subprocess.DEVNULL,
+            timeout=5,
+            check=False,
+            creationflags=int(getattr(subprocess, "CREATE_NO_WINDOW", 0)),
+        )
+        if result.returncode != 0:
+            return None
+        expected_port = str(port)
+        for line in result.stdout.decode("utf-8", errors="replace").splitlines():
+            columns = line.split()
+            if len(columns) < 5 or columns[0].lower() != "tcp":
+                continue
+            local_address = columns[1]
+            _, separator, local_port = local_address.rpartition(":")
+            if not separator or local_port != expected_port:
+                continue
+            try:
+                process_id = int(columns[-1])
+            except ValueError:
+                continue
+            if process_id > 0:
+                return process_id
+    except (OSError, subprocess.SubprocessError, ValueError):
+        pass
+    return None
+
+
+def _process_id_may_be_running(process_id: int) -> bool:
+    try:
+        if os.name != "nt":
+            os.kill(process_id, 0)
+            return True
+        result = subprocess.run(
+            ["tasklist.exe", "/FI", f"PID eq {process_id}", "/FO", "CSV", "/NH"],
+            stdin=subprocess.DEVNULL,
+            stdout=subprocess.PIPE,
+            stderr=subprocess.DEVNULL,
+            timeout=3,
+            check=False,
+            creationflags=int(getattr(subprocess, "CREATE_NO_WINDOW", 0)),
+        )
+        output = result.stdout.decode("utf-8", errors="replace")
+        return result.returncode == 0 and f'"{process_id}"' in output
+    except ProcessLookupError:
+        return False
+    except PermissionError:
+        return True
+    except (OSError, subprocess.SubprocessError):
+        return True
+
+
+def _wait_for_syncthing_shutdown(
+    client: SyncthingClient,
+    timeout: float,
+    process_id: int | None = None,
+) -> None:
+    deadline = time.monotonic() + timeout
+    api_stopped = False
+    process_running = True
+    while time.monotonic() < deadline:
+        try:
+            client._request("GET", "/rest/noauth/health")
+            api_stopped = False
+        except SyncthingUnavailableError:
+            api_stopped = True
+        except LibraryMoveError:
+            # An HTTP response still proves that the local process owns the port.
+            api_stopped = False
+        process_running = (
+            _process_id_may_be_running(process_id)
+            if process_id is not None
+            else _syncthing_process_may_be_running()
+        )
+        if api_stopped and not process_running:
+            return
+        time.sleep(0.4)
+    if not api_stopped:
+        raise LibraryMoveError(
+            "The dedicated Lattice Syncthing instance did not shut down, so the drive is still connected."
+        )
+    raise LibraryMoveError(
+        "A Syncthing process is still running after Lattice requested shutdown, so the drive is still connected."
+    )
+
+
 def _start_windows_syncthing(config_path: Path) -> subprocess.Popen[bytes]:
     if os.name != "nt":
         raise LibraryMoveError(
@@ -858,6 +958,7 @@ def prepare_library_disconnect(
     *,
     folder_id: str = DEFAULT_FOLDER_ID,
     syncthing_config: Path | str | None = None,
+    shutdown_syncthing: bool = False,
     sync_timeout: float = 30.0,
 ) -> DisconnectResult:
     source_input = Path(source_value).expanduser()
@@ -875,7 +976,7 @@ def prepare_library_disconnect(
         )
     discovery = _discover_syncthing(source, folder_id, syncthing_config)
     if not discovery.managed:
-        return DisconnectResult(False, False, False)
+        return DisconnectResult(False, False, False, False)
     if not discovery.running:
         if _syncthing_process_may_be_running():
             raise LibraryMoveError(
@@ -883,7 +984,7 @@ def prepare_library_disconnect(
                 "Restart Syncthing, wait for Lattice to show Live sync, and try disconnecting again."
             )
         # A proven-stopped process has no watcher or filesystem handle to release.
-        return DisconnectResult(True, False, False)
+        return DisconnectResult(True, False, False, True)
 
     assert discovery.client is not None and discovery.folder is not None
     client = discovery.client
@@ -893,36 +994,49 @@ def prepare_library_disconnect(
     if client.restart_required():
         raise LibraryMoveError("Syncthing has a pending restart. Restart it, then try disconnecting again.")
     original_paused = bool(folder.get("paused", False))
-    if original_paused:
-        return DisconnectResult(True, True, False)
-    initial_status = client.status(folder_id)
-    if not _validate_syncthing_status(initial_status, allow_paused=False):
-        raise LibraryMoveError(
-            "Wait for the Lattice folder to show Up to Date before disconnecting its drive."
-        )
-
-    client.patch_folder(folder_id, {"paused": True})
-    try:
-        if not bool(client.folder(folder_id).get("paused", False)):
-            raise LibraryMoveError("Syncthing did not pause the Lattice folder.")
-        _wait_for_syncthing(
-            client,
-            folder_id,
-            allow_paused=True,
-            timeout=sync_timeout,
-            required_state="paused",
-        )
-        _write_disconnect_state(source, state_file, folder_id)
-    except BaseException as error:
-        try:
-            client.patch_folder(folder_id, {"paused": False})
-            client.scan(folder_id)
-        except Exception as restore_error:  # pragma: no cover - catastrophic API failure
+    paused_by_lattice = False
+    if not original_paused:
+        initial_status = client.status(folder_id)
+        if not _validate_syncthing_status(initial_status, allow_paused=False):
             raise LibraryMoveError(
-                f"{error} Syncthing also could not restore the folder after disconnect preparation failed: {restore_error}"
-            ) from error
-        raise
-    return DisconnectResult(True, True, True)
+                "Wait for the Lattice folder to show Up to Date before disconnecting its drive."
+            )
+
+        client.patch_folder(folder_id, {"paused": True})
+        try:
+            if not bool(client.folder(folder_id).get("paused", False)):
+                raise LibraryMoveError("Syncthing did not pause the Lattice folder.")
+            _wait_for_syncthing(
+                client,
+                folder_id,
+                allow_paused=True,
+                timeout=sync_timeout,
+                required_state="paused",
+            )
+            _write_disconnect_state(source, state_file, folder_id)
+            paused_by_lattice = True
+        except BaseException as error:
+            try:
+                client.patch_folder(folder_id, {"paused": False})
+                client.scan(folder_id)
+            except Exception as restore_error:  # pragma: no cover - catastrophic API failure
+                raise LibraryMoveError(
+                    f"{error} Syncthing also could not restore the folder after disconnect preparation failed: {restore_error}"
+                ) from error
+            raise
+
+    if shutdown_syncthing:
+        process_id = _windows_syncthing_listener_process_id(client)
+        try:
+            client.shutdown()
+        except SyncthingUnavailableError:
+            # Syncthing may close the socket before the successful shutdown
+            # response reaches the client. The process check below is authoritative.
+            pass
+        _wait_for_syncthing_shutdown(client, sync_timeout, process_id)
+        return DisconnectResult(True, True, paused_by_lattice, True)
+
+    return DisconnectResult(True, True, paused_by_lattice, False)
 
 
 def reconnect_library(
@@ -1142,6 +1256,7 @@ def _parser() -> argparse.ArgumentParser:
     parser.add_argument("--destination", help="New, not-yet-existing library root")
     parser.add_argument("--state-file", help="Local reconnect record outside the library")
     parser.add_argument("--start-if-needed", action="store_true", help=argparse.SUPPRESS)
+    parser.add_argument("--shutdown-syncthing", action="store_true", help=argparse.SUPPRESS)
     parser.add_argument("--folder-id", default=DEFAULT_FOLDER_ID)
     parser.add_argument("--protected-path", action="append", default=[])
     parser.add_argument("--syncthing-config", help=argparse.SUPPRESS)
@@ -1180,6 +1295,7 @@ def main(argv: list[str] | None = None) -> int:
                 arguments.state_file,
                 folder_id=arguments.folder_id,
                 syncthing_config=arguments.syncthing_config,
+                shutdown_syncthing=arguments.shutdown_syncthing,
             )
             reporter(
                 "complete",
@@ -1187,8 +1303,11 @@ def main(argv: list[str] | None = None) -> int:
                 syncthingManaged=disconnected.syncthing_managed,
                 syncthingRunning=disconnected.syncthing_running,
                 pausedByLattice=disconnected.paused_by_lattice,
+                syncthingStopped=disconnected.syncthing_stopped,
                 message=(
-                    "Syncthing released the Lattice folder. Close Lattice before ejecting the drive."
+                    "The dedicated Lattice Syncthing instance is stopped. Close Lattice before ejecting the drive."
+                    if disconnected.syncthing_stopped
+                    else "Syncthing released the Lattice folder. Close Lattice before ejecting the drive."
                     if disconnected.syncthing_running
                     else "Syncthing is already stopped. Close Lattice before ejecting the drive."
                 ),

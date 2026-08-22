@@ -1,5 +1,16 @@
 # Changelog
 
+## 2.2.5 — 2026-08-22
+
+### Fixed
+
+- **Disconnect library drive** on Windows now shuts down the dedicated Lattice
+  Syncthing instance and verifies that both its loopback API and process have
+  stopped before claiming the external drive is ready to eject. Pausing the
+  folder alone did not reliably release Syncthing's Windows volume handle.
+- **Reconnect library sync** continues to restart that same dedicated instance
+  and resumes only a pause that Lattice created.
+
 ## 2.2.4 — 2026-08-22
 
 ### Added
