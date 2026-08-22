@@ -1,0 +1,8 @@
+(?d).DS_Store
+!/books
+!/books/**
+!/papers
+!/papers/**
+!/lectures
+!/lectures/**
+*

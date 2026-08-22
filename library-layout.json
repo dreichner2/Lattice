@@ -1,0 +1,26 @@
+{
+  "schema_version": 1,
+  "content_directories": [
+    "books",
+    "books/art-of-hpc",
+    "books/software-foundations",
+    "papers",
+    "papers/mit-6006",
+    "lectures"
+  ],
+  "required_root_entries": [
+    "CATALOG.md",
+    "metadata",
+    "ui"
+  ],
+  "syncthing": {
+    "folder_id": "cs-library-3b8290f24f15",
+    "folder_label": "CS Library",
+    "folder_type": "sendreceive",
+    "shared_paths": [
+      "books",
+      "papers",
+      "lectures"
+    ]
+  }
+}

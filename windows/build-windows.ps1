@@ -13,6 +13,11 @@ $PublishRoot = Join-Path $BuildRoot "publish-$Runtime"
 $ServerRoot = Join-Path $BuildRoot "server-$Runtime"
 $PackageRoot = Join-Path $BuildRoot "package-$Runtime"
 $ArtifactsRoot = Join-Path $RepoRoot "artifacts"
+$LayoutPath = Join-Path $RepoRoot "library-layout.json"
+
+if (-not (Test-Path $LayoutPath)) { throw "library-layout.json is missing" }
+$Layout = Get-Content $LayoutPath -Raw | ConvertFrom-Json
+if ($Layout.schema_version -ne 1) { throw "Unsupported library layout schema" }
 
 Push-Location $RepoRoot
 try {
@@ -71,11 +76,21 @@ try {
   Copy-Item (Join-Path $RepoRoot "native\SharedReaderState.js") (Join-Path $PackageRoot "native\SharedReaderState.js") -Force
   Copy-Item (Join-Path $RepoRoot "native\ImmersiveEPUB.js") (Join-Path $PackageRoot "native\ImmersiveEPUB.js") -Force
 
-  foreach ($file in @("CATALOG.md", "LIBRARY_RULES.md", "README.md", "STUDY_GUIDE.md")) {
+  foreach ($file in @(".stignore", "CATALOG.md", "LIBRARY_RULES.md", "README.md", "STUDY_GUIDE.md", "library-layout.json")) {
     Copy-Item (Join-Path $RepoRoot $file) (Join-Path $PackageRoot $file) -Force
   }
-  New-Item (Join-Path $PackageRoot "books") -ItemType Directory -Force | Out-Null
-  New-Item (Join-Path $PackageRoot "papers") -ItemType Directory -Force | Out-Null
+  foreach ($directory in @($Layout.content_directories)) {
+    $relative = [string]$directory
+    $segments = $relative -split "[/\\]"
+    if ([string]::IsNullOrWhiteSpace($relative) -or [IO.Path]::IsPathRooted($relative) -or ($segments -contains "..")) {
+      throw "Unsafe content directory in library-layout.json: $relative"
+    }
+    $packageDirectory = Join-Path $PackageRoot $relative
+    $placeholder = Join-Path (Join-Path $RepoRoot $relative) ".gitkeep"
+    if (-not (Test-Path $placeholder)) { throw "Scaffold placeholder is missing: $relative/.gitkeep" }
+    New-Item $packageDirectory -ItemType Directory -Force | Out-Null
+    Copy-Item $placeholder (Join-Path $packageDirectory ".gitkeep") -Force
+  }
   Copy-Item (Join-Path $ScriptRoot "install.ps1") (Join-Path $PackageRoot "Install CS Library.ps1") -Force
 
   New-Item $ArtifactsRoot -ItemType Directory -Force | Out-Null
@@ -85,7 +100,26 @@ try {
 
   if (-not (Test-Path (Join-Path $PackageRoot "CS Library.exe"))) { throw "Windows app was not published" }
   if (-not (Test-Path (Join-Path $PackageRoot "Server\CSLibraryServer.exe"))) { throw "Local service was not bundled" }
+  if (-not (Test-Path (Join-Path $PackageRoot ".stignore"))) { throw "Syncthing rules were not bundled" }
+  foreach ($directory in @($Layout.content_directories)) {
+    $packageDirectory = Join-Path $PackageRoot ([string]$directory)
+    if (-not (Test-Path (Join-Path $packageDirectory ".gitkeep"))) {
+      throw "Library scaffold directory was not bundled: $directory"
+    }
+  }
   if (-not (Test-Path $Archive)) { throw "Portable archive was not created" }
+  Add-Type -AssemblyName System.IO.Compression.FileSystem
+  $Zip = [IO.Compression.ZipFile]::OpenRead($Archive)
+  try {
+    $EntryNames = @($Zip.Entries | ForEach-Object { $_.FullName })
+    if ($EntryNames -notcontains ".stignore") { throw "Syncthing rules are missing from the archive" }
+    foreach ($directory in @($Layout.content_directories)) {
+      $entry = (([string]$directory).TrimEnd("/") + "/.gitkeep")
+      if ($EntryNames -notcontains $entry) { throw "Scaffold is missing from the archive: $entry" }
+    }
+  } finally {
+    $Zip.Dispose()
+  }
   Write-Host "Built $Archive"
 } finally {
   Pop-Location

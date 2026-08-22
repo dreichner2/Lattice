@@ -11,6 +11,12 @@ on:
       - "native/*.js"
       - "windows/server_bootstrap.py"
       - "ui/**"
+      - ".gitignore"
+      - ".stignore"
+      - "library-layout.json"
+      - "books/**"
+      - "papers/**"
+      - "lectures/**"
       - ".github/workflows/quality.yml"
   pull_request:
     paths:
@@ -19,6 +25,12 @@ on:
       - "native/*.js"
       - "windows/server_bootstrap.py"
       - "ui/**"
+      - ".gitignore"
+      - ".stignore"
+      - "library-layout.json"
+      - "books/**"
+      - "papers/**"
+      - "lectures/**"
       - ".github/workflows/quality.yml"
   workflow_dispatch:
 
@@ -45,7 +57,12 @@ jobs:
 
       - name: Compile Python sources
         run: |
-          python -m py_compile scripts/library_ui.py scripts/cross_platform_server.py windows/server_bootstrap.py
+          python -m py_compile scripts/library_ui.py scripts/cross_platform_server.py scripts/validate_library_layout.py windows/server_bootstrap.py
+
+      - name: Validate clone and Syncthing layout
+        run: |
+          python scripts/validate_library_layout.py
+          python tests/test_library_layout.py
 
       - name: Run local-server tests
         run: python tests/test_cross_platform_server.py

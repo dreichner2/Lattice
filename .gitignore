@@ -4,11 +4,23 @@ __pycache__/
 *.part
 *.tmp
 
-# The repository versions the shelf index, metadata, provenance, and tools.
-# Book/paper payloads stay local because the collection mixes open editions,
-# personal-use downloads, and legacy imports with unverified redistribution.
-/books/
-/papers/
+# The repository versions the shelf index, metadata, provenance, tools, and
+# hidden layout markers. Reading payloads stay local because the collection
+# mixes open editions, personal-use downloads, and legacy imports with
+# unverified redistribution.
+/books/**
+!/books/
+!/books/**/
+!/books/**/.gitkeep
+/papers/**
+!/papers/
+!/papers/**/
+!/papers/**/.gitkeep
+/lectures/**
+!/lectures/
+!/lectures/**/
+!/lectures/**/.gitkeep
+!/lectures/catalog.json
 
 # Local UI/runtime state never belongs in the repository.
 /.library-cache/
@@ -18,3 +30,9 @@ __pycache__/
 /windows/build/
 /windows/CSLibrary.Windows/bin/
 /windows/CSLibrary.Windows/obj/
+
+# Syncthing owns these machine-local markers, history, and temporary files.
+.stfolder/
+.stversions/
+.syncthing.*.tmp
+*.sync-conflict-*
