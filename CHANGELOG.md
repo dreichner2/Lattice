@@ -1,5 +1,13 @@
 # Changelog
 
+## 2.2.3 — 2026-08-22
+
+### Changed
+
+- Public macOS and Windows packages now carry version 2.2.3 so release metadata
+  and installed application versions remain aligned. Version 2.2.2 was not
+  published.
+
 ## 2.2.1 — 2026-08-22
 
 ### Added
