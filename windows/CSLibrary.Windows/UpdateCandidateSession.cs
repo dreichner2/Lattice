@@ -1,5 +1,7 @@
 using System.Diagnostics;
+using System.IO;
 using System.Net;
+using System.Net.Http;
 using System.Security.Cryptography;
 using System.Text.Json;
 
@@ -8,7 +10,7 @@ namespace CSLibrary.Windows;
 /// <summary>
 /// Health gate used only by an isolated, newly staged version. The existing
 /// Start-menu shortcut remains pointed at the previous version until both the
-/// candidate's local server and its WebView navigation have succeeded.
+/// candidate's local server and complete shared WebView interface have succeeded.
 /// </summary>
 internal sealed class UpdateCandidateSession
 {
