@@ -199,7 +199,7 @@ cd "$HOME\Lattice"
 & ".\windows\setup\Install Lattice and Connect.cmd"
 ```
 
-The setup downloads and installs the pinned Lattice `v2.2.0` release for the
+The setup downloads and installs the pinned Lattice `v2.2.1` release for the
 current user, installs official Syncthing `2.1.3` through WinGet when needed,
 selects this clone as the library, configures the Mac mini hub and shared folder
 on the Windows side, starts both apps, and copies the Windows Syncthing Device ID.

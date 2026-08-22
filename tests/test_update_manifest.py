@@ -5,7 +5,6 @@ import hashlib
 import json
 import os
 import re
-import subprocess
 import tempfile
 import unittest
 from pathlib import Path
@@ -42,6 +41,26 @@ def production_public_der() -> bytes:
     if not match:
         raise AssertionError("embedded production public key is missing")
     return base64.b64decode("".join(match.group(1).split()), validate=True)
+
+
+def der_length(length: int) -> bytes:
+    if length < 0:
+        raise ValueError("DER length cannot be negative")
+    if length < 0x80:
+        return bytes([length])
+    encoded = length.to_bytes((length.bit_length() + 7) // 8, "big")
+    return bytes([0x80 | len(encoded)]) + encoded
+
+
+def der_value(tag: int, payload: bytes) -> bytes:
+    return bytes([tag]) + der_length(len(payload)) + payload
+
+
+def rsa_pkcs1_to_subject_public_key_info(pkcs1_der: bytes) -> bytes:
+    # rsaEncryption OID 1.2.840.113549.1.1.1 plus its required NULL parameters.
+    rsa_algorithm = bytes.fromhex("300d06092a864886f70d0101010500")
+    public_key_bits = der_value(0x03, b"\x00" + pkcs1_der)
+    return der_value(0x30, rsa_algorithm + public_key_bits)
 
 
 class UpdateManifestTests(unittest.TestCase):
@@ -187,20 +206,7 @@ class UpdateManifestTests(unittest.TestCase):
         )
         self.assertIsNotNone(match)
         pkcs1_der = base64.b64decode("".join(match.group(1).split()), validate=True)  # type: ignore[union-attr]
-        converted = subprocess.run(
-            [
-                "openssl",
-                "rsa",
-                "-RSAPublicKey_in",
-                "-pubout",
-                "-outform",
-                "DER",
-            ],
-            input=pkcs1_der,
-            stdout=subprocess.PIPE,
-            stderr=subprocess.PIPE,
-            check=True,
-        ).stdout
+        converted = rsa_pkcs1_to_subject_public_key_info(pkcs1_der)
         self.assertEqual(converted, production_public_der())
         self.assertEqual(hashlib.sha256(converted).hexdigest(), PRODUCTION_PUBLIC_KEY_SHA256)
 

@@ -1,6 +1,6 @@
 # Changelog
 
-## Unreleased
+## 2.2.1 — 2026-08-22
 
 ### Added
 
@@ -9,6 +9,14 @@
   stages and validates the bundle, preserves the installed version, relaunches
   the candidate, and automatically rolls back unless the updated shelf becomes
   healthy.
+
+### Fixed
+
+- Rapid macOS close-and-reopen cycles no longer attach to a stale local server;
+  each relaunched app verifies that its own isolated service is healthy before
+  completing an update.
+- The macOS CI signing-key equivalence check no longer depends on an
+  OpenSSL-version-specific conversion command.
 
 ## 2.2.0 — 2026-08-22
 
