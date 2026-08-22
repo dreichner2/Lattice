@@ -71,6 +71,7 @@ jobs:
       - name: Run reader tests
         run: |
           node --check ui/app.js
+          node --check ui/pdf-reader.js
           node --check native/ImmersiveEPUB.js
           node --check native/LibraryWorkspace.js
           node --check native/SharedReaderState.js

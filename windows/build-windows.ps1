@@ -17,7 +17,21 @@ $LayoutPath = Join-Path $RepoRoot "library-layout.json"
 $IconGenerator = Join-Path $ScriptRoot "generate_icon.py"
 $IconPath = Join-Path $BuildRoot "Lattice.ico"
 $PackageMetadataPath = Join-Path $PackageRoot "update-package.json"
-$RequiredUiFiles = @("index.html", "app.js", "styles.css", "video-styles.css", "videos.js")
+$RequiredUiFiles = @(
+  "index.html",
+  "app.js",
+  "styles.css",
+  "video-styles.css",
+  "videos.js",
+  "pdf-reader.html",
+  "pdf-reader.css",
+  "pdf-reader.js",
+  "vendor/pdfjs/LICENSE",
+  "vendor/pdfjs/build/pdf.min.mjs",
+  "vendor/pdfjs/build/pdf.worker.min.mjs",
+  "vendor/pdfjs/web/pdf_viewer.mjs",
+  "vendor/pdfjs/web/pdf_viewer.css"
+)
 $RequiredNativeFiles = @("SharedReaderState.js", "ImmersiveEPUB.js")
 $RequiredRootFiles = @(
   ".stignore",
@@ -68,6 +82,8 @@ try {
     Assert-NativeSuccess "Python tests"
     node --check ui/app.js
     Assert-NativeSuccess "ui/app.js syntax check"
+    node --check ui/pdf-reader.js
+    Assert-NativeSuccess "ui/pdf-reader.js syntax check"
     node --check ui/videos.js
     Assert-NativeSuccess "ui/videos.js syntax check"
     node --check native/ImmersiveEPUB.js

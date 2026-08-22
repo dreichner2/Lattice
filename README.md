@@ -142,9 +142,12 @@ macOS, and Syncthing paths.
 ## Windows app
 
 The Windows package provides the same shelf, search, study documents, EPUB
-reader, and PDF access in a native WPF/WebView2 window. It includes its own
-loopback-only server, so the packaged app does not require Python or .NET to be
-installed on your cousin's computer.
+reader, and a Lattice-owned PDF workspace in a native WPF/WebView2 window.
+PDFs range-load quickly and support search, outlines, lazy thumbnails,
+continuous, single-page, and two-page layouts, fit/zoom, rotation, restored
+position, true fullscreen, and a reliable return to the existing shelf. The
+package includes its own loopback-only server, so it does not require Python or
+.NET to be installed on your cousin's computer.
 
 For the fast path, install Git for Windows first, then run these commands in
 PowerShell:
@@ -161,7 +164,7 @@ cd "$HOME\Lattice"
 & ".\windows\setup\Install Lattice and Connect.cmd"
 ```
 
-The setup downloads and installs the pinned Lattice `v2.0.2` release for the
+The setup downloads and installs the pinned Lattice `v2.1.0` release for the
 current user, installs official Syncthing `2.1.3` through WinGet when needed,
 selects this clone as the library, configures the Mac mini hub and shared folder
 on the Windows side, starts both apps, and copies the Windows Syncthing Device ID.

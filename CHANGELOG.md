@@ -1,6 +1,17 @@
 # Changelog
 
-## 2.0.2 — 2026-08-21
+## 2.1.0 — 2026-08-21
+
+### Added
+
+- A bundled Lattice PDF reader for Windows and the browser fallback, built on
+  PDF.js 6.2.108 with fast range loading instead of waiting for an entire large
+  document before showing the first page.
+- Continuous, single-page, and two-page spread layouts; search, thumbnails,
+  outlines, fit and zoom controls, rotation, keyboard navigation, and true
+  fullscreen integration with the Windows-native frame.
+- Per-document page, layout, zoom, and rotation restoration, plus a Shelf
+  control that returns to the existing collection without losing shelf state.
 
 ### Fixed
 
@@ -8,6 +19,9 @@
   Lattice window automatically instead of leaving it stuck on “Verifying.”
 - Update handoffs bind new launchers to their process ID and executable path;
   the first fixed release also safely handles legacy 2.0.1 activation records.
+- The packaged Windows smoke test now opens and renders a real two-page PDF,
+  captures visual proof, returns to the shelf, and verifies that the reader
+  frame is fully closed.
 
 ## 2.0.1 — 2026-08-21
 

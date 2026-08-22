@@ -1,0 +1,152 @@
+<!doctype html>
+<html lang="en" data-theme="light">
+  <head>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
+    <meta name="color-scheme" content="light dark">
+    <meta name="theme-color" content="#171a23">
+    <title>PDF Reader — Lattice</title>
+    <link rel="stylesheet" href="/vendor/pdfjs/web/pdf_viewer.css">
+    <link rel="stylesheet" href="/pdf-reader.css">
+    <script type="module" src="/pdf-reader.js"></script>
+  </head>
+  <body>
+    <div class="pdf-app" id="pdfApp" data-ready="false">
+      <header class="reader-header">
+        <div class="reader-brand">
+          <button class="tool-button shelf-button" id="closeButton" type="button" aria-label="Return to the Lattice shelf">
+            <span aria-hidden="true">←</span>
+            <span>Shelf</span>
+          </button>
+          <span class="header-rule" aria-hidden="true"></span>
+          <span class="brand-mark" aria-hidden="true"><i></i><i></i><i></i></span>
+          <span class="brand-copy"><strong>Lattice</strong><small>PDF reader</small></span>
+        </div>
+
+        <div class="document-heading">
+          <small id="documentKicker">Opening local document</small>
+          <strong id="documentTitle">PDF</strong>
+        </div>
+
+        <div class="header-actions">
+          <button class="tool-button text-action" id="openButton" type="button" title="Open in the system PDF app">Open</button>
+          <button class="tool-button text-action" id="revealButton" type="button" title="Show the PDF file">Show file</button>
+          <button class="tool-button icon-action" id="fullscreenButton" type="button" aria-label="Enter fullscreen" title="Fullscreen (F11)">⛶</button>
+        </div>
+      </header>
+
+      <div class="reader-workspace">
+        <aside class="reader-sidebar" id="sidebar" aria-label="Document navigation" aria-hidden="true">
+          <header class="sidebar-header">
+            <div>
+              <small>Navigate</small>
+              <strong>Document</strong>
+            </div>
+            <button class="icon-button" id="sidebarCloseButton" type="button" aria-label="Close document navigation">×</button>
+          </header>
+          <div class="sidebar-tabs" role="tablist" aria-label="Navigation type">
+            <button id="outlineTab" type="button" role="tab" aria-selected="true" aria-controls="outlineView">Contents</button>
+            <button id="thumbnailsTab" type="button" role="tab" aria-selected="false" aria-controls="thumbnailsView">Pages</button>
+          </div>
+          <nav class="outline-view" id="outlineView" role="tabpanel" aria-labelledby="outlineTab">
+            <div class="sidebar-placeholder"><span>☷</span><p>Opening the table of contents…</p></div>
+          </nav>
+          <div class="thumbnails-view" id="thumbnailsView" role="tabpanel" aria-labelledby="thumbnailsTab" hidden></div>
+        </aside>
+
+        <main class="reader-main">
+          <div class="reader-controls" role="toolbar" aria-label="PDF controls">
+            <div class="control-group navigation-controls">
+              <button class="control-button contents-button" id="sidebarButton" type="button" aria-label="Show contents" aria-expanded="false" title="Contents">
+                <span aria-hidden="true">☷</span><span>Contents</span>
+              </button>
+              <span class="control-separator" aria-hidden="true"></span>
+              <button class="control-button compact" id="previousPageButton" type="button" aria-label="Previous page" title="Previous page (Page Up)">‹</button>
+              <label class="page-field" for="pageNumberInput">
+                <span class="sr-only">Page number</span>
+                <input id="pageNumberInput" type="text" inputmode="numeric" value="1" autocomplete="off" aria-label="Current page">
+                <span id="pageCount">of —</span>
+              </label>
+              <button class="control-button compact" id="nextPageButton" type="button" aria-label="Next page" title="Next page (Page Down)">›</button>
+            </div>
+
+            <div class="layout-switcher" id="layoutSwitcher" role="group" aria-label="Page layout">
+              <button type="button" data-layout="continuous" aria-pressed="true" title="Continuous pages">Continuous</button>
+              <button type="button" data-layout="single" aria-pressed="false" title="One page at a time">Single</button>
+              <button type="button" data-layout="spread" aria-pressed="false" title="Two pages side by side">Two-page</button>
+            </div>
+
+            <div class="control-group zoom-controls">
+              <select id="fitSelect" aria-label="Fit pages">
+                <option value="page-width">Fit width</option>
+                <option value="page-fit">Fit page</option>
+                <option value="auto">Automatic</option>
+              </select>
+              <button class="control-button compact" id="zoomOutButton" type="button" aria-label="Zoom out" title="Zoom out (−)">−</button>
+              <output id="zoomValue" aria-live="polite">100%</output>
+              <button class="control-button compact" id="zoomInButton" type="button" aria-label="Zoom in" title="Zoom in (+)">+</button>
+              <button class="control-button compact rotate-button" id="rotateButton" type="button" aria-label="Rotate clockwise" title="Rotate clockwise">↻</button>
+            </div>
+
+            <form class="find-box" id="findForm" role="search">
+              <span aria-hidden="true">⌕</span>
+              <input id="findInput" type="search" autocomplete="off" placeholder="Find in document…" aria-label="Find in document">
+              <output id="findCount" aria-live="polite"></output>
+              <button id="findPreviousButton" type="button" aria-label="Previous search result" title="Previous result">↑</button>
+              <button id="findNextButton" type="submit" aria-label="Next search result" title="Next result">↓</button>
+            </form>
+          </div>
+
+          <div class="viewer-host" id="viewerHost">
+            <div class="viewer-container" id="viewerContainer" tabindex="0" aria-label="PDF pages">
+              <div class="pdfViewer" id="viewer"></div>
+            </div>
+
+            <section class="loading-state" id="loadingState" aria-live="polite">
+              <span class="loading-mark" aria-hidden="true"><i></i><i></i><i></i></span>
+              <p class="loading-eyebrow">Private · local</p>
+              <h1>Opening your document</h1>
+              <p id="loadingDetail">Reading the first page without downloading the whole file…</p>
+              <div class="loading-track" aria-hidden="true"><span id="loadingProgress"></span></div>
+              <small id="loadingPercent">Preparing PDF.js</small>
+            </section>
+
+            <section class="error-state" id="errorState" hidden role="alert">
+              <span aria-hidden="true">!</span>
+              <p>Reader needs attention</p>
+              <h1 id="errorTitle">This PDF could not be opened</h1>
+              <p id="errorDetail">Try opening the file in your system PDF app.</p>
+              <div>
+                <button class="primary-button" id="errorOpenButton" type="button">Open in system app</button>
+                <button class="secondary-button" id="retryButton" type="button">Try again</button>
+              </div>
+            </section>
+          </div>
+
+          <footer class="reader-statusbar">
+            <span><i class="status-dot"></i><span id="statusText">Local reader</span></span>
+            <span id="documentStats">Waiting for document</span>
+            <span class="shortcut-hint"><kbd>F11</kbd> Fullscreen <kbd>Ctrl</kbd><b>+</b><kbd>F</kbd> Search</span>
+          </footer>
+        </main>
+      </div>
+
+      <button class="sidebar-scrim" id="sidebarScrim" type="button" aria-label="Close document navigation"></button>
+    </div>
+
+    <dialog class="password-dialog" id="passwordDialog">
+      <form method="dialog" id="passwordForm">
+        <span class="dialog-mark" aria-hidden="true">L</span>
+        <p>Protected document</p>
+        <h2 id="passwordTitle">Enter the PDF password</h2>
+        <label for="passwordInput">Password</label>
+        <input id="passwordInput" type="password" autocomplete="current-password">
+        <small id="passwordError"></small>
+        <div>
+          <button value="cancel" class="secondary-button" type="button" id="passwordCancelButton">Cancel</button>
+          <button value="submit" class="primary-button" type="submit">Unlock</button>
+        </div>
+      </form>
+    </dialog>
+  </body>
+</html>

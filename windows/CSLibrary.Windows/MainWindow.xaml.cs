@@ -43,7 +43,14 @@ public partial class MainWindow : Window
     private bool _candidateLaunched;
     private bool _candidatePromoted;
     private bool _candidateErrorNotified;
+    private bool _webContentFullscreen;
     private string? _candidatePromotionError;
+    private WindowStyle _windowStyleBeforeFullscreen;
+    private ResizeMode _resizeModeBeforeFullscreen;
+    private WindowState _windowStateBeforeFullscreen;
+    private Rect _windowBoundsBeforeFullscreen;
+    private GridLength _topChromeHeightBeforeFullscreen = new(58);
+    private Visibility _topChromeVisibilityBeforeFullscreen = Visibility.Visible;
     private DesktopUpdateCheck? _availableUpdate;
     private StagedDesktopUpdate? _stagedUpdate;
     private Task<DesktopUpdateCheck>? _updateCheckTask;
@@ -476,6 +483,12 @@ public partial class MainWindow : Window
             Browser.CoreWebView2.NavigationCompleted += NavigationCompleted;
             Browser.CoreWebView2.HistoryChanged += (_, _) => UpdateNavigationControls();
             Browser.CoreWebView2.NewWindowRequested += NewWindowRequested;
+            Browser.CoreWebView2.ContainsFullScreenElementChanged += (_, _) =>
+            {
+                if (_lifetime.IsCancellationRequested) return;
+                Dispatcher.InvokeAsync(() => SetWebContentFullscreen(
+                    Browser.CoreWebView2.ContainsFullScreenElement));
+            };
             Browser.CoreWebView2.ProcessFailed += (_, eventArgs) =>
             {
                 if (_lifetime.IsCancellationRequested) return;
@@ -644,6 +657,48 @@ public partial class MainWindow : Window
             && !uri.IsLoopback
             && (uri.Scheme == Uri.UriSchemeHttp || uri.Scheme == Uri.UriSchemeHttps))
             Process.Start(new ProcessStartInfo(uri.AbsoluteUri) { UseShellExecute = true });
+    }
+
+    private void SetWebContentFullscreen(bool fullscreen)
+    {
+        if (_webContentFullscreen == fullscreen) return;
+        if (fullscreen)
+        {
+            _webContentFullscreen = true;
+            _windowStyleBeforeFullscreen = WindowStyle;
+            _resizeModeBeforeFullscreen = ResizeMode;
+            _windowStateBeforeFullscreen = WindowState;
+            _windowBoundsBeforeFullscreen = WindowState == WindowState.Normal
+                ? new Rect(Left, Top, ActualWidth, ActualHeight)
+                : RestoreBounds;
+            _topChromeHeightBeforeFullscreen = TopChromeRow.Height;
+            _topChromeVisibilityBeforeFullscreen = TopChrome.Visibility;
+
+            TopChrome.Visibility = Visibility.Collapsed;
+            TopChromeRow.Height = new GridLength(0);
+            WindowState = WindowState.Normal;
+            WindowStyle = WindowStyle.None;
+            ResizeMode = ResizeMode.NoResize;
+            WindowState = WindowState.Maximized;
+            return;
+        }
+
+        WindowState = WindowState.Normal;
+        WindowStyle = _windowStyleBeforeFullscreen;
+        ResizeMode = _resizeModeBeforeFullscreen;
+        TopChromeRow.Height = _topChromeHeightBeforeFullscreen;
+        TopChrome.Visibility = _topChromeVisibilityBeforeFullscreen;
+        if (_windowBoundsBeforeFullscreen.Width >= MinWidth
+            && _windowBoundsBeforeFullscreen.Height >= MinHeight)
+        {
+            Left = _windowBoundsBeforeFullscreen.Left;
+            Top = _windowBoundsBeforeFullscreen.Top;
+            Width = _windowBoundsBeforeFullscreen.Width;
+            Height = _windowBoundsBeforeFullscreen.Height;
+        }
+        WindowState = _windowStateBeforeFullscreen;
+        _webContentFullscreen = false;
+        UpdateResponsiveChrome();
     }
 
     private bool IsOwnedServerUri(string value)
@@ -937,7 +992,7 @@ public partial class MainWindow : Window
 
     private void SaveWindowBounds()
     {
-        if (_launchOptions.SmokeTest is not null) return;
+        if (_launchOptions.SmokeTest is not null || _webContentFullscreen) return;
         try
         {
             var bounds = WindowState == WindowState.Normal
@@ -983,8 +1038,10 @@ public partial class MainWindow : Window
         var finalStage = stage;
         var finalError = error;
         var screenshotCaptured = false;
+        var pdfScreenshotCaptured = false;
         var ok = false;
         SmokeWebProbe? probe = null;
+        SmokePdfProbe? pdfProbe = null;
 
         try
         {
@@ -994,7 +1051,7 @@ public partial class MainWindow : Window
 
             if (navigationSucceeded)
             {
-                using var verificationTimeout = new CancellationTokenSource(TimeSpan.FromSeconds(10));
+                using var verificationTimeout = new CancellationTokenSource(TimeSpan.FromSeconds(30));
                 probe = await WaitForSharedUiAsync(verificationTimeout.Token);
                 await Task.Delay(250, verificationTimeout.Token);
                 await using var screenshot = new FileStream(
@@ -1008,7 +1065,26 @@ public partial class MainWindow : Window
                     .WaitAsync(verificationTimeout.Token);
                 await screenshot.FlushAsync(verificationTimeout.Token);
                 screenshotCaptured = true;
-                ok = true;
+                if (!string.IsNullOrWhiteSpace(smoke.PdfPath))
+                {
+                    pdfProbe = await WaitForPdfReaderAsync(
+                        smoke.PdfPath,
+                        verificationTimeout.Token);
+                    await using var pdfScreenshot = new FileStream(
+                        smoke.PdfScreenshotPath,
+                        FileMode.Create,
+                        FileAccess.Write,
+                        FileShare.None);
+                    await Browser.CoreWebView2.CapturePreviewAsync(
+                            CoreWebView2CapturePreviewImageFormat.Png,
+                            pdfScreenshot)
+                        .WaitAsync(verificationTimeout.Token);
+                    await pdfScreenshot.FlushAsync(verificationTimeout.Token);
+                    pdfScreenshotCaptured = true;
+                    pdfProbe.ShelfReturnWorked = await WaitForPdfShelfReturnAsync(
+                        verificationTimeout.Token);
+                }
+                ok = pdfProbe?.Ready ?? true;
                 finalStage = "ready";
                 finalError = null;
             }
@@ -1038,7 +1114,11 @@ public partial class MainWindow : Window
                     status = StatusText.Text,
                 },
                 web = probe,
+                pdf = pdfProbe,
                 screenshot = screenshotCaptured ? Path.GetFileName(smoke.ScreenshotPath) : null,
+                pdfScreenshot = pdfScreenshotCaptured
+                    ? Path.GetFileName(smoke.PdfScreenshotPath)
+                    : null,
                 captureKind = screenshotCaptured ? "WebView2 content preview" : null,
             };
             var json = JsonSerializer.Serialize(
@@ -1148,6 +1228,157 @@ public partial class MainWindow : Window
             : $"readyState={lastProbe.ReadyState}, brand={lastProbe.Brand}, sync={lastProbe.SyncText}, "
                 + $"add={lastProbe.HasAddButton}, grid={lastProbe.HasLibraryGrid}, bridge={lastProbe.HasNativeAddBridge}";
         throw new InvalidOperationException($"The shared Lattice interface was not ready. {detail}");
+    }
+
+    private async Task<SmokePdfProbe> WaitForPdfReaderAsync(
+        string relativePath,
+        CancellationToken cancellationToken)
+    {
+        var pathJson = JsonSerializer.Serialize(relativePath);
+        const string scriptTemplate = """
+            (() => {
+              const requestedPath = __PDF_PATH__;
+              if (!window.__latticePdfSmokeOpened) {
+                const material = state.library?.materials?.find(item => item.path === requestedPath);
+                const work = material ? state.workById.get(material.workId) : null;
+                if (!material || !work) {
+                  return { ready: false, error: "Smoke PDF is not in the library inventory." };
+                }
+                window.__latticePdfSmokeOpened = true;
+                showPdfReader(work, material);
+              }
+              const frame = document.getElementById("pdfReader");
+              const frameDocument = frame?.contentDocument;
+              const frameRect = frame?.getBoundingClientRect();
+              if (!frameDocument) {
+                return { ready: false, error: "PDF reader frame has not loaded." };
+              }
+              const app = frameDocument.getElementById("pdfApp");
+              const spread = frameDocument.querySelector('[data-layout="spread"]');
+              if (app?.dataset.ready === "true" && frame.dataset.smokeSpread !== "true") {
+                frame.dataset.smokeSpread = "true";
+                spread?.click();
+              }
+              const visibleCanvases = [...frameDocument.querySelectorAll(".page canvas")]
+                .filter(canvas => {
+                  const rect = canvas.getBoundingClientRect();
+                  return rect.width > 0 && rect.height > 0
+                    && rect.bottom > 0 && rect.top < frameDocument.documentElement.clientHeight;
+                }).length;
+              const pageCount = Number(frameDocument.documentElement.dataset.pageCount || 0);
+              const spreadActive = spread?.getAttribute("aria-pressed") === "true";
+              return {
+                ready: app?.dataset.ready === "true"
+                  && pageCount === 2
+                  && spreadActive
+                  && visibleCanvases === 2
+                  && (frameRect?.height || 0) > 300,
+                error: "",
+                pageCount,
+                layout: frameDocument.documentElement.dataset.layout || "",
+                spreadActive,
+                visibleCanvases,
+                frameHeight: Math.round(frameRect?.height || 0),
+                hasSearch: Boolean(frameDocument.getElementById("findInput")),
+                hasFullscreen: Boolean(frameDocument.getElementById("fullscreenButton")),
+                allowsFullscreen: frame?.getAttribute("allow")?.includes("fullscreen") === true,
+                status: frameDocument.getElementById("statusText")?.textContent?.trim() || ""
+              };
+            })()
+            """;
+        var script = scriptTemplate.Replace("__PDF_PATH__", pathJson, StringComparison.Ordinal);
+        var jsonOptions = new JsonSerializerOptions { PropertyNameCaseInsensitive = true };
+        SmokePdfProbe? lastProbe = null;
+        Exception? lastError = null;
+        for (var attempt = 0; attempt < 60; attempt++)
+        {
+            try
+            {
+                var raw = await Browser.CoreWebView2.ExecuteScriptAsync(script)
+                    .WaitAsync(cancellationToken);
+                lastProbe = JsonSerializer.Deserialize<SmokePdfProbe>(raw, jsonOptions);
+                if (lastProbe?.Ready == true) return lastProbe;
+            }
+            catch (OperationCanceledException) when (cancellationToken.IsCancellationRequested)
+            {
+                throw new TimeoutException("The bundled PDF reader did not become ready within the allotted time.");
+            }
+            catch (Exception error)
+            {
+                lastError = error;
+            }
+            await Task.Delay(200, cancellationToken);
+        }
+        var detail = lastProbe?.Error;
+        if (string.IsNullOrWhiteSpace(detail))
+        {
+            detail = lastProbe is null
+                ? lastError?.Message ?? "No PDF reader state was returned."
+                : $"pages={lastProbe.PageCount}, layout={lastProbe.Layout}, "
+                    + $"spread={lastProbe.SpreadActive}, canvases={lastProbe.VisibleCanvases}, "
+                    + $"height={lastProbe.FrameHeight}";
+        }
+        throw new InvalidOperationException($"The bundled PDF reader was not ready. {detail}");
+    }
+
+    private async Task<bool> WaitForPdfShelfReturnAsync(CancellationToken cancellationToken)
+    {
+        const string script = """
+            (() => {
+              const frame = document.getElementById("pdfReader");
+              if (!window.__latticePdfSmokeCloseClicked) {
+                const close = frame?.contentDocument?.getElementById("closeButton");
+                if (!close) {
+                  return { ready: false, error: "The PDF reader Shelf control is missing." };
+                }
+                window.__latticePdfSmokeCloseClicked = true;
+                close.click();
+              }
+              const shell = document.getElementById("readerShell");
+              const shelf = document.getElementById("libraryGrid");
+              const shellHidden = shell?.getAttribute("aria-hidden") === "true"
+                && !document.body.classList.contains("reader-open");
+              const frameReset = frame?.hidden === true
+                && (frame.getAttribute("src") === "about:blank" || frame.src === "about:blank");
+              const shelfPresent = Boolean(shelf && shelf.getClientRects().length);
+              return {
+                ready: shellHidden && frameReset && shelfPresent,
+                error: "",
+                shellHidden,
+                frameReset,
+                shelfPresent
+              };
+            })()
+            """;
+        var jsonOptions = new JsonSerializerOptions { PropertyNameCaseInsensitive = true };
+        SmokeShelfProbe? lastProbe = null;
+        Exception? lastError = null;
+        for (var attempt = 0; attempt < 30; attempt++)
+        {
+            try
+            {
+                var raw = await Browser.CoreWebView2.ExecuteScriptAsync(script)
+                    .WaitAsync(cancellationToken);
+                lastProbe = JsonSerializer.Deserialize<SmokeShelfProbe>(raw, jsonOptions);
+                if (lastProbe?.Ready == true) return true;
+            }
+            catch (OperationCanceledException) when (cancellationToken.IsCancellationRequested)
+            {
+                throw new TimeoutException(
+                    "The PDF reader did not return to the shelf within the allotted time.");
+            }
+            catch (Exception error)
+            {
+                lastError = error;
+            }
+            await Task.Delay(100, cancellationToken);
+        }
+
+        var detail = lastProbe is null
+            ? lastError?.Message ?? "No shelf state was returned."
+            : $"hidden={lastProbe.ShellHidden}, reset={lastProbe.FrameReset}, "
+                + $"shelf={lastProbe.ShelfPresent}, error={lastProbe.Error}";
+        throw new InvalidOperationException($"The PDF reader did not return to the shelf. {detail}");
     }
 
     private void StopOwnedServer()
@@ -1442,5 +1673,34 @@ public partial class MainWindow : Window
         public bool HasAddButton { get; init; }
         public bool HasLibraryGrid { get; init; }
         public bool HasNativeAddBridge { get; init; }
+    }
+
+    private sealed class SmokePdfProbe
+    {
+        public SmokePdfProbe()
+        {
+        }
+
+        public bool Ready { get; init; }
+        public string Error { get; init; } = "";
+        public int PageCount { get; init; }
+        public string Layout { get; init; } = "";
+        public bool SpreadActive { get; init; }
+        public int VisibleCanvases { get; init; }
+        public int FrameHeight { get; init; }
+        public bool HasSearch { get; init; }
+        public bool HasFullscreen { get; init; }
+        public bool AllowsFullscreen { get; init; }
+        public bool ShelfReturnWorked { get; set; }
+        public string Status { get; init; } = "";
+    }
+
+    private sealed class SmokeShelfProbe
+    {
+        public bool Ready { get; init; }
+        public string Error { get; init; } = "";
+        public bool ShellHidden { get; init; }
+        public bool FrameReset { get; init; }
+        public bool ShelfPresent { get; init; }
     }
 }

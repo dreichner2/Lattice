@@ -433,6 +433,43 @@ class ServerTests(unittest.TestCase):
             self.assertTrue(response.headers["Content-Type"].startswith("text/javascript"))
             self.assertIn(b"youtube-nocookie.com", response.read())
 
+    def test_pdf_reader_is_embeddable_secure_and_self_contained(self) -> None:
+        with urllib.request.urlopen(self.base + "/pdf-reader.html", timeout=3) as response:
+            markup = response.read()
+            policy = response.headers["Content-Security-Policy"]
+            self.assertEqual(response.headers["X-Frame-Options"], "SAMEORIGIN")
+            self.assertIn("script-src 'self'", policy)
+            self.assertIn("worker-src 'self'", policy)
+            self.assertIn("frame-ancestors 'self'", policy)
+            self.assertNotIn("'unsafe-eval'", policy)
+            self.assertIn(b'data-layout="spread"', markup)
+            self.assertIn(b'id="fullscreenButton"', markup)
+            self.assertIn(b'id="findInput"', markup)
+
+        with urllib.request.urlopen(
+            self.base + "/vendor/pdfjs/build/pdf.min.mjs",
+            timeout=3,
+        ) as response:
+            self.assertTrue(response.headers["Content-Type"].startswith("text/javascript"))
+            self.assertIn("immutable", response.headers["Cache-Control"])
+            self.assertIn(b"6.2.108", response.read())
+
+        script = (ROOT / "ui" / "pdf-reader.js").read_text(encoding="utf-8")
+        self.assertIn("disableStream: true", script)
+        self.assertIn("disableAutoFetch: true", script)
+        self.assertIn("rangeChunkSize: 256 * 1024", script)
+        self.assertIn('new Set(["continuous", "single", "spread"])', script)
+        self.assertIn('window.location.assign("/")', script)
+        self.assertNotIn("PDFScriptingManager", script)
+
+        request = urllib.request.Request(
+            self.base + "/vendor/pdfjs/%2e%2e/pdf-reader.js",
+        )
+        with self.assertRaises(urllib.error.HTTPError) as caught:
+            urllib.request.urlopen(request, timeout=3)
+        self.assertEqual(caught.exception.code, 404)
+        caught.exception.close()
+
     def test_pdf_range_request(self) -> None:
         if not (ROOT / "books" / "sicp.pdf").is_file():
             self.skipTest("local book payloads are intentionally not committed")

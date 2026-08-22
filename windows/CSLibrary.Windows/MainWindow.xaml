@@ -21,7 +21,7 @@
         Closing="Window_Closing">
   <Grid Background="{StaticResource LatticeCanvasBrush}">
     <Grid.RowDefinitions>
-      <RowDefinition Height="58" />
+      <RowDefinition x:Name="TopChromeRow" Height="58" />
       <RowDefinition Height="*" />
     </Grid.RowDefinitions>
 

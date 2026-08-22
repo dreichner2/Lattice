@@ -112,6 +112,7 @@ internal sealed record LaunchOptions(string? LibraryRoot, SmokeTestOptions? Smok
         var smokeTest = false;
         string? libraryRoot = null;
         string? smokeOutput = null;
+        string? smokePdf = null;
         var positional = new List<string>();
         var unknownOptions = new List<string>();
 
@@ -127,6 +128,9 @@ internal sealed record LaunchOptions(string? LibraryRoot, SmokeTestOptions? Smok
                     break;
                 case "--smoke-output":
                     smokeOutput = ReadValue(arguments, ref index, "--smoke-output");
+                    break;
+                case "--smoke-pdf":
+                    smokePdf = ReadValue(arguments, ref index, "--smoke-pdf");
                     break;
                 case "--update-candidate":
                 case "--update-token":
@@ -156,7 +160,9 @@ internal sealed record LaunchOptions(string? LibraryRoot, SmokeTestOptions? Smok
         return new LaunchOptions(root, new SmokeTestOptions(
             Root: root,
             ReportPath: Path.Combine(output, "lattice-smoke.json"),
-            ScreenshotPath: Path.Combine(output, "lattice-webview.png")));
+            ScreenshotPath: Path.Combine(output, "lattice-webview.png"),
+            PdfPath: smokePdf,
+            PdfScreenshotPath: Path.Combine(output, "lattice-pdf-reader.png")));
     }
 
     private static string ReadValue(IReadOnlyList<string> arguments, ref int index, string option)
@@ -170,4 +176,9 @@ internal sealed record LaunchOptions(string? LibraryRoot, SmokeTestOptions? Smok
     }
 }
 
-internal sealed record SmokeTestOptions(string Root, string ReportPath, string ScreenshotPath);
+internal sealed record SmokeTestOptions(
+    string Root,
+    string ReportPath,
+    string ScreenshotPath,
+    string? PdfPath,
+    string PdfScreenshotPath);

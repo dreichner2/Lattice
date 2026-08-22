@@ -28,6 +28,7 @@ jobs:
           node --check native/ImmersiveEPUB.js
           node --check native/LibraryWorkspace.js
           node --check ui/app.js
+          node --check ui/pdf-reader.js
           node --test tests/*.mjs
 
       - name: Validate durable reader store
@@ -48,6 +49,8 @@ jobs:
           test -x "Lattice.app/Contents/MacOS/Lattice"
           test -f "Lattice.app/Contents/Resources/ui/index.html"
           test -f "Lattice.app/Contents/Resources/ui/app.js"
+          test -f "Lattice.app/Contents/Resources/ui/pdf-reader.html"
+          test -f "Lattice.app/Contents/Resources/ui/vendor/pdfjs/build/pdf.min.mjs"
           test -f "Lattice.app/Contents/Resources/server/library_ui.py"
           test -f "Lattice.app/Contents/Resources/ImmersiveEPUB.js"
           test -f "Lattice.app/Contents/Resources/LibraryWorkspace.js"

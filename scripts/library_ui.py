@@ -74,6 +74,9 @@ MATERIAL_LABELS = {
     "standard": "Standards",
 }
 READABLE_SUFFIXES = frozenset({".epub", ".pdf", ".txt"})
+PDFJS_VENDOR_SUFFIXES = frozenset(
+    {".bcmap", ".css", ".gif", ".icc", ".js", ".mjs", ".pfb", ".svg", ".ttf", ".wasm", ""}
+)
 CONTENT_DIRECTORIES = ("books", "papers", "lectures")
 IMPORT_KINDS = {"book": "books", "paper": "papers", "lecture": "lectures"}
 SIDECAR_SUFFIX = ".library.json"
@@ -3122,10 +3125,19 @@ class LibraryRequestHandler(BaseHTTPRequestHandler):
         cache: str = "no-store",
         head_only: bool = False,
         page_policy: bool = False,
+        embedded_page: bool = False,
     ) -> None:
         self.send_response(status)
-        self._security_headers()
-        if page_policy:
+        self._security_headers(frame_policy="SAMEORIGIN" if embedded_page else "DENY")
+        if embedded_page:
+            self.send_header(
+                "Content-Security-Policy",
+                "default-src 'self'; script-src 'self'; style-src 'self' 'unsafe-inline'; "
+                "img-src 'self' data: blob:; font-src 'self' data:; connect-src 'self'; "
+                "worker-src 'self'; object-src 'none'; frame-ancestors 'self'; "
+                "base-uri 'none'; form-action 'none'",
+            )
+        elif page_policy:
             self.send_header(
                 "Content-Security-Policy",
                 "default-src 'self'; script-src 'self'; style-src 'self'; "
@@ -3247,6 +3259,12 @@ class LibraryRequestHandler(BaseHTTPRequestHandler):
         if request_path.startswith("/epub/"):
             self._serve_epub_resource(request_path.removeprefix("/epub/"), head_only=head_only)
             return
+        if request_path.startswith("/vendor/pdfjs/"):
+            self._serve_pdfjs_vendor(
+                request_path.removeprefix("/vendor/pdfjs/"),
+                head_only=head_only,
+            )
+            return
         if request_path.startswith("/document/"):
             name = urllib.parse.unquote(request_path.removeprefix("/document/"))
             if name not in ALLOWED_DOCUMENTS:
@@ -3271,19 +3289,22 @@ class LibraryRequestHandler(BaseHTTPRequestHandler):
             return
 
         static_files = {
-            "/": ("index.html", "text/html; charset=utf-8"),
-            "/index.html": ("index.html", "text/html; charset=utf-8"),
-            "/styles.css": ("styles.css", "text/css; charset=utf-8"),
-            "/video-styles.css": ("video-styles.css", "text/css; charset=utf-8"),
-            "/videos.js": ("videos.js", "text/javascript; charset=utf-8"),
-            "/app.js": ("app.js", "text/javascript; charset=utf-8"),
+            "/": ("index.html", "text/html; charset=utf-8", False),
+            "/index.html": ("index.html", "text/html; charset=utf-8", False),
+            "/styles.css": ("styles.css", "text/css; charset=utf-8", False),
+            "/video-styles.css": ("video-styles.css", "text/css; charset=utf-8", False),
+            "/videos.js": ("videos.js", "text/javascript; charset=utf-8", False),
+            "/app.js": ("app.js", "text/javascript; charset=utf-8", False),
+            "/pdf-reader.html": ("pdf-reader.html", "text/html; charset=utf-8", True),
+            "/pdf-reader.css": ("pdf-reader.css", "text/css; charset=utf-8", False),
+            "/pdf-reader.js": ("pdf-reader.js", "text/javascript; charset=utf-8", False),
         }
         if request_path == "/favicon.ico":
             self._send_bytes(HTTPStatus.NO_CONTENT, b"", "image/x-icon", head_only=head_only)
             return
         static = static_files.get(request_path)
         if static:
-            filename, content_type = static
+            filename, content_type, embedded_page = static
             self._send_bytes(
                 HTTPStatus.OK,
                 (self.server.ui_root / filename).read_bytes(),
@@ -3291,9 +3312,48 @@ class LibraryRequestHandler(BaseHTTPRequestHandler):
                 cache="no-cache",
                 head_only=head_only,
                 page_policy=True,
+                embedded_page=embedded_page,
             )
             return
         self._send_json(HTTPStatus.NOT_FOUND, {"error": "Not found"})
+
+    def _serve_pdfjs_vendor(self, encoded_path: str, *, head_only: bool) -> None:
+        try:
+            relative = urllib.parse.unquote(encoded_path)
+            if not relative or "\\" in relative or "\x00" in relative:
+                raise ValueError("PDF reader asset not found")
+            pure = PurePosixPath(relative)
+            if pure.is_absolute() or any(part in {"", ".", ".."} for part in pure.parts):
+                raise ValueError("PDF reader asset not found")
+            vendor_root = (self.server.ui_root / "vendor" / "pdfjs").resolve()
+            path = vendor_root.joinpath(*pure.parts).resolve()
+            if vendor_root not in path.parents or not path.is_file():
+                raise ValueError("PDF reader asset not found")
+            if path.suffix.lower() not in PDFJS_VENDOR_SUFFIXES:
+                raise ValueError("PDF reader asset not found")
+        except (OSError, ValueError):
+            self._send_json(HTTPStatus.NOT_FOUND, {"error": "PDF reader asset not found"})
+            return
+
+        content_types = {
+            ".bcmap": "application/octet-stream",
+            ".css": "text/css; charset=utf-8",
+            ".gif": "image/gif",
+            ".icc": "application/vnd.iccprofile",
+            ".js": "text/javascript; charset=utf-8",
+            ".mjs": "text/javascript; charset=utf-8",
+            ".pfb": "application/octet-stream",
+            ".svg": "image/svg+xml",
+            ".ttf": "font/ttf",
+            ".wasm": "application/wasm",
+        }
+        self._send_bytes(
+            HTTPStatus.OK,
+            path.read_bytes(),
+            content_types.get(path.suffix.lower(), "text/plain; charset=utf-8"),
+            cache="private, max-age=31536000, immutable",
+            head_only=head_only,
+        )
 
     def _serve_events(self) -> None:
         query = urllib.parse.parse_qs(urllib.parse.urlsplit(self.path).query)

@@ -12,6 +12,7 @@ const STORAGE = {
   epubSettings: "cs-library:epub-settings",
   epubProgress: "cs-library:epub-progress",
   epubBookmarks: "cs-library:epub-bookmarks",
+  pdfState: "cs-library:pdf-state",
 };
 
 const DEFAULT_EPUB_SETTINGS = Object.freeze({
@@ -74,6 +75,7 @@ const state = {
   epubSettings: { ...DEFAULT_EPUB_SETTINGS, ...readStorage(STORAGE.epubSettings, {}) },
   epubProgress: readStorage(STORAGE.epubProgress, {}) || {},
   epubBookmarks: readStorage(STORAGE.epubBookmarks, {}) || {},
+  pdfState: readStorage(STORAGE.pdfState, {}) || {},
   videoCatalog: null,
   videoLibrary: null,
   imports: [],
@@ -1121,7 +1123,7 @@ function showReaderShell(title, kicker, mode) {
   elements.readerFocus.title = "Focus on the page";
   elements.epubFocusExit.hidden = true;
   state.epubFocused = false;
-  elements.readerShell.classList.remove("is-focused");
+  elements.readerShell.classList.remove("is-focused", "is-pdf-web");
   elements.readerShell.classList.toggle("is-epub", mode === "epub");
   document.body.classList.add("reader-open");
   elements.readerShell.setAttribute("aria-hidden", "false");
@@ -1138,7 +1140,7 @@ function closeReader() {
   window.cancelAnimationFrame(state.epubScrollFrame);
   document.body.classList.remove("reader-open");
   elements.readerShell.setAttribute("aria-hidden", "true");
-  elements.readerShell.classList.remove("is-epub", "is-focused");
+  elements.readerShell.classList.remove("is-epub", "is-focused", "is-pdf-web");
   delete elements.readerShell.dataset.path;
   delete elements.readerShell.dataset.workId;
   delete elements.readerShell.dataset.format;
@@ -1198,6 +1200,101 @@ function configureLocalReaderActions(work, file) {
   return descriptor;
 }
 
+const PDF_READER_CHANNEL = "lattice-pdf-reader";
+const PDF_LAYOUTS = new Set(["continuous", "single", "spread"]);
+const PDF_SCALE_PRESETS = new Set(["auto", "page-fit", "page-width"]);
+
+function normalizePdfReaderState(value) {
+  if (!value || typeof value !== "object") return null;
+  const numericScale = Number(value.scaleValue);
+  const scaleValue = PDF_SCALE_PRESETS.has(value.scaleValue)
+    ? value.scaleValue
+    : Number.isFinite(numericScale) && numericScale >= 0.1 && numericScale <= 8
+      ? numericScale
+      : "page-width";
+  const rotation = [0, 90, 180, 270].includes(Number(value.rotation)) ? Number(value.rotation) : 0;
+  return {
+    page: Math.max(1, Math.trunc(Number(value.page)) || 1),
+    layout: PDF_LAYOUTS.has(value.layout) ? value.layout : "continuous",
+    scaleValue,
+    rotation,
+    updatedAt: typeof value.updatedAt === "string" ? value.updatedAt : new Date().toISOString(),
+  };
+}
+
+function sendPdfReaderMessage(type, detail = {}) {
+  if (state.readerMode !== "pdf" || !elements.readerPdf.contentWindow) return;
+  elements.readerPdf.contentWindow.postMessage(
+    { channel: PDF_READER_CHANNEL, type, ...detail },
+    window.location.origin,
+  );
+}
+
+function initializePdfReaderFrame() {
+  if (!state.readerPath) return;
+  sendPdfReaderMessage("initialize", {
+    path: state.readerPath,
+    theme: document.documentElement.dataset.theme || "light",
+    state: normalizePdfReaderState(state.pdfState[state.readerPath]),
+  });
+}
+
+function persistPdfReaderState(path, value) {
+  if (path !== state.readerPath) return;
+  const normalized = normalizePdfReaderState(value);
+  if (!normalized) return;
+  state.pdfState[path] = normalized;
+  const retained = Object.entries(state.pdfState)
+    .sort(([, left], [, right]) => String(right?.updatedAt || "").localeCompare(String(left?.updatedAt || "")))
+    .slice(0, 250);
+  state.pdfState = Object.fromEntries(retained);
+  writeStorage(STORAGE.pdfState, state.pdfState);
+  window.dispatchEvent(new CustomEvent("cs-library-reader-position", {
+    detail: {
+      path,
+      workId: state.readerWorkId,
+      locator: {
+        type: "pdf",
+        page: normalized.page,
+        layout: normalized.layout,
+        scaleValue: normalized.scaleValue,
+        rotation: normalized.rotation,
+      },
+      progress: 0,
+    },
+  }));
+}
+
+function handlePdfReaderMessage(event) {
+  if (
+    event.origin !== window.location.origin
+    || event.source !== elements.readerPdf.contentWindow
+    || state.readerMode !== "pdf"
+  ) return;
+  const message = event.data;
+  if (!message || message.channel !== PDF_READER_CHANNEL || message.path !== state.readerPath) return;
+  if (message.type === "boot" || message.type === "ready") {
+    initializePdfReaderFrame();
+  } else if (message.type === "rendered") {
+    elements.readerLoading.hidden = true;
+  } else if (message.type === "state") {
+    persistPdfReaderState(message.path, message.state);
+  } else if (message.type === "close") {
+    closeReader();
+  } else if (message.type === "open") {
+    const work = state.workById.get(state.readerWorkId);
+    const file = work?.files.find((item) => item.path === state.readerPath);
+    if (work && file) openOnMac(work, file);
+  } else if (message.type === "reveal") {
+    const work = state.workById.get(state.readerWorkId);
+    const file = work?.files.find((item) => item.path === state.readerPath);
+    if (file) revealFile(file);
+  } else if (message.type === "error") {
+    elements.readerLoading.hidden = true;
+    announce(message.error || "This PDF could not be opened", true);
+  }
+}
+
 function showPdfReader(work, file) {
   if (!file.exists) {
     announce(`${file.title} is no longer on this computer`, true);
@@ -1208,8 +1305,15 @@ function showPdfReader(work, file) {
   const descriptor = configureLocalReaderActions(work, file);
   elements.readerPdf.title = `${file.title} PDF reader`;
   const useWebFallback = () => {
+    elements.readerShell.classList.add("is-pdf-web");
     elements.readerPdf.hidden = false;
-    elements.readerPdf.src = contentUrl(file.path);
+    const params = new URLSearchParams({
+      file: file.path,
+      title: file.title || work.title,
+      work: work.title,
+      theme: document.documentElement.dataset.theme || "light",
+    });
+    elements.readerPdf.src = `/pdf-reader.html?${params}`;
   };
   if (IS_NATIVE_APP && typeof window.csLibraryNativeCall === "function") {
     window.csLibraryNativeCall("document.upsert", descriptor)
@@ -2558,6 +2662,7 @@ function applyTheme(theme) {
   elements.theme.setAttribute("aria-label", `Switch to ${theme === "dark" ? "light" : "dark"} theme`);
   const meta = $("meta[name='theme-color']");
   if (meta) meta.content = theme === "dark" ? "#171915" : "#f2eee5";
+  sendPdfReaderMessage("theme", { theme });
 }
 
 function initializeTheme() {
@@ -2568,6 +2673,7 @@ function initializeTheme() {
 
 function bindEvents() {
   bindImportEvents();
+  window.addEventListener("message", handlePdfReaderMessage);
   window.addEventListener("cs-library-reader-restore", event => {
     const saved = event.detail;
     if (!saved || saved.path !== state.readerPath) return;
@@ -2631,7 +2737,10 @@ function bindEvents() {
   elements.readerFocus.addEventListener("click", () => setEpubFocus(!state.epubFocused));
   elements.epubFocusExit.addEventListener("click", () => setEpubFocus(false));
   elements.readerPdf.addEventListener("load", () => {
-    if (state.readerMode === "pdf" && document.body.classList.contains("reader-open")) elements.readerLoading.hidden = true;
+    if (state.readerMode === "pdf" && document.body.classList.contains("reader-open")) {
+      elements.readerLoading.hidden = true;
+      initializePdfReaderFrame();
+    }
   });
   elements.epubFrame.addEventListener("load", handleEpubFrameLoad);
   elements.epubPrevious.addEventListener("click", () => turnEpubPage(-1));

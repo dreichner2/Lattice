@@ -153,7 +153,7 @@ jobs:
             $activePath = Join-Path $installDestination "active-version.json"
             if (-not (Test-Path $activePath)) { throw "Onboarding did not install Lattice." }
             $active = Get-Content $activePath -Raw | ConvertFrom-Json
-            if ($active.version -ne "2.0.2") { throw "Onboarding selected the wrong Lattice version." }
+            if ($active.version -ne "2.1.0") { throw "Onboarding selected the wrong Lattice version." }
             $startupShortcut = Join-Path $testAppData "Microsoft\Windows\Start Menu\Programs\Startup\Lattice Syncthing.lnk"
             if (-not (Test-Path $startupShortcut)) { throw "Onboarding did not create the Syncthing startup shortcut." }
             [xml]$configured = Get-Content $configPath -Raw
@@ -208,9 +208,23 @@ jobs:
               throw "Bundled native bridge file missing: $file"
             }
           }
-          foreach ($file in @("index.html", "app.js", "styles.css", "video-styles.css", "videos.js")) {
+          foreach ($file in @(
+            "index.html", "app.js", "styles.css", "video-styles.css", "videos.js",
+            "pdf-reader.html", "pdf-reader.css", "pdf-reader.js"
+          )) {
             if (-not (Test-Path (Join-Path "windows/build/package-win-x64/ui" $file))) {
               throw "Bundled interface file missing: $file"
+            }
+          }
+          foreach ($file in @(
+            "vendor/pdfjs/LICENSE",
+            "vendor/pdfjs/build/pdf.min.mjs",
+            "vendor/pdfjs/build/pdf.worker.min.mjs",
+            "vendor/pdfjs/web/pdf_viewer.mjs",
+            "vendor/pdfjs/web/pdf_viewer.css"
+          )) {
+            if (-not (Test-Path (Join-Path "windows/build/package-win-x64/ui" $file))) {
+              throw "Bundled PDF reader dependency missing: $file"
             }
           }
           $layout = Get-Content "library-layout.json" -Raw | ConvertFrom-Json
@@ -242,7 +256,7 @@ jobs:
             $activePath = Join-Path $destination "active-version.json"
             if (-not (Test-Path $activePath)) { throw "Installer did not write active-version.json" }
             $active = Get-Content $activePath -Raw | ConvertFrom-Json
-            if ($active.schemaVersion -ne 1 -or $active.version -ne "2.0.2") {
+            if ($active.schemaVersion -ne 1 -or $active.version -ne "2.1.0") {
               throw "Installer selected an unexpected active version: $($active.version)"
             }
             $versionRoot = Join-Path (Join-Path $destination "versions") ([string]$active.version)
@@ -268,7 +282,9 @@ jobs:
         run: |
           $legacyArchive = Join-Path $env:RUNNER_TEMP "Lattice-Windows-2.0.1.zip"
           $legacyExtracted = Join-Path $env:RUNNER_TEMP "lattice-2.0.1-package"
-          $testLocalAppData = Join-Path $env:RUNNER_TEMP "lattice-update-localappdata"
+          $testLocalAppData = [Environment]::GetFolderPath(
+            [Environment+SpecialFolder]::LocalApplicationData
+          )
           $testAppData = Join-Path $env:RUNNER_TEMP "lattice-update-appdata"
           $installDestination = Join-Path $testLocalAppData "Programs\Lattice"
           $currentPackage = (Resolve-Path "windows/build/package-win-x64").Path
@@ -278,6 +294,7 @@ jobs:
           $legacy = $null
           $candidate = $null
           try {
+            Remove-Item -LiteralPath $installDestination -Recurse -Force -ErrorAction SilentlyContinue
             Invoke-WebRequest `
               -Uri "https://github.com/dreichner2/Lattice/releases/download/v2.0.1/Lattice-Windows-win-x64.zip" `
               -OutFile $legacyArchive
@@ -303,7 +320,7 @@ jobs:
             if ($LASTEXITCODE -ne 0) { throw "The pinned 2.0.1 package did not install." }
 
             $legacyExecutable = Join-Path $installDestination "versions\2.0.1\Lattice.exe"
-            $candidateDirectory = Join-Path $installDestination "versions\2.0.2"
+            $candidateDirectory = Join-Path $installDestination "versions\2.1.0"
             New-Item $candidateDirectory -ItemType Directory -Force | Out-Null
             Get-ChildItem $currentPackage -Force |
               Copy-Item -Destination $candidateDirectory -Recurse -Force
@@ -341,7 +358,7 @@ jobs:
               tokenSha256 = $tokenHash
               createdAt = [DateTimeOffset]::UtcNow.ToString("O")
               previousVersion = "2.0.1"
-              candidateVersion = "2.0.2"
+              candidateVersion = "2.1.0"
               candidateDirectory = $candidateDirectory
             } | ConvertTo-Json -Compress |
               Set-Content (Join-Path $pendingRoot "$activationId.json") -Encoding utf8
@@ -361,18 +378,18 @@ jobs:
               Start-Sleep -Milliseconds 250
               $candidate.Refresh()
               if ($candidate.HasExited) {
-                throw "The 2.0.2 update candidate exited before promotion."
+                throw "The 2.1.0 update candidate exited before promotion."
               }
               $activePath = Join-Path $installDestination "active-version.json"
               if (Test-Path $activePath) {
                 $activeVersion = (Get-Content $activePath -Raw | ConvertFrom-Json).version
               }
             } while (
-              $activeVersion -ne "2.0.2" -and
+              $activeVersion -ne "2.1.0" -and
               [DateTimeOffset]::UtcNow -lt $promotionDeadline
             )
-            if ($activeVersion -ne "2.0.2") {
-              throw "The 2.0.2 candidate did not become active."
+            if ($activeVersion -ne "2.1.0") {
+              throw "The 2.1.0 candidate did not become active."
             }
             if (-not $legacy.WaitForExit(20000)) {
               throw "The superseded 2.0.1 Lattice window remained open after verified promotion."
@@ -394,6 +411,7 @@ jobs:
             }
             $env:LOCALAPPDATA = $previousLocalAppData
             $env:APPDATA = $previousAppData
+            Remove-Item -LiteralPath $installDestination -Recurse -Force -ErrorAction SilentlyContinue
           }
 
       - name: Launch packaged native shell and capture UI proof
@@ -406,14 +424,18 @@ jobs:
           $smokeRoot = Join-Path $env:RUNNER_TEMP "lattice-native-smoke"
           $stdout = Join-Path $env:RUNNER_TEMP "lattice-native.stdout.log"
           $stderr = Join-Path $env:RUNNER_TEMP "lattice-native.stderr.log"
+          $smokePdf = Join-Path $libraryRoot "books\lattice-reader-smoke.pdf"
           Remove-Item $smokeRoot -Recurse -Force -ErrorAction SilentlyContinue
           New-Item $smokeRoot -ItemType Directory -Force | Out-Null
+          $smokePdfBase64 = "JVBERi0xLjQKJeLjz9MKMSAwIG9iago8PCAvVHlwZSAvQ2F0YWxvZyAvUGFnZXMgMiAwIFIgPj4KZW5kb2JqCjIgMCBvYmoKPDwgL1R5cGUgL1BhZ2VzIC9LaWRzIFszIDAgUiA2IDAgUl0gL0NvdW50IDIgPj4KZW5kb2JqCjMgMCBvYmoKPDwgL1R5cGUgL1BhZ2UgL1BhcmVudCAyIDAgUiAvTWVkaWFCb3ggWzAgMCA2MTIgNzkyXSAvUmVzb3VyY2VzIDw8IC9Gb250IDw8IC9GMSA1IDAgUiA+PiA+PiAvQ29udGVudHMgNCAwIFIgPj4KZW5kb2JqCjQgMCBvYmoKPDwgL0xlbmd0aCAxMTggPj4Kc3RyZWFtCkJUCi9GMSAzMCBUZgo3MiA2ODAgVGQKKExhdHRpY2UgV2luZG93cyBQREYgUmVhZGVyKSBUagowIC00NCBUZAovRjEgMTYgVGYKKFBhZ2Ugb25lIC0gZnVsbHNjcmVlbiBzbW9rZSBmaXh0dXJlKSBUagpFVAplbmRzdHJlYW0KZW5kb2JqCjUgMCBvYmoKPDwgL1R5cGUgL0ZvbnQgL1N1YnR5cGUgL1R5cGUxIC9CYXNlRm9udCAvSGVsdmV0aWNhID4+CmVuZG9iago2IDAgb2JqCjw8IC9UeXBlIC9QYWdlIC9QYXJlbnQgMiAwIFIgL01lZGlhQm94IFswIDAgNjEyIDc5Ml0gL1Jlc291cmNlcyA8PCAvRm9udCA8PCAvRjEgNSAwIFIgPj4gPj4gL0NvbnRlbnRzIDcgMCBSID4+CmVuZG9iago3IDAgb2JqCjw8IC9MZW5ndGggMTAyID4+CnN0cmVhbQpCVAovRjEgMzAgVGYKNzIgNjgwIFRkCihUd28tcGFnZSBtb2RlKSBUagowIC00NCBUZAovRjEgMTYgVGYKKFBhZ2UgdHdvIHJlbmRlcnMgYmVzaWRlIHBhZ2Ugb25lKSBUagpFVAplbmRzdHJlYW0KZW5kb2JqCnhyZWYKMCA4CjAwMDAwMDAwMDAgNjU1MzUgZiAKMDAwMDAwMDAxNSAwMDAwMCBuIAowMDAwMDAwMDY0IDAwMDAwIG4gCjAwMDAwMDAxMjcgMDAwMDAgbiAKMDAwMDAwMDI1MyAwMDAwMCBuIAowMDAwMDAwNDIxIDAwMDAwIG4gCjAwMDAwMDA0OTEgMDAwMDAgbiAKMDAwMDAwMDYxNyAwMDAwMCBuIAp0cmFpbGVyCjw8IC9TaXplIDggL1Jvb3QgMSAwIFIgPj4Kc3RhcnR4cmVmCjc2OQolJUVPRgo="
+          [IO.File]::WriteAllBytes($smokePdf, [Convert]::FromBase64String($smokePdfBase64))
 
           $process = Start-Process $executable `
             -ArgumentList @(
               "--smoke-test",
               "--library-root", $libraryRoot,
-              "--smoke-output", $smokeRoot
+              "--smoke-output", $smokeRoot,
+              "--smoke-pdf", "books/lattice-reader-smoke.pdf"
             ) `
             -RedirectStandardOutput $stdout `
             -RedirectStandardError $stderr `
@@ -430,8 +452,10 @@ jobs:
 
           $reportPath = Join-Path $smokeRoot "lattice-smoke.json"
           $screenshotPath = Join-Path $smokeRoot "lattice-webview.png"
+          $pdfScreenshotPath = Join-Path $smokeRoot "lattice-pdf-reader.png"
           if (-not (Test-Path $reportPath)) { throw "Native smoke report is missing" }
           if (-not (Test-Path $screenshotPath)) { throw "Native WebView screenshot is missing" }
+          if (-not (Test-Path $pdfScreenshotPath)) { throw "Native PDF reader screenshot is missing" }
           $report = Get-Content $reportPath -Raw | ConvertFrom-Json
           if (
             $report.schemaVersion -ne 1 -or
@@ -442,13 +466,25 @@ jobs:
             $report.web.ready -ne $true -or
             $report.web.brand -ne "Lattice" -or
             $report.web.hasAddButton -ne $true -or
-            $report.web.hasNativeAddBridge -ne $true
-          ) { throw "Native smoke report did not prove the shared Lattice UI contract" }
-          $png = [IO.File]::ReadAllBytes($screenshotPath)
+            $report.web.hasNativeAddBridge -ne $true -or
+            $report.pdf.ready -ne $true -or
+            $report.pdf.pageCount -ne 2 -or
+            $report.pdf.layout -ne "spread" -or
+            $report.pdf.spreadActive -ne $true -or
+            $report.pdf.visibleCanvases -ne 2 -or
+            $report.pdf.frameHeight -lt 300 -or
+            $report.pdf.hasSearch -ne $true -or
+            $report.pdf.hasFullscreen -ne $true -or
+            $report.pdf.allowsFullscreen -ne $true -or
+            $report.pdf.shelfReturnWorked -ne $true
+          ) { throw "Native smoke report did not prove the shared Lattice and PDF reader contracts" }
           $signature = [byte[]](137, 80, 78, 71, 13, 10, 26, 10)
-          if ($png.Length -lt 1024) { throw "Native WebView screenshot is unexpectedly small" }
-          for ($index = 0; $index -lt $signature.Length; $index++) {
-            if ($png[$index] -ne $signature[$index]) { throw "Native WebView screenshot is not a PNG" }
+          foreach ($imagePath in @($screenshotPath, $pdfScreenshotPath)) {
+            $png = [IO.File]::ReadAllBytes($imagePath)
+            if ($png.Length -lt 1024) { throw "Native WebView screenshot is unexpectedly small: $imagePath" }
+            for ($index = 0; $index -lt $signature.Length; $index++) {
+              if ($png[$index] -ne $signature[$index]) { throw "Native WebView screenshot is not a PNG: $imagePath" }
+            }
           }
 
       - name: Smoke-test packaged local service
@@ -545,5 +581,6 @@ jobs:
           path: |
             ${{ runner.temp }}/lattice-native-smoke/lattice-smoke.json
             ${{ runner.temp }}/lattice-native-smoke/lattice-webview.png
+            ${{ runner.temp }}/lattice-native-smoke/lattice-pdf-reader.png
           if-no-files-found: error
           retention-days: 30

@@ -136,10 +136,11 @@ class WindowsNativeShellTests(unittest.TestCase):
         self.assertIn("!uri.IsLoopback", self.window_code)
 
     def test_bounded_packaged_smoke_mode_emits_proof_contract(self) -> None:
-        for option in ("--smoke-test", "--library-root", "--smoke-output"):
+        for option in ("--smoke-test", "--library-root", "--smoke-output", "--smoke-pdf"):
             self.assertIn(option, self.app_code)
         self.assertIn('"lattice-smoke.json"', self.app_code)
         self.assertIn('"lattice-webview.png"', self.app_code)
+        self.assertIn('"lattice-pdf-reader.png"', self.app_code)
         self.assertIn("TimeSpan.FromSeconds(50)", self.window_code)
         self.assertIn("CapturePreviewAsync", self.window_code)
         self.assertIn("CoreWebView2CapturePreviewImageFormat.Png", self.window_code)
@@ -147,7 +148,22 @@ class WindowsNativeShellTests(unittest.TestCase):
         self.assertIn('document.getElementById("libraryGrid")', self.window_code)
         self.assertIn('brand === "Lattice"', self.window_code)
         self.assertIn("hasNativeAddBridge", self.window_code)
+        self.assertIn("WaitForPdfReaderAsync", self.window_code)
+        self.assertIn("WaitForPdfShelfReturnAsync", self.window_code)
+        self.assertIn('getElementById("closeButton")', self.window_code)
+        self.assertIn("ShelfReturnWorked", self.window_code)
         self.assertIn("Application.Current.Shutdown(exitCode);", self.window_code)
+
+    def test_pdf_reader_can_request_true_native_fullscreen(self) -> None:
+        named_element(self.window_tree, "TopChromeRow")
+        self.assertIn("ContainsFullScreenElementChanged", self.window_code)
+        self.assertIn("ContainsFullScreenElement", self.window_code)
+        self.assertIn("SetWebContentFullscreen", self.window_code)
+        self.assertIn("TopChrome.Visibility = Visibility.Collapsed", self.window_code)
+        self.assertIn("TopChromeRow.Height = new GridLength(0)", self.window_code)
+        self.assertIn("WindowStyle = WindowStyle.None", self.window_code)
+        self.assertIn("ResizeMode = ResizeMode.NoResize", self.window_code)
+        self.assertIn("|| _webContentFullscreen", self.window_code)
 
     def test_native_caption_customization_keeps_high_contrast_system_chrome(self) -> None:
         self.assertIn("DwmSetWindowAttribute", self.app_code)

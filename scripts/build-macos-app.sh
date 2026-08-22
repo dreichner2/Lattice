@@ -39,7 +39,22 @@ for source in $required_sources; do
     exit 1
   fi
 done
-for resource in "$native_root/ImmersiveEPUB.js" "$native_root/LibraryWorkspace.js" "$native_root/Info.plist" "$server_source" "$ui_root/index.html" "$ui_root/app.js" "$ui_root/styles.css"; do
+for resource in \
+  "$native_root/ImmersiveEPUB.js" \
+  "$native_root/LibraryWorkspace.js" \
+  "$native_root/Info.plist" \
+  "$server_source" \
+  "$ui_root/index.html" \
+  "$ui_root/app.js" \
+  "$ui_root/styles.css" \
+  "$ui_root/pdf-reader.html" \
+  "$ui_root/pdf-reader.css" \
+  "$ui_root/pdf-reader.js" \
+  "$ui_root/vendor/pdfjs/LICENSE" \
+  "$ui_root/vendor/pdfjs/build/pdf.min.mjs" \
+  "$ui_root/vendor/pdfjs/build/pdf.worker.min.mjs" \
+  "$ui_root/vendor/pdfjs/web/pdf_viewer.mjs" \
+  "$ui_root/vendor/pdfjs/web/pdf_viewer.css"; do
   if [[ ! -f "$resource" ]]; then
     print -u2 "Missing app resource: $resource"
     exit 1
@@ -102,6 +117,9 @@ for bundled in \
   "$staged_app/Contents/MacOS/Lattice" \
   "$staged_app/Contents/Resources/ui/index.html" \
   "$staged_app/Contents/Resources/ui/app.js" \
+  "$staged_app/Contents/Resources/ui/pdf-reader.html" \
+  "$staged_app/Contents/Resources/ui/pdf-reader.js" \
+  "$staged_app/Contents/Resources/ui/vendor/pdfjs/build/pdf.min.mjs" \
   "$staged_app/Contents/Resources/server/library_ui.py" \
   "$staged_app/Contents/Resources/ImmersiveEPUB.js" \
   "$staged_app/Contents/Resources/LibraryWorkspace.js"; do
