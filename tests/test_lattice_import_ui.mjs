@@ -9,6 +9,7 @@ const MAC_APP = fs.readFileSync(new URL("../native/CSLibraryApp.swift", import.m
 const MAC_BRIDGE = fs.readFileSync(new URL("../native/ReaderBridge.swift", import.meta.url), "utf8");
 const MAC_BUILD = fs.readFileSync(new URL("../scripts/build-macos-app.sh", import.meta.url), "utf8");
 const MAC_UPDATE = fs.readFileSync(new URL("../native/MacUpdateChecker.swift", import.meta.url), "utf8");
+const MAC_INSTALLER = fs.readFileSync(new URL("../native/MacUpdateInstaller.swift", import.meta.url), "utf8");
 const PDF_HTML = fs.readFileSync(new URL("../ui/pdf-reader.html", import.meta.url), "utf8");
 const PDF_READER = fs.readFileSync(new URL("../ui/pdf-reader.js", import.meta.url), "utf8");
 const PDF_STYLES = fs.readFileSync(new URL("../ui/pdf-reader.css", import.meta.url), "utf8");
@@ -101,10 +102,29 @@ test("desktop apps expose native actions in the inline header menu", () => {
   assert.match(MAC_BRIDGE, /case "app\.checkForUpdates", "app\.moveLibrary":/);
   assert.match(MAC_APP, /"version": self\?\.installedAppVersion\(\)/);
   assert.doesNotMatch(MAC_APP, /NSTitlebarAccessoryViewController/);
-  assert.match(MAC_UPDATE, /releases\/latest/);
+  assert.match(MAC_UPDATE, /releases\/latest\/download\/update-manifest\.json/);
+  assert.match(MAC_UPDATE, /SecKeyVerifySignature/);
   assert.match(MAC_UPDATE, /Lattice-macOS\.zip/);
   assert.match(MAC_UPDATE, /github\.com/);
+  assert.match(MAC_APP, /addButton\(withTitle: "Install Update"\)/);
+  assert.match(MAC_APP, /Darwin\.kill\(reportedParentPID, 0\) == 0/);
+  assert.match(MAC_APP, /"--no-browser",\s*"--isolated"/);
+  assert.match(MAC_APP, /locateRunningLibrary\(requireCurrentParent: true\)/);
+  assert.match(MAC_INSTALLER, /\/Applications\/Lattice\.app/);
+  assert.match(MAC_INSTALLER, /archiveDigestMismatch/);
+  assert.match(MAC_INSTALLER, /codesign/);
+  assert.match(MAC_INSTALLER, /candidateDidNotBecomeHealthy/);
+  assert.match(MAC_INSTALLER, /moveItem\(at: backup, to: plan\.targetApplication\)/);
+  assert.match(MAC_INSTALLER, /helper-plan\.json/);
+  assert.match(MAC_INSTALLER, /candidate-activation\.json/);
+  assert.match(MAC_INSTALLER, /guard arguments\.count == 3,[\s\S]*?arguments\[1\] == candidateFlag/);
+  assert.match(MAC_INSTALLER, /process\.arguments = \[helperFlag, prepared\.operationID\]/);
+  assert.match(MAC_INSTALLER, /arguments: \[candidateFlag, plan\.operationID\]/);
+  assert.doesNotMatch(MAC_INSTALLER, /process\.arguments = \[helperFlag[^\n]*prepared\.token/);
+  assert.doesNotMatch(MAC_INSTALLER, /arguments: \[candidateFlag[^\n]*plan\.token/);
   assert.match(MAC_BUILD, /MacUpdateChecker\.swift/);
+  assert.match(MAC_BUILD, /MacUpdateInstaller\.swift/);
+  assert.match(MAC_BUILD, /-framework Security/);
 });
 
 test("metadata editing sends the supported fields", () => {

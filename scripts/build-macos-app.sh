@@ -29,6 +29,7 @@ required_sources=(
   ReaderStore.swift
   ReaderBridge.swift
   MacUpdateChecker.swift
+  MacUpdateInstaller.swift
   CSLibraryApp.swift
   ImmersiveReaderCoordinator.swift
   NativePDFReaderController.swift
@@ -80,6 +81,7 @@ target_arch=$(/usr/bin/uname -m)
   -framework AppKit \
   -framework CryptoKit \
   -framework PDFKit \
+  -framework Security \
   -framework WebKit \
   -lsqlite3 \
   "$native_root/ReaderModels.swift" \
@@ -87,6 +89,7 @@ target_arch=$(/usr/bin/uname -m)
   "$native_root/ReaderStore.swift" \
   "$native_root/ReaderBridge.swift" \
   "$native_root/MacUpdateChecker.swift" \
+  "$native_root/MacUpdateInstaller.swift" \
   "$native_root/CSLibraryApp.swift" \
   "$native_root/ImmersiveReaderCoordinator.swift" \
   "$native_root/NativePDFReaderController.swift" \

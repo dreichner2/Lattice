@@ -1376,7 +1376,7 @@ def _epub_url(
     if reader_document:
         url += f"?reader={EPUB_RENDERER_VERSION}"
     if fragment:
-        url += f"#{urllib.parse.quote(fragment, safe='-._~!$&\'()*+,;=:@/?')}"
+        url += "#" + urllib.parse.quote(fragment, safe="-._~!$&'()*+,;=:@/?")
     return url
 
 
@@ -3008,6 +3008,7 @@ class LibraryHTTPServer(ThreadingHTTPServer):
                 "app": "cs-library",
                 "protocolVersion": PROTOCOL_VERSION,
                 "libraryId": self.library_id,
+                "parentPid": self.parent_pid,
                 "root": str(self.root),
                 "status": "ok",
                 "revision": self.revision,
@@ -3629,15 +3630,17 @@ def run_server(
     ui_root: Path | None = None,
     parent_pid: int | None = None,
     open_browser: bool = True,
+    reuse_running: bool = True,
 ) -> int:
     candidates = [port] if port == 0 else list(range(port, min(port + 20, 65536)))
     expected_library_id = library_identity(root)
-    for candidate in candidates:
-        if candidate and (running_url := find_running_library(candidate, expected_library_id)):
-            print(f"Lattice is already running at {running_url}")
-            if open_browser:
-                webbrowser.open(running_url)
-            return 0
+    if reuse_running:
+        for candidate in candidates:
+            if candidate and (running_url := find_running_library(candidate, expected_library_id)):
+                print(f"Lattice is already running at {running_url}")
+                if open_browser:
+                    webbrowser.open(running_url)
+                return 0
 
     server: LibraryHTTPServer | None = None
     for candidate in candidates:
@@ -3675,6 +3678,7 @@ def build_parser() -> argparse.ArgumentParser:
     parser.add_argument("--root", type=Path, default=REPO_ROOT, help="Lattice content root")
     parser.add_argument("--ui-root", type=Path, default=None, help="Bundled UI resource directory")
     parser.add_argument("--parent-pid", type=int, default=None, help="Exit when this parent process exits")
+    parser.add_argument("--isolated", action="store_true", help="Own a new server process instead of reusing one")
     parser.add_argument("--no-browser", action="store_true", help="Do not open a browser")
     return parser
 
@@ -3694,6 +3698,7 @@ def main(argv: list[str] | None = None) -> int:
             ui_root=args.ui_root,
             parent_pid=args.parent_pid,
             open_browser=not args.no_browser,
+            reuse_running=not args.isolated,
         )
     except (OSError, ValueError) as exc:
         print(str(exc), file=sys.stderr)

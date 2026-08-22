@@ -52,9 +52,13 @@ Python 3 is currently required to run the loopback library service.
 
 The three-dot button sits inline with the library header controls, shows the installed version, and
 provides **Check for Updates…** and **Move Library to External Storage…**. The
-update check accepts only a stable release from the canonical Lattice GitHub
-repository that includes the expected `Lattice-macOS.zip`; available updates
-open their exact release page for download.
+update check verifies Lattice's RSA-signed release manifest before trusting the
+version or `Lattice-macOS.zip`. When the app is installed at
+`/Applications/Lattice.app`, **Install Update** downloads the exact signed size
+and SHA-256, validates the app bundle, replaces it, and reopens Lattice. The old
+bundle remains available for rollback until the updated shelf loads
+successfully. Development copies elsewhere continue to offer the exact release
+page instead of replacing themselves.
 
 ### PDF reading
 
@@ -400,6 +404,7 @@ bash -n scripts/build-macos-app.sh
 The macOS workflow additionally:
 
 - compiles and exercises the SQLite reader store;
+- verifies signed-update parsing, bundle validation, and candidate health markers;
 - compiles the full AppKit/PDFKit application;
 - validates bundled resources and `Info.plist`;
 - verifies the ad-hoc code signature; and

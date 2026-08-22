@@ -74,6 +74,28 @@ Reader databases remain in their existing per-user application-support paths;
 they are not moved or synchronized. The helper never edits `config.xml`, stores
 the Syncthing API key, or sends it beyond the configured loopback endpoint.
 
+## macOS direct updates
+
+`MacUpdateChecker` downloads the same fixed, RSA-signed release manifest used
+by Windows and selects the version-pinned `macos-arm64` asset. The manifest
+authorizes the exact GitHub URL, size, and SHA-256 before `MacUpdateInstaller`
+downloads or extracts code.
+
+Direct replacement is enabled only for `/Applications/Lattice.app`. The app
+stages the update in a private per-user directory, rejects linked or special
+files, validates the bundle identifier, version, arm64 executable, and strict
+code-signature consistency, then launches its existing executable in helper
+mode. After the current process exits, the helper re-verifies the signed
+manifest and archive, preserves the old bundle under a collision-safe hidden
+name, installs the candidate, and launches it with an operation-bound private
+activation record.
+The token lives only in private mode-0600 operation records; process arguments
+contain an opaque operation ID. The candidate writes its token-bound health
+marker only after the local service and shared shelf finish loading. A missing
+marker or early exit restores and relaunches the previous bundle; the library
+folder, Syncthing configuration, and reader database are outside this
+transaction.
+
 ## Product identity and compatibility IDs
 
 **Lattice** is the visible product and Syncthing label. Existing internal

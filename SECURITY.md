@@ -80,6 +80,34 @@ SmartScreen or Smart App Control may warn or block it based on local policy and
 reputation. Users must not be told to disable or bypass Windows protections to
 install Lattice.
 
+### macOS updater
+
+- Direct installation is enabled only when the running bundle is exactly
+  `/Applications/Lattice.app` and its parent directory is writable. Repository
+  builds and copies at other paths never replace themselves.
+- The app downloads the same fixed `update-manifest.json` and signature used by
+  Windows, verifies the RSA-3072 signature before parsing it, and accepts only
+  a strictly newer stable release with an exact version-pinned
+  `macos-arm64` GitHub URL, signed size, and SHA-256.
+- Downloads are staged under the current user's Application Support directory.
+  The extracted archive must contain exactly one `Lattice.app`; symbolic links,
+  special files, excessive file counts or bytes, the wrong bundle identifier or
+  version, a non-arm64 executable, and invalid code-signature structure are
+  rejected.
+- A helper mode in the already-running executable waits for the old process to
+  exit, then re-verifies the signed manifest and archive before replacement.
+  The existing bundle is moved to a collision-safe backup rather than deleted.
+- The candidate must launch from the installed path and write an
+  operation-token and PID-bound health marker only after the loopback service
+  and shared shelf load. Tokens stay in mode-0600 operation records and are
+  never placed in helper or candidate process arguments. An early exit or
+  90-second timeout terminates the candidate, restores the previous bundle,
+  and relaunches it.
+- The macOS archive is currently ad-hoc signed. That signature proves bundle
+  consistency, not Developer ID identity; release authorization comes from the
+  separately verified manifest signature and archive digest. The updater never
+  modifies the selected library, Syncthing configuration, or reader database.
+
 ### Storage relocation
 
 - Move Library requires the current Syncthing folder to match the exact stable
@@ -121,6 +149,7 @@ Release operators build and sign exact artifacts with the checked-in helpers:
 python3 scripts/build_update_manifest.py \
   --version X.Y.Z \
   --archive artifacts/Lattice-Windows-win-x64.zip \
+  --macos-archive artifacts/Lattice-macOS.zip \
   --published-at YYYY-MM-DDTHH:MM:SSZ \
   --output update-manifest.json
 
@@ -204,8 +233,9 @@ possibly compromised key to authorize its own replacement.
   authenticated session, model availability, and OpenAI service connectivity.
 - Ad-hoc signing verifies bundle consistency but is not Developer ID
   notarization.
-- Windows update-manifest signing verifies release authorization inside
-  Lattice but is not Authenticode signing or Microsoft reputation.
+- Desktop update-manifest signing verifies release authorization inside
+  Lattice but is neither Windows Authenticode nor Apple Developer ID signing
+  and does not create platform reputation.
 - Imported books may have restrictive copyright or machine-processing terms;
   access rights are tracked separately from software security.
 

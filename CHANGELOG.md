@@ -1,5 +1,15 @@
 # Changelog
 
+## Unreleased
+
+### Added
+
+- Direct in-app macOS updates from `/Applications/Lattice.app`. Lattice now
+  verifies the shared RSA-signed release manifest and exact macOS ZIP digest,
+  stages and validates the bundle, preserves the installed version, relaunches
+  the candidate, and automatically rolls back unless the updated shelf becomes
+  healthy.
+
 ## 2.2.0 — 2026-08-22
 
 ### Added

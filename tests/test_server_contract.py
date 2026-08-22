@@ -63,11 +63,12 @@ class ServerContractTests(unittest.TestCase):
 
     def test_cli_accepts_native_app_lifecycle_arguments(self) -> None:
         args = library_ui.build_parser().parse_args([
-            "--root", str(self.root), "--ui-root", str(self.ui), "--parent-pid", "42", "--port", "0", "--no-browser",
+            "--root", str(self.root), "--ui-root", str(self.ui), "--parent-pid", "42", "--port", "0", "--no-browser", "--isolated",
         ])
         self.assertEqual(args.root, self.root)
         self.assertEqual(args.ui_root, self.ui)
         self.assertEqual(args.parent_pid, 42)
+        self.assertTrue(args.isolated)
 
     def test_server_rejects_a_library_missing_its_required_taxonomy(self) -> None:
         with tempfile.TemporaryDirectory() as temporary_name:

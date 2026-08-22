@@ -13,9 +13,14 @@ from pathlib import Path
 
 
 SEMVER_RE = re.compile(r"^(0|[1-9][0-9]*)\.(0|[1-9][0-9]*)\.(0|[1-9][0-9]*)$")
+UTC_TIMESTAMP_RE = re.compile(r"^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}Z$")
 REPOSITORY = "dreichner2/Lattice"
-PLATFORM = "windows-x64"
-ASSET_NAME = "Lattice-Windows-win-x64.zip"
+WINDOWS_PLATFORM = "windows-x64"
+MACOS_ARM64_PLATFORM = "macos-arm64"
+WINDOWS_ASSET_NAME = "Lattice-Windows-win-x64.zip"
+MACOS_ASSET_NAME = "Lattice-macOS.zip"
+# Backward-compatible import used by existing release tests and tooling.
+ASSET_NAME = WINDOWS_ASSET_NAME
 MAXIMUM_ASSET_SIZE = 1_073_741_824
 
 
@@ -47,18 +52,15 @@ def build_manifest(
     *,
     version: str,
     archive: Path,
+    macos_archive: Path | None = None,
     published_at: str,
     repository: str = REPOSITORY,
 ) -> dict[str, object]:
     version = stable_version(version)
-    archive = archive.resolve()
     if repository != REPOSITORY:
         raise ValueError(f"repository must be exactly {REPOSITORY}")
-    if not archive.is_file() or archive.name != ASSET_NAME:
-        raise ValueError(f"archive must be an existing file named {ASSET_NAME}")
-    size = archive.stat().st_size
-    if size <= 0 or size > MAXIMUM_ASSET_SIZE:
-        raise ValueError("archive size is outside the updater safety limit")
+    if not UTC_TIMESTAMP_RE.fullmatch(published_at):
+        raise ValueError("published_at must use whole-second UTC ISO-8601 form")
     try:
         timestamp = datetime.fromisoformat(published_at.replace("Z", "+00:00"))
     except ValueError as error:
@@ -67,22 +69,42 @@ def build_manifest(
         raise ValueError("published_at must be UTC")
 
     tag = f"v{version}"
+    archives = [
+        AssetInput(WINDOWS_PLATFORM, archive.resolve()),
+    ]
+    if macos_archive is not None:
+        archives.append(AssetInput(MACOS_ARM64_PLATFORM, macos_archive.resolve()))
+
+    expected_names = {
+        WINDOWS_PLATFORM: WINDOWS_ASSET_NAME,
+        MACOS_ARM64_PLATFORM: MACOS_ASSET_NAME,
+    }
+    assets: dict[str, dict[str, object]] = {}
+    for candidate in archives:
+        expected_name = expected_names[candidate.platform]
+        if not candidate.path.is_file() or candidate.path.name != expected_name:
+            raise ValueError(
+                f"{candidate.platform} archive must be an existing file named {expected_name}"
+            )
+        size = candidate.path.stat().st_size
+        if size <= 0 or size > MAXIMUM_ASSET_SIZE:
+            raise ValueError(f"{candidate.platform} archive size is outside the updater safety limit")
+        assets[candidate.platform] = {
+            "url": (
+                f"https://github.com/{repository}/releases/download/"
+                f"{tag}/{expected_name}"
+            ),
+            "sha256": sha256_file(candidate.path),
+            "size": size,
+        }
+
     return {
         "schemaVersion": 2,
         "repository": repository,
         "releaseVersion": version,
         "releaseTag": tag,
         "publishedAt": published_at,
-        "assets": {
-            PLATFORM: {
-                "url": (
-                    f"https://github.com/{repository}/releases/download/"
-                    f"{tag}/{ASSET_NAME}"
-                ),
-                "sha256": sha256_file(archive),
-                "size": size,
-            }
-        },
+        "assets": assets,
     }
 
 
@@ -90,6 +112,7 @@ def main(argv: list[str] | None = None) -> int:
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--version", required=True)
     parser.add_argument("--archive", type=Path, required=True)
+    parser.add_argument("--macos-archive", type=Path, required=True)
     parser.add_argument("--published-at", required=True)
     parser.add_argument("--repository", default=REPOSITORY)
     parser.add_argument("--output", type=Path, required=True)
@@ -98,6 +121,7 @@ def main(argv: list[str] | None = None) -> int:
     manifest = build_manifest(
         version=args.version,
         archive=args.archive,
+        macos_archive=args.macos_archive,
         published_at=args.published_at,
         repository=args.repository,
     )

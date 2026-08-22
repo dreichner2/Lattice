@@ -46,10 +46,22 @@ jobs:
       - name: Validate macOS update checker
         run: |
           swiftc -O \
+            -framework Security \
             native/MacUpdateChecker.swift \
             tests/MacUpdateCheckerSmoke.swift \
             -o /tmp/mac-update-checker-smoke
           /tmp/mac-update-checker-smoke
+
+      - name: Validate direct macOS update installer
+        run: |
+          swiftc -O \
+            -framework CryptoKit \
+            -framework Security \
+            native/MacUpdateChecker.swift \
+            native/MacUpdateInstaller.swift \
+            tests/MacUpdateInstallerSmoke.swift \
+            -o /tmp/mac-update-installer-smoke
+          /tmp/mac-update-installer-smoke
 
       - name: Build and verify Lattice.app
         run: |

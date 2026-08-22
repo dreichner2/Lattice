@@ -1,4 +1,5 @@
 import AppKit
+import Darwin
 import Foundation
 import UniformTypeIdentifiers
 import WebKit
@@ -27,6 +28,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, WKNavigationDelegate, 
     private var libraryMoveInProgress = false
     private var updateCheckInProgress = false
     private var updateCheckTask: Task<Void, Never>?
+    private var updateActivation = MacUpdateInstaller.activation()
 
     func applicationDidFinishLaunching(_ notification: Notification) {
         NSApp.setActivationPolicy(.regular)
@@ -239,6 +241,10 @@ final class AppDelegate: NSObject, NSApplicationDelegate, WKNavigationDelegate, 
     // MARK: Server lifecycle
 
     private func connectToLibrary() {
+        if updateActivation != nil {
+            startLibraryServer()
+            return
+        }
         locateRunningLibrary { [weak self] url in
             guard let self else { return }
             if let url { self.loadLibrary(at: url) }
@@ -246,7 +252,10 @@ final class AppDelegate: NSObject, NSApplicationDelegate, WKNavigationDelegate, 
         }
     }
 
-    private func locateRunningLibrary(completion: @escaping (URL?) -> Void) {
+    private func locateRunningLibrary(
+        requireCurrentParent: Bool = false,
+        completion: @escaping (URL?) -> Void
+    ) {
         let group = DispatchGroup()
         let lock = NSLock()
         var available = Set<Int>()
@@ -262,7 +271,16 @@ final class AppDelegate: NSObject, NSApplicationDelegate, WKNavigationDelegate, 
                       let json = try? JSONSerialization.jsonObject(with: data) as? [String: Any],
                       json["app"] as? String == "cs-library",
                       json["protocolVersion"] as? Int == LibraryIdentity.protocolVersion,
-                      json["libraryId"] as? String == expectedLibraryID else { return }
+                      json["libraryId"] as? String == expectedLibraryID
+                else { return }
+                if requireCurrentParent {
+                    guard json["parentPid"] as? Int
+                        == Int(ProcessInfo.processInfo.processIdentifier) else { return }
+                } else if let reportedParent = json["parentPid"] as? Int {
+                    guard let reportedParentPID = Int32(exactly: reportedParent),
+                          reportedParentPID > 1,
+                          Darwin.kill(reportedParentPID, 0) == 0 else { return }
+                }
                 lock.lock(); available.insert(port); lock.unlock()
             }.resume()
         }
@@ -309,7 +327,8 @@ final class AppDelegate: NSObject, NSApplicationDelegate, WKNavigationDelegate, 
                 "--ui-root", uiRoot.path,
                 "--parent-pid", String(ProcessInfo.processInfo.processIdentifier),
                 "--port", String(preferredPort),
-                "--no-browser"
+                "--no-browser",
+                "--isolated"
             ]
             process.currentDirectoryURL = libraryRoot
             process.standardOutput = log
@@ -351,7 +370,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, WKNavigationDelegate, 
     }
 
     private func waitForStartedServer(attempt: Int) {
-        locateRunningLibrary { [weak self] url in
+        locateRunningLibrary(requireCurrentParent: true) { [weak self] url in
             guard let self else { return }
             if let url { self.loadLibrary(at: url); return }
             guard attempt < 32 else {
@@ -421,6 +440,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, WKNavigationDelegate, 
 
     func webView(_ webView: WKWebView, didFinish navigation: WKNavigation!) {
         webInterfaceReady = true
+        completeUpdateActivationIfNeeded()
         if pendingAddMaterials {
             pendingAddMaterials = false
             showAddMaterialsDialog()
@@ -972,7 +992,12 @@ final class AppDelegate: NSObject, NSApplicationDelegate, WKNavigationDelegate, 
             do {
                 let result = try await MacUpdateChecker.check(installedVersion: installedVersion)
                 try Task.checkCancellation()
-                self.presentUpdateCheckResult(result, installedVersion: installedVersion)
+                if case .install(let release) = self.presentUpdateCheckResult(
+                    result,
+                    installedVersion: installedVersion
+                ) {
+                    try await self.installUpdate(release)
+                }
             } catch is CancellationError {
                 // The app is closing.
             } catch {
@@ -984,10 +1009,15 @@ final class AppDelegate: NSObject, NSApplicationDelegate, WKNavigationDelegate, 
         }
     }
 
+    private enum UpdatePromptAction {
+        case dismiss
+        case install(ValidatedMacRelease)
+    }
+
     private func presentUpdateCheckResult(
         _ result: MacUpdateCheckResult,
         installedVersion: String
-    ) {
+    ) -> UpdatePromptAction {
         let alert = NSAlert()
         switch result {
         case .current(let release):
@@ -996,24 +1026,95 @@ final class AppDelegate: NSObject, NSApplicationDelegate, WKNavigationDelegate, 
             alert.addButton(withTitle: "OK")
         case .available(let release):
             alert.messageText = "Lattice \(release.version) is available"
-            alert.informativeText = """
-            Installed: \(installedVersion)
-            Latest: \(release.version)
+            if MacUpdateInstaller.isAutomaticUpdateSupported() {
+                alert.informativeText = """
+                Installed: \(installedVersion)
+                Latest: \(release.version)
 
-            The verified Lattice repository release includes Lattice-macOS.zip. Open the release page to download it.
-            """
-            alert.addButton(withTitle: "View Release")
-            alert.addButton(withTitle: "Later")
-            if alert.runModal() == .alertFirstButtonReturn {
-                NSWorkspace.shared.open(release.releaseURL)
+                Lattice will download the signed update, verify its exact bytes, replace the app, and reopen. The current app is preserved unless the updated version starts successfully.
+                """
+                alert.addButton(withTitle: "Install Update")
+                alert.addButton(withTitle: "Later")
+                alert.addButton(withTitle: "View Release")
+                let response = alert.runModal()
+                if response == .alertFirstButtonReturn { return .install(release) }
+                if response == .alertThirdButtonReturn {
+                    NSWorkspace.shared.open(release.releaseURL)
+                }
+            } else {
+                alert.informativeText = """
+                Installed: \(installedVersion)
+                Latest: \(release.version)
+
+                Direct updates require Lattice at /Applications/Lattice.app. Open the release page to update this copy manually.
+                """
+                alert.addButton(withTitle: "View Release")
+                alert.addButton(withTitle: "Later")
+                if alert.runModal() == .alertFirstButtonReturn {
+                    NSWorkspace.shared.open(release.releaseURL)
+                }
             }
-            return
+            return .dismiss
         case .developmentBuild(let installed, let latest):
             alert.messageText = "This Lattice build is newer"
             alert.informativeText = "Installed version \(installed) is newer than the latest published release, \(latest.version)."
             alert.addButton(withTitle: "OK")
         }
         alert.runModal()
+        return .dismiss
+    }
+
+    private func installUpdate(_ release: ValidatedMacRelease) async throws {
+        let progressAlert = NSAlert()
+        progressAlert.messageText = "Installing Lattice \(release.version)"
+        progressAlert.informativeText = "Downloading and verifying the signed macOS update. Keep Lattice open."
+        progressAlert.addButton(withTitle: "Cancel")
+        let indicator = NSProgressIndicator(frame: NSRect(x: 0, y: 0, width: 280, height: 18))
+        indicator.style = .bar
+        indicator.isIndeterminate = true
+        indicator.startAnimation(nil)
+        progressAlert.accessoryView = indicator
+        progressAlert.beginSheetModal(for: window) { [weak self] response in
+            if response == .alertFirstButtonReturn {
+                self?.updateCheckTask?.cancel()
+            }
+        }
+
+        do {
+            let prepared = try await MacUpdateInstaller.prepare(release: release)
+            try Task.checkCancellation()
+            indicator.stopAnimation(nil)
+            if window.attachedSheet === progressAlert.window {
+                window.endSheet(progressAlert.window, returnCode: .OK)
+            }
+            try MacUpdateInstaller.launchHelper(for: prepared)
+            NSApp.terminate(nil)
+        } catch {
+            indicator.stopAnimation(nil)
+            if window.attachedSheet === progressAlert.window {
+                window.endSheet(progressAlert.window, returnCode: .OK)
+            }
+            throw error
+        }
+    }
+
+    private func completeUpdateActivationIfNeeded() {
+        guard let activation = updateActivation else { return }
+        do {
+            try MacUpdateInstaller.markCandidateHealthy(
+                activation,
+                version: installedAppVersion()
+            )
+            updateActivation = nil
+            let alert = NSAlert()
+            alert.messageText = "Lattice was updated"
+            alert.informativeText = "Version \(installedAppVersion()) is installed and ready."
+            alert.addButton(withTitle: "Continue")
+            alert.beginSheetModal(for: window)
+        } catch {
+            updateActivation = nil
+            NSApp.terminate(nil)
+        }
     }
 
     private func installedAppVersion() -> String {
@@ -1114,6 +1215,9 @@ final class AppDelegate: NSObject, NSApplicationDelegate, WKNavigationDelegate, 
 @main
 struct CSLibraryApplication {
     static func main() {
+        if let status = MacUpdateInstaller.runHelperIfRequested() {
+            Darwin.exit(status)
+        }
         let application = NSApplication.shared
         let delegate = AppDelegate()
         application.delegate = delegate
