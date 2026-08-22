@@ -154,7 +154,7 @@ jobs:
             for ($attempt = 0; $attempt -lt 80 -and -not $url; $attempt++) {
               Start-Sleep -Milliseconds 250
               if (Test-Path $stdout) {
-                $text = Get-Content $stdout -Raw
+                $text = [string](Get-Content $stdout -Raw)
                 $match = [regex]::Match(
                   $text,
                   "(?:Lattice|Shared Library|CS Library) is (?:ready:|already running at )(?<url>http://127\.0\.0\.1:\d+)"
