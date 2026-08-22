@@ -1,6 +1,6 @@
 [CmdletBinding(SupportsShouldProcess = $true, ConfirmImpact = "Medium")]
 param(
-    [string]$LibraryRoot = (Split-Path -Parent (Split-Path -Parent $PSScriptRoot)),
+    [string]$LibraryRoot,
     [string]$LatticePackagePath,
     [string]$LatticeVersion = "v2.0.0",
     [string]$InstallDestination,
@@ -14,6 +14,12 @@ param(
 )
 
 $ErrorActionPreference = "Stop"
+if ([string]::IsNullOrWhiteSpace($LibraryRoot)) {
+    # Windows PowerShell 5.1 does not reliably populate $PSScriptRoot while
+    # parameter default expressions are being evaluated. Resolve the clone
+    # root from the script location only after parameter binding completes.
+    $LibraryRoot = [IO.Path]::GetFullPath((Join-Path $PSScriptRoot "..\.."))
+}
 $modulePath = Join-Path $PSScriptRoot "LatticeWindowsSetup.psm1"
 Import-Module $modulePath -Force
 

@@ -27,7 +27,17 @@ class WindowsOnboardingSetupTests(unittest.TestCase):
         cls.workflow = WORKFLOW.read_text(encoding="utf-8")
 
     def test_entry_defaults_to_clone_root_and_pinned_release(self) -> None:
-        self.assertIn("Split-Path -Parent (Split-Path -Parent $PSScriptRoot)", self.entry)
+        parameter_block = self.entry.split('$ErrorActionPreference = "Stop"', 1)[0]
+        self.assertNotIn("$PSScriptRoot", parameter_block)
+        self.assertIn(
+            'if ([string]::IsNullOrWhiteSpace($LibraryRoot))',
+            self.entry,
+        )
+        self.assertIn(
+            '$LibraryRoot = [IO.Path]::GetFullPath((Join-Path $PSScriptRoot "..\\.."))',
+            self.entry,
+        )
+        self.assertIn('-LibraryRoot "%~dp0..\\.."', self.launcher)
         self.assertRegex(self.entry, r'\$LatticeVersion\s*=\s*"v2\.0\.0"')
         self.assertIn("-PlanOnly", self.guide)
         self.assertIn("Lattice-Windows-win-x64.zip", self.module)
@@ -145,8 +155,6 @@ class WindowsOnboardingSetupTests(unittest.TestCase):
                 "-NoProfile",
                 "-File",
                 str(ENTRY),
-                "-LibraryRoot",
-                str(ROOT),
                 "-PlanOnly",
             ],
             cwd=ROOT,

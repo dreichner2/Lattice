@@ -1,7 +1,7 @@
 @echo off
 setlocal
 cd /d "%~dp0\..\.."
-powershell.exe -NoLogo -NoProfile -ExecutionPolicy Bypass -File "%~dp0Setup-LatticeWindows.ps1"
+powershell.exe -NoLogo -NoProfile -ExecutionPolicy Bypass -File "%~dp0Setup-LatticeWindows.ps1" -LibraryRoot "%~dp0..\.."
 set "lattice_setup_exit=%ERRORLEVEL%"
 echo.
 if not "%lattice_setup_exit%"=="0" (

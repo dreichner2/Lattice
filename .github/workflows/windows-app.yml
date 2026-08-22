@@ -136,7 +136,6 @@ jobs:
             $arguments = @(
               "-NoLogo", "-NoProfile", "-ExecutionPolicy", "Bypass",
               "-File", $entry,
-              "-LibraryRoot", $libraryRoot,
               "-LatticePackagePath", $package,
               "-InstallDestination", $installDestination,
               "-SyncthingExecutable", $syncthing.FullName,
