@@ -147,7 +147,7 @@ internal enum UpdateVersionRejection
 
 internal sealed class UpdateVersionRejectedException(
     UpdateVersionRejection reason,
-    string message) : InvalidDataException(message)
+    string message) : IOException(message)
 {
     public UpdateVersionRejection Reason { get; } = reason;
 }
