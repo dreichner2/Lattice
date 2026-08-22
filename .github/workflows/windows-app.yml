@@ -131,6 +131,11 @@ jobs:
           $stdout = Join-Path $env:RUNNER_TEMP "lattice-server.stdout.log"
           $stderr = Join-Path $env:RUNNER_TEMP "lattice-server.stderr.log"
           $state = Join-Path $env:RUNNER_TEMP "lattice-reader-state.sqlite3"
+          $listener = [System.Net.Sockets.TcpListener]::new([System.Net.IPAddress]::Loopback, 0)
+          $listener.Start()
+          $port = ([System.Net.IPEndPoint]$listener.LocalEndpoint).Port
+          $listener.Stop()
+          $url = "http://127.0.0.1:$port"
           $parent = $null
           $server = $null
           try {
@@ -142,7 +147,7 @@ jobs:
                 "--root", $libraryRoot,
                 "--ui-root", (Join-Path $package "ui"),
                 "--state-db", $state,
-                "--port", "0",
+                "--port", $port.ToString(),
                 "--parent-pid", $parent.Id.ToString(),
                 "--no-browser"
               ) `
@@ -150,26 +155,25 @@ jobs:
               -RedirectStandardError $stderr `
               -PassThru
 
-            $url = $null
-            for ($attempt = 0; $attempt -lt 80 -and -not $url; $attempt++) {
+            $health = $null
+            for ($attempt = 0; $attempt -lt 80 -and -not $health; $attempt++) {
               Start-Sleep -Milliseconds 250
-              if (Test-Path $stdout) {
-                $text = [string](Get-Content $stdout -Raw)
-                $match = [regex]::Match(
-                  $text,
-                  "(?:Lattice|Shared Library|CS Library) is (?:ready:|already running at )(?<url>http://127\.0\.0\.1:\d+)"
-                )
-                if ($match.Success) { $url = $match.Groups["url"].Value }
+              try {
+                $health = Invoke-RestMethod "$url/api/health" -TimeoutSec 2
+              } catch {
+                $health = $null
               }
               $server.Refresh()
-              if ($server.HasExited -and -not $url) {
+              if ($server.HasExited -and -not $health) {
                 $detail = if (Test-Path $stderr) { Get-Content $stderr -Raw } else { "" }
                 throw "Packaged server exited before readiness: $detail"
               }
             }
-            if (-not $url) { throw "Packaged server did not report readiness" }
-
-            $health = Invoke-RestMethod "$url/api/health" -TimeoutSec 5
+            if (-not $health) {
+              $output = if (Test-Path $stdout) { [string](Get-Content $stdout -Raw) } else { "" }
+              $detail = if (Test-Path $stderr) { [string](Get-Content $stderr -Raw) } else { "" }
+              throw "Packaged server did not become healthy. stdout: $output stderr: $detail"
+            }
             if ($health.status -ne "ok") { throw "Unexpected health status: $($health.status)" }
             if (-not [string]::Equals(
               [IO.Path]::GetFullPath([string]$health.root),
