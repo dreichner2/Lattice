@@ -9,6 +9,26 @@ struct MacUpdateInstallerSmoke {
             isDirectory: true
         )
         defer { try? manager.removeItem(at: root) }
+        try manager.createDirectory(at: root, withIntermediateDirectories: true)
+
+        let arm64Header = root.appendingPathComponent("arm64-mach-o")
+        try Data([
+            0xcf, 0xfa, 0xed, 0xfe,
+            0x0c, 0x00, 0x00, 0x01,
+            0x00, 0x00, 0x00, 0x00,
+        ]).write(to: arm64Header)
+        let supportsArm64 = try MacUpdateInstaller.executableContainsSupportedArchitecture(arm64Header)
+        precondition(supportsArm64)
+
+        let x86Header = root.appendingPathComponent("x86-mach-o")
+        try Data([
+            0xcf, 0xfa, 0xed, 0xfe,
+            0x07, 0x00, 0x00, 0x01,
+            0x03, 0x00, 0x00, 0x00,
+        ]).write(to: x86Header)
+        let supportsX86 = try MacUpdateInstaller.executableContainsSupportedArchitecture(x86Header)
+        precondition(!supportsX86)
+
         let application = root.appendingPathComponent("Lattice.app", isDirectory: true)
         try buildTestApplication(application, version: "2.3.0")
 

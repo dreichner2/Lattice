@@ -1,6 +1,7 @@
 import CryptoKit
 import Darwin
 import Foundation
+import Security
 
 struct PreparedMacUpdate: Sendable {
     let operationID: String
@@ -334,15 +335,116 @@ enum MacUpdateInstaller {
                 throw MacUpdateInstallerError.invalidApplication
             }
         }
-        try runProcessSynchronously(
-            executable: URL(fileURLWithPath: "/usr/bin/lipo"),
-            arguments: ["-verify_arch", "arm64", executable.path]
-        )
-        try runProcessSynchronously(
-            executable: URL(fileURLWithPath: "/usr/bin/codesign"),
-            arguments: ["--verify", "--deep", "--strict", application.path]
-        )
+        guard try executableContainsSupportedArchitecture(executable) else {
+            throw MacUpdateInstallerError.invalidApplication
+        }
+        guard applicationCodeSignatureIsValid(application) else {
+            throw MacUpdateInstallerError.invalidApplication
+        }
         return version
+    }
+
+    static func executableContainsSupportedArchitecture(
+        _ executable: URL
+    ) throws -> Bool {
+        let handle = try FileHandle(forReadingFrom: executable)
+        defer { try? handle.close() }
+        guard let header = try handle.read(upToCount: 8), header.count == 8 else {
+            return false
+        }
+
+        let magic = Array(header.prefix(4))
+        let littleEndian: Bool
+        let isFat64: Bool
+        switch magic {
+        case [0xcf, 0xfa, 0xed, 0xfe]:
+            guard let remainder = try handle.read(upToCount: 4), remainder.count == 4 else {
+                return false
+            }
+            return machArchitectureIsSupported(
+                cpuType: uint32(Array(header[4..<8]), littleEndian: true),
+                cpuSubtype: uint32(Array(remainder), littleEndian: true)
+            )
+        case [0xfe, 0xed, 0xfa, 0xcf]:
+            guard let remainder = try handle.read(upToCount: 4), remainder.count == 4 else {
+                return false
+            }
+            return machArchitectureIsSupported(
+                cpuType: uint32(Array(header[4..<8]), littleEndian: false),
+                cpuSubtype: uint32(Array(remainder), littleEndian: false)
+            )
+        case [0xca, 0xfe, 0xba, 0xbe]:
+            littleEndian = false
+            isFat64 = false
+        case [0xbe, 0xba, 0xfe, 0xca]:
+            littleEndian = true
+            isFat64 = false
+        case [0xca, 0xfe, 0xba, 0xbf]:
+            littleEndian = false
+            isFat64 = true
+        case [0xbf, 0xba, 0xfe, 0xca]:
+            littleEndian = true
+            isFat64 = true
+        default:
+            return false
+        }
+
+        let architectureCount = Int(uint32(Array(header[4..<8]), littleEndian: littleEndian))
+        guard architectureCount > 0, architectureCount <= 64 else { return false }
+        let entrySize = isFat64 ? 32 : 20
+        guard let table = try handle.read(upToCount: architectureCount * entrySize),
+              table.count == architectureCount * entrySize else { return false }
+        for index in 0..<architectureCount {
+            let offset = index * entrySize
+            let cpuType = uint32(Array(table[offset..<(offset + 4)]), littleEndian: littleEndian)
+            let cpuSubtype = uint32(
+                Array(table[(offset + 4)..<(offset + 8)]),
+                littleEndian: littleEndian
+            )
+            if machArchitectureIsSupported(cpuType: cpuType, cpuSubtype: cpuSubtype) {
+                return true
+            }
+        }
+        return false
+    }
+
+    private static func uint32(_ bytes: [UInt8], littleEndian: Bool) -> UInt32 {
+        precondition(bytes.count == 4)
+        if littleEndian {
+            return UInt32(bytes[0])
+                | UInt32(bytes[1]) << 8
+                | UInt32(bytes[2]) << 16
+                | UInt32(bytes[3]) << 24
+        }
+        return UInt32(bytes[0]) << 24
+            | UInt32(bytes[1]) << 16
+            | UInt32(bytes[2]) << 8
+            | UInt32(bytes[3])
+    }
+
+    private static func machArchitectureIsSupported(
+        cpuType: UInt32,
+        cpuSubtype: UInt32
+    ) -> Bool {
+        // CPU_TYPE_ARM64 with CPU_SUBTYPE_ARM64_ALL. The upper subtype byte
+        // contains capability flags and does not change the base subtype.
+        cpuType == 0x0100_000c && (cpuSubtype & 0x00ff_ffff) == 0
+    }
+
+    private static func applicationCodeSignatureIsValid(_ application: URL) -> Bool {
+        var code: SecStaticCode?
+        let createStatus = SecStaticCodeCreateWithPath(
+            application as CFURL,
+            SecCSFlags(rawValue: 0),
+            &code
+        )
+        guard createStatus == errSecSuccess, let code else { return false }
+        let flags = SecCSFlags(
+            rawValue: kSecCSCheckAllArchitectures
+                | kSecCSStrictValidate
+                | kSecCSCheckNestedCode
+        )
+        return SecStaticCodeCheckValidity(code, flags, nil) == errSecSuccess
     }
 
     // MARK: Preparation

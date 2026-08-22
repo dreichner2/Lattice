@@ -17,6 +17,8 @@
   completing an update.
 - The macOS CI signing-key equivalence check no longer depends on an
   OpenSSL-version-specific conversion command.
+- macOS update bundles now use bounded in-process Mach-O and Security framework
+  validation instead of depending on command-line verifier behavior.
 
 ## 2.2.0 — 2026-08-22
 

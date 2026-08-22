@@ -112,7 +112,8 @@ test("desktop apps expose native actions in the inline header menu", () => {
   assert.match(MAC_APP, /locateRunningLibrary\(requireCurrentParent: true\)/);
   assert.match(MAC_INSTALLER, /\/Applications\/Lattice\.app/);
   assert.match(MAC_INSTALLER, /archiveDigestMismatch/);
-  assert.match(MAC_INSTALLER, /codesign/);
+  assert.match(MAC_INSTALLER, /SecStaticCodeCheckValidity/);
+  assert.match(MAC_INSTALLER, /cpuType == 0x0100_000c/);
   assert.match(MAC_INSTALLER, /candidateDidNotBecomeHealthy/);
   assert.match(MAC_INSTALLER, /moveItem\(at: backup, to: plan\.targetApplication\)/);
   assert.match(MAC_INSTALLER, /helper-plan\.json/);
