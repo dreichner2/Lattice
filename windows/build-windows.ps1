@@ -16,6 +16,7 @@ $ArtifactsRoot = Join-Path $RepoRoot "artifacts"
 $LayoutPath = Join-Path $RepoRoot "library-layout.json"
 $IconGenerator = Join-Path $ScriptRoot "generate_icon.py"
 $IconPath = Join-Path $BuildRoot "Lattice.ico"
+$PackageMetadataPath = Join-Path $PackageRoot "update-package.json"
 $RequiredUiFiles = @("index.html", "app.js", "styles.css", "video-styles.css", "videos.js")
 $RequiredNativeFiles = @("SharedReaderState.js", "ImmersiveEPUB.js")
 $RequiredRootFiles = @(
@@ -38,6 +39,11 @@ if (-not (Test-Path $LayoutPath)) { throw "library-layout.json is missing" }
 if (-not (Test-Path $IconGenerator)) { throw "Lattice icon generator is missing" }
 $Layout = Get-Content $LayoutPath -Raw | ConvertFrom-Json
 if ($Layout.schema_version -ne 1) { throw "Unsupported library layout schema" }
+$ProjectXml = [xml](Get-Content $Project -Raw)
+$PackageVersion = [string]$ProjectXml.Project.PropertyGroup.Version
+if ($PackageVersion -notmatch '^(0|[1-9][0-9]*)\.(0|[1-9][0-9]*)\.(0|[1-9][0-9]*)$') {
+  throw "The Windows project Version must be a stable major.minor.patch release"
+}
 foreach ($relative in $RequiredRootFiles) {
   if (-not (Test-Path (Join-Path $RepoRoot $relative))) { throw "Required package file is missing: $relative" }
 }
@@ -148,6 +154,40 @@ try {
   }
   Copy-Item (Join-Path $ScriptRoot "install.ps1") (Join-Path $PackageRoot "Install Lattice.ps1") -Force
   Copy-Item $IconPath (Join-Path $PackageRoot "Lattice.ico") -Force
+  [IO.File]::WriteAllText(
+    $PackageMetadataPath,
+    (([ordered]@{
+      schemaVersion = 1
+      repository = "dreichner2/cs-library"
+      platform = "windows-x64"
+      version = $PackageVersion
+    } | ConvertTo-Json -Compress) + [Environment]::NewLine),
+    [Text.UTF8Encoding]::new($false)
+  )
+  $PackageFiles = @(
+    Get-ChildItem $PackageRoot -File -Recurse |
+      Sort-Object FullName |
+      ForEach-Object {
+        $packagePrefix = [IO.Path]::GetFullPath($PackageRoot).TrimEnd('\', '/') + [IO.Path]::DirectorySeparatorChar
+        $packageFile = [IO.Path]::GetFullPath($_.FullName)
+        if (-not $packageFile.StartsWith($packagePrefix, [StringComparison]::OrdinalIgnoreCase)) {
+          throw "Package file escapes the package root: $packageFile"
+        }
+        $relative = $packageFile.Substring($packagePrefix.Length).Replace("\", "/")
+        if ($relative -cne "update-files.json") {
+          [ordered]@{
+            path = $relative
+            sha256 = (Get-FileHash $_.FullName -Algorithm SHA256).Hash.ToLowerInvariant()
+            size = $_.Length
+          }
+        }
+      }
+  )
+  [IO.File]::WriteAllText(
+    (Join-Path $PackageRoot "update-files.json"),
+    (([ordered]@{ schemaVersion = 1; files = $PackageFiles } | ConvertTo-Json -Depth 5 -Compress) + [Environment]::NewLine),
+    [Text.UTF8Encoding]::new($false)
+  )
 
   New-Item $ArtifactsRoot -ItemType Directory -Force | Out-Null
   $Archive = Join-Path $ArtifactsRoot "Lattice-Windows-$Runtime.zip"
@@ -191,7 +231,7 @@ try {
       $entry = "native/$file"
       if ($EntryNames -notcontains $entry) { throw "Native file is missing from the archive: $entry" }
     }
-    foreach ($entry in @("Lattice.exe", "Lattice.ico", "Server/LatticeServer.exe", "Install Lattice.ps1")) {
+    foreach ($entry in @("Lattice.exe", "Lattice.ico", "Server/LatticeServer.exe", "Install Lattice.ps1", "update-package.json", "update-files.json")) {
       if ($EntryNames -notcontains $entry) { throw "Runtime file is missing from the archive: $entry" }
     }
     foreach ($directory in @($Layout.content_directories)) {

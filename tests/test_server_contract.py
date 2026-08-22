@@ -93,18 +93,27 @@ class EpubSafetyTests(unittest.TestCase):
         self.addCleanup(archive.close)
         return archive
 
-    def test_rejects_symlinks_active_content_and_traversal(self) -> None:
+    def test_rejects_symlinks_and_traversal_but_indexes_active_content(self) -> None:
         symlink = zipfile.ZipInfo("EPUB/link.xhtml")
         symlink.create_system = 3
         symlink.external_attr = (stat.S_IFLNK | 0o777) << 16
         for entries in (
             [(symlink, b"target")],
-            [("EPUB/reader.js", b"alert(1)")],
             [("../outside.xhtml", b"bad")],
         ):
             with self.subTest(entries=entries[0][0]):
                 with self.assertRaises(ValueError):
                     library_ui._epub_archive_entries(self._archive(entries))
+
+        archive = self._archive([("EPUB/reader.js", b"alert(1)")])
+        self.assertIn("EPUB/reader.js", library_ui._epub_archive_entries(archive))
+        self.assertTrue(library_ui._epub_resource_is_active("EPUB/reader.js"))
+        self.assertTrue(
+            library_ui._epub_resource_is_active(
+                "EPUB/reader.bin",
+                "application/wasm",
+            )
+        )
 
     def test_rejects_extreme_compression_ratio(self) -> None:
         archive = self._archive([("EPUB/huge.txt", b"A" * (library_ui.EPUB_XML_LIMIT + 1))])

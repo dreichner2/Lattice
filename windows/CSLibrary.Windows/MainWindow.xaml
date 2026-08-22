@@ -6,58 +6,294 @@
         Icon="{StaticResource LatticeIcon}"
         Width="1440"
         Height="920"
-        MinWidth="900"
-        MinHeight="620"
-        Background="#0D0F14"
+        MinWidth="880"
+        MinHeight="600"
+        WindowStartupLocation="CenterScreen"
+        Background="{StaticResource LatticeCanvasBrush}"
+        FontFamily="{StaticResource LatticeSansFont}"
+        Foreground="{StaticResource LatticeInkBrush}"
+        UseLayoutRounding="True"
+        SnapsToDevicePixels="True"
+        TextOptions.TextFormattingMode="Display"
         Loaded="Window_Loaded"
+        SizeChanged="Window_SizeChanged"
+        PreviewKeyDown="Window_PreviewKeyDown"
         Closing="Window_Closing">
-  <Grid>
+  <Grid Background="{StaticResource LatticeCanvasBrush}">
     <Grid.RowDefinitions>
-      <RowDefinition Height="48" />
+      <RowDefinition Height="58" />
       <RowDefinition Height="*" />
-      <RowDefinition Height="26" />
     </Grid.RowDefinitions>
 
-    <Border Grid.Row="0" Background="{StaticResource ChromeBrush}" BorderBrush="#303643" BorderThickness="0,0,0,1">
-      <DockPanel Margin="10,7">
-        <StackPanel DockPanel.Dock="Left" Orientation="Horizontal">
-          <Button x:Name="BackButton" Content="←" Width="38" Padding="0" ToolTip="Back" AutomationProperties.Name="Back" IsEnabled="False" Click="Back_Click" />
-          <Button x:Name="HomeButton" Content="⌂" Width="38" Padding="0" ToolTip="Library home" AutomationProperties.Name="Library home" IsEnabled="False" Click="Home_Click" />
-          <Button x:Name="ReloadButton" Content="↻" Width="38" Padding="0" ToolTip="Reload" AutomationProperties.Name="Reload" IsEnabled="False" Click="Reload_Click" />
+    <Border x:Name="TopChrome"
+            Grid.Row="0"
+            Background="{StaticResource LatticeRaisedBrush}"
+            BorderBrush="{StaticResource LatticeLineBrush}"
+            BorderThickness="0,0,0,1"
+            Panel.ZIndex="20">
+      <Border.Effect>
+        <DropShadowEffect BlurRadius="14" ShadowDepth="3" Direction="270" Color="#220F121B" Opacity="0.24" />
+      </Border.Effect>
+      <Grid Margin="12,8">
+        <Grid.ColumnDefinitions>
+          <ColumnDefinition Width="Auto" />
+          <ColumnDefinition Width="*" />
+          <ColumnDefinition Width="Auto" />
+        </Grid.ColumnDefinitions>
+
+        <StackPanel Grid.Column="0" Orientation="Horizontal" VerticalAlignment="Center">
+          <Button x:Name="BackButton"
+                  Style="{StaticResource LatticeIconButtonStyle}"
+                  ToolTip="Back  (Alt+Left)"
+                  AutomationProperties.Name="Back"
+                  IsEnabled="False"
+                  Click="Back_Click">
+            <Viewbox Width="18" Height="18">
+              <Path Width="24" Height="24" Stretch="Uniform"
+                    Data="{StaticResource BackIconGeometry}"
+                    Fill="{Binding Foreground, RelativeSource={RelativeSource AncestorType={x:Type Button}}}" />
+            </Viewbox>
+          </Button>
+          <Button x:Name="HomeButton"
+                  Style="{StaticResource LatticeIconButtonStyle}"
+                  Margin="6,0,0,0"
+                  ToolTip="Library home  (Alt+Home)"
+                  AutomationProperties.Name="Library home"
+                  IsEnabled="False"
+                  Click="Home_Click">
+            <Viewbox Width="17" Height="17">
+              <Path Width="24" Height="24" Stretch="Uniform"
+                    Data="{StaticResource HomeIconGeometry}"
+                    Fill="{Binding Foreground, RelativeSource={RelativeSource AncestorType={x:Type Button}}}" />
+            </Viewbox>
+          </Button>
+          <Button x:Name="ReloadButton"
+                  Style="{StaticResource LatticeIconButtonStyle}"
+                  Margin="6,0,0,0"
+                  ToolTip="Reload  (Ctrl+R or F5)"
+                  AutomationProperties.Name="Reload"
+                  IsEnabled="False"
+                  Click="Reload_Click">
+            <Viewbox Width="17" Height="17">
+              <Path Width="24" Height="24" Stretch="Uniform"
+                    Data="{StaticResource ReloadIconGeometry}"
+                    Fill="{Binding Foreground, RelativeSource={RelativeSource AncestorType={x:Type Button}}}" />
+            </Viewbox>
+          </Button>
+
+          <Border Width="1" Height="27" Margin="12,0" Background="{StaticResource LatticeLineStrongBrush}" />
+
+          <Image Width="32" Height="32" Source="{StaticResource LatticeIcon}" />
+          <StackPanel x:Name="BrandCopy" Margin="10,0,0,0" VerticalAlignment="Center">
+            <TextBlock Text="Lattice"
+                       Foreground="{StaticResource LatticeInkBrush}"
+                       FontFamily="{StaticResource LatticeDisplayFont}"
+                       FontSize="16"
+                       FontWeight="SemiBold" />
+            <TextBlock x:Name="BrandSubtitle"
+                       Text="A shared knowledge library"
+                       Margin="0,-1,0,0"
+                       Foreground="{StaticResource LatticeMutedBrush}"
+                       FontSize="9.5" />
+          </StackPanel>
         </StackPanel>
-        <StackPanel DockPanel.Dock="Right" Orientation="Horizontal" HorizontalAlignment="Right">
-          <Button x:Name="AddMaterialsButton" Content="Add materials…" ToolTip="Add PDF, EPUB, or text materials"
-                  AutomationProperties.Name="Add materials" IsEnabled="False" Click="AddMaterials_Click" />
-          <Button Content="Open folder" Click="OpenFolder_Click" />
-          <Button Content="Change library…" Margin="0" Click="ChangeLibrary_Click" />
+
+        <StackPanel Grid.Column="2" Orientation="Horizontal" VerticalAlignment="Center">
+          <StackPanel VerticalAlignment="Center">
+            <Border x:Name="StatusPill"
+                    MinHeight="34"
+                    Padding="11,0"
+                    Background="{StaticResource LatticePanelBrush}"
+                    BorderBrush="{StaticResource LatticeLineBrush}"
+                    BorderThickness="1"
+                    CornerRadius="17"
+                    VerticalAlignment="Center"
+                    AutomationProperties.LiveSetting="Polite">
+              <StackPanel Orientation="Horizontal" VerticalAlignment="Center">
+                <Ellipse x:Name="StatusDot" Width="7" Height="7" Fill="{StaticResource LatticeWarningBrush}" />
+                <TextBlock x:Name="StatusText"
+                           Text="Starting"
+                           Margin="7,0,0,0"
+                           Foreground="{StaticResource LatticeMutedBrush}"
+                           FontSize="10.5"
+                           FontWeight="SemiBold"
+                           VerticalAlignment="Center" />
+              </StackPanel>
+            </Border>
+            <ProgressBar x:Name="UpdateProgress"
+                         Height="2"
+                         Margin="10,-3,10,0"
+                         Minimum="0"
+                         Maximum="100"
+                         Foreground="{StaticResource LatticeAccentBrush}"
+                         Background="{StaticResource LatticeAccentSoftBrush}"
+                         BorderThickness="0"
+                         Visibility="Collapsed"
+                         AutomationProperties.Name="Update progress" />
+          </StackPanel>
+
+          <Button x:Name="LibraryPathButton"
+                  Style="{StaticResource LatticeQuietButtonStyle}"
+                  Margin="6,0,0,0"
+                  MaxWidth="250"
+                  Visibility="Collapsed"
+                  ToolTipService.ShowDuration="30000"
+                  AutomationProperties.Name="Open library folder"
+                  Click="OpenFolder_Click">
+            <StackPanel Orientation="Horizontal">
+              <Viewbox Width="15" Height="15" Margin="0,0,7,0">
+                <Path Width="24" Height="24" Stretch="Uniform"
+                      Data="{StaticResource FolderIconGeometry}"
+                      Fill="{Binding Foreground, RelativeSource={RelativeSource AncestorType={x:Type Button}}}" />
+              </Viewbox>
+              <TextBlock x:Name="LibraryPathText"
+                         MaxWidth="205"
+                         Foreground="{StaticResource LatticeMutedBrush}"
+                         FontSize="10.5"
+                         TextTrimming="CharacterEllipsis" />
+            </StackPanel>
+          </Button>
+
+          <Button x:Name="AddMaterialsButton"
+                  Style="{StaticResource LatticePrimaryButtonStyle}"
+                  Margin="8,0,0,0"
+                  ToolTip="Add PDF, EPUB, or TXT files  (Ctrl+Shift+O)"
+                  AutomationProperties.Name="Add materials"
+                  IsEnabled="False"
+                  Click="AddMaterials_Click">
+            <StackPanel Orientation="Horizontal">
+              <Viewbox Width="16" Height="16" Margin="0,0,7,0">
+                <Path Width="24" Height="24" Stretch="Uniform"
+                      Data="{StaticResource PlusIconGeometry}"
+                      Fill="{Binding Foreground, RelativeSource={RelativeSource AncestorType={x:Type Button}}}" />
+              </Viewbox>
+              <TextBlock x:Name="AddButtonLabel" Text="Add materials" VerticalAlignment="Center" />
+            </StackPanel>
+          </Button>
+
+          <Button x:Name="MoreButton"
+                  Style="{StaticResource LatticeIconButtonStyle}"
+                  Margin="6,0,0,0"
+                  ToolTip="Library options"
+                  AutomationProperties.Name="Library options"
+                  Click="More_Click">
+            <Button.ContextMenu>
+              <ContextMenu x:Name="LibraryMenu" Placement="Bottom">
+                <MenuItem x:Name="OpenFolderMenuItem"
+                          Header="_Open library folder"
+                          IsEnabled="False"
+                          Click="OpenFolder_Click" />
+                <Separator />
+                <MenuItem x:Name="ChooseLibraryMenuItem"
+                          Header="_Choose another library…"
+                          Click="ChangeLibrary_Click" />
+                <Separator />
+                <MenuItem x:Name="UpdateMenuItem"
+                          Header="_Check for updates…"
+                          Click="CheckForUpdates_Click" />
+              </ContextMenu>
+            </Button.ContextMenu>
+            <Viewbox Width="18" Height="18">
+              <Path Width="24" Height="24" Stretch="Uniform"
+                    Data="{StaticResource MoreIconGeometry}"
+                    Fill="{Binding Foreground, RelativeSource={RelativeSource AncestorType={x:Type Button}}}" />
+            </Viewbox>
+          </Button>
         </StackPanel>
-        <TextBlock Text="Lattice" Foreground="#F5F6F8" FontFamily="Georgia" FontSize="17"
-                   FontWeight="SemiBold" VerticalAlignment="Center" HorizontalAlignment="Center" />
-      </DockPanel>
+      </Grid>
     </Border>
 
-    <wv2:WebView2 x:Name="Browser" Grid.Row="1" DefaultBackgroundColor="#0D0F14"
-                  AllowExternalDrop="True" />
+    <wv2:WebView2 x:Name="Browser"
+                  Grid.Row="1"
+                  DefaultBackgroundColor="#F4F3EF"
+                  AllowExternalDrop="True"
+                  AutomationProperties.Name="Lattice library" />
 
-    <Border x:Name="LoadingOverlay" Grid.Row="1" Background="#0D0F14" Panel.ZIndex="5">
-      <StackPanel HorizontalAlignment="Center" VerticalAlignment="Center" MaxWidth="620">
-        <TextBlock x:Name="LoadingTitle" Text="Opening your library…" Foreground="#F5F6F8"
-                   FontFamily="Georgia" FontSize="30" TextAlignment="Center" />
-        <TextBlock x:Name="LoadingDetail" Text="Starting the private local reading service"
-                   Foreground="{StaticResource MutedBrush}" Margin="0,12,0,0" FontSize="14"
-                   TextAlignment="Center" TextWrapping="Wrap" />
-        <Button x:Name="ChooseFolderButton" Content="Choose another library…" HorizontalAlignment="Center"
-                Margin="0,22,0,0" Visibility="Collapsed" Click="ChangeLibrary_Click" />
-      </StackPanel>
-    </Border>
-
-    <Border Grid.Row="2" Background="#14171E" BorderBrush="#303643" BorderThickness="0,1,0,0">
-      <DockPanel Margin="9,0">
-        <TextBlock x:Name="StatusText" Text="Starting" Foreground="{StaticResource MutedBrush}"
-                   FontSize="11" VerticalAlignment="Center" />
-        <TextBlock x:Name="LibraryPathText" DockPanel.Dock="Right" Foreground="#777F90"
-                   FontSize="11" VerticalAlignment="Center" TextTrimming="CharacterEllipsis" />
-      </DockPanel>
+    <Border x:Name="LoadingOverlay"
+            Grid.Row="1"
+            Panel.ZIndex="10"
+            AutomationProperties.LiveSetting="Polite">
+      <Border.Background>
+        <LinearGradientBrush StartPoint="0,0" EndPoint="1,1">
+          <GradientStop Offset="0" Color="#F8F7F4" />
+          <GradientStop Offset="0.52" Color="#F4F3EF" />
+          <GradientStop Offset="1" Color="#ECEEFB" />
+        </LinearGradientBrush>
+      </Border.Background>
+      <Grid Margin="28">
+        <Border x:Name="LoadingCard"
+                Width="560"
+                MaxWidth="560"
+                Padding="42,38,42,34"
+                HorizontalAlignment="Center"
+                VerticalAlignment="Center"
+                Background="#F2FFFFFF"
+                BorderBrush="{StaticResource LatticeLineBrush}"
+                BorderThickness="1"
+                CornerRadius="24"
+                Focusable="True"
+                KeyboardNavigation.TabNavigation="Cycle"
+                AutomationProperties.Name="Lattice status">
+          <Border.Effect>
+            <DropShadowEffect BlurRadius="44" ShadowDepth="14" Direction="270" Color="#2A191D28" Opacity="0.34" />
+          </Border.Effect>
+          <StackPanel>
+            <Image Width="52" Height="52" HorizontalAlignment="Center" Source="{StaticResource LatticeIcon}" />
+            <TextBlock x:Name="LoadingEyebrow"
+                       Text="PRIVATE · LOCAL · SEARCHABLE"
+                       Margin="0,22,0,0"
+                       Foreground="{StaticResource LatticeAccentDeepBrush}"
+                       FontSize="9.5"
+                       FontWeight="Bold"
+                       TextAlignment="Center" />
+            <TextBlock x:Name="LoadingTitle"
+                       Text="Opening your library…"
+                       Margin="0,9,0,0"
+                       Foreground="{StaticResource LatticeInkBrush}"
+                       FontFamily="{StaticResource LatticeDisplayFont}"
+                       FontSize="32"
+                       FontWeight="SemiBold"
+                       TextAlignment="Center"
+                       TextWrapping="Wrap" />
+            <TextBlock x:Name="LoadingDetail"
+                       Text="Starting the private local reading service"
+                       Margin="0,13,0,0"
+                       Foreground="{StaticResource LatticeMutedBrush}"
+                       FontSize="13.5"
+                       LineHeight="21"
+                       TextAlignment="Center"
+                       TextWrapping="Wrap" />
+            <ProgressBar x:Name="LoadingProgress"
+                         Height="4"
+                         Margin="48,25,48,0"
+                         IsIndeterminate="True"
+                         Foreground="{StaticResource LatticeAccentBrush}"
+                         Background="{StaticResource LatticeAccentSoftBrush}"
+                         BorderThickness="0" />
+            <StackPanel x:Name="LoadingActions"
+                        Orientation="Horizontal"
+                        HorizontalAlignment="Center"
+                        Margin="0,24,0,0">
+              <Button x:Name="RetryButton"
+                      Style="{StaticResource LatticePrimaryButtonStyle}"
+                      Content="Try again"
+                      Visibility="Collapsed"
+                      Click="Retry_Click" />
+              <Button x:Name="ChooseFolderButton"
+                      Style="{StaticResource LatticeButtonStyle}"
+                      Content="Choose another library…"
+                      Margin="8,0,0,0"
+                      Visibility="Collapsed"
+                      Click="ChangeLibrary_Click" />
+            </StackPanel>
+            <WrapPanel Margin="0,28,0,0" HorizontalAlignment="Center">
+              <TextBlock Foreground="{StaticResource LatticeMutedBrush}" FontSize="10.5" Text="●  Files stay local" />
+              <TextBlock Margin="18,0,0,0" Foreground="{StaticResource LatticeMutedBrush}" FontSize="10.5" Text="●  Loopback only" />
+              <TextBlock Margin="18,0,0,0" Foreground="{StaticResource LatticeMutedBrush}" FontSize="10.5" Text="●  No account required" />
+            </WrapPanel>
+          </StackPanel>
+        </Border>
+      </Grid>
     </Border>
   </Grid>
 </Window>

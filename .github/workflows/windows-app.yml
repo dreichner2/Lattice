@@ -73,9 +73,126 @@ jobs:
         with:
           dotnet-version: "8.0.x"
 
+      - name: Verify signed updater security boundaries
+        shell: pwsh
+        run: dotnet run --project windows/UpdateSecurityHarness/UpdateSecurityHarness.csproj --configuration Release
+
       - name: Build and test portable app
         shell: pwsh
         run: ./windows/build-windows.ps1 -Runtime win-x64
+
+      - name: Smoke-test one-click onboarding with Syncthing
+        shell: pwsh
+        run: |
+          $syncthingVersion = "2.1.3"
+          $syncthingArchive = Join-Path $env:RUNNER_TEMP "syncthing-$syncthingVersion.zip"
+          $syncthingExtracted = Join-Path $env:RUNNER_TEMP "syncthing-$syncthingVersion"
+          $syncthingHome = Join-Path $env:RUNNER_TEMP "lattice-onboarding-syncthing"
+          $testLocalAppData = Join-Path $env:RUNNER_TEMP "lattice-onboarding-localappdata"
+          $testAppData = Join-Path $env:RUNNER_TEMP "lattice-onboarding-appdata"
+          $installDestination = Join-Path $testLocalAppData "Programs\Lattice"
+          $package = (Resolve-Path "windows/build/package-win-x64").Path
+          $entry = (Resolve-Path "windows/setup/Setup-LatticeWindows.ps1").Path
+          $libraryRoot = (Resolve-Path ".").Path
+          $expectedSyncthingSha256 = "c0b79cffa6ce5dad5ed41ede86454f3325d13ccac33447a528cb59d65fbc3a21"
+          $previousLocalAppData = $env:LOCALAPPDATA
+          $previousAppData = $env:APPDATA
+          $syncthing = $null
+          try {
+            Invoke-WebRequest `
+              -Uri "https://github.com/syncthing/syncthing/releases/download/v$($syncthingVersion)/syncthing-windows-amd64-v$($syncthingVersion).zip" `
+              -OutFile $syncthingArchive `
+              -UseBasicParsing
+            $actualSyncthingSha256 = (Get-FileHash $syncthingArchive -Algorithm SHA256).Hash.ToLowerInvariant()
+            if ($actualSyncthingSha256 -cne $expectedSyncthingSha256) {
+              throw "The pinned Syncthing onboarding fixture failed SHA-256 verification."
+            }
+            Expand-Archive $syncthingArchive $syncthingExtracted -Force
+            $syncthing = @(
+              Get-ChildItem $syncthingExtracted -Filter "syncthing.exe" -File -Recurse
+            ) | Select-Object -First 1
+            if ($null -eq $syncthing) { throw "The pinned Syncthing fixture is missing syncthing.exe." }
+
+            # Generate the exact v2 configuration used by setup, then keep this
+            # CI-only peer offline so it never contacts the real Mac mini hub.
+            & $syncthing.FullName generate "--home=$syncthingHome" --no-port-probing | Out-Null
+            if ($LASTEXITCODE -ne 0) { throw "Syncthing could not generate the onboarding fixture." }
+            $configPath = Join-Path $syncthingHome "config.xml"
+            [xml]$configuration = Get-Content $configPath -Raw
+            foreach ($setting in @(
+              "globalAnnounceEnabled",
+              "localAnnounceEnabled",
+              "relaysEnabled",
+              "natEnabled",
+              "crashReportingEnabled"
+            )) {
+              $configuration.configuration.options.$setting = "false"
+            }
+            $configuration.configuration.options.autoUpgradeIntervalH = "0"
+            $configuration.Save($configPath)
+
+            $env:LOCALAPPDATA = $testLocalAppData
+            $env:APPDATA = $testAppData
+            $arguments = @(
+              "-NoLogo", "-NoProfile", "-ExecutionPolicy", "Bypass",
+              "-File", $entry,
+              "-LibraryRoot", $libraryRoot,
+              "-LatticePackagePath", $package,
+              "-InstallDestination", $installDestination,
+              "-SyncthingExecutable", $syncthing.FullName,
+              "-SyncthingHome", $syncthingHome,
+              "-Offline", "-NoLaunch", "-ReplaceSavedLibraryRoot"
+            )
+            & powershell.exe @arguments
+            if ($LASTEXITCODE -ne 0) { throw "Windows PowerShell 5.1 onboarding smoke failed." }
+
+            # A second identical run must reuse the complete app, identity,
+            # folder, and startup shortcut without creating ambiguous state.
+            & powershell.exe @arguments
+            if ($LASTEXITCODE -ne 0) { throw "Idempotent onboarding rerun failed." }
+
+            $activePath = Join-Path $installDestination "active-version.json"
+            if (-not (Test-Path $activePath)) { throw "Onboarding did not install Lattice." }
+            $active = Get-Content $activePath -Raw | ConvertFrom-Json
+            if ($active.version -ne "2.0.0") { throw "Onboarding selected the wrong Lattice version." }
+            $startupShortcut = Join-Path $testAppData "Microsoft\Windows\Start Menu\Programs\Startup\Lattice Syncthing.lnk"
+            if (-not (Test-Path $startupShortcut)) { throw "Onboarding did not create the Syncthing startup shortcut." }
+            [xml]$configured = Get-Content $configPath -Raw
+            $folder = @($configured.configuration.folder | Where-Object { $_.id -eq "cs-library-3b8290f24f15" })
+            if ($folder.Count -ne 1 -or $folder[0].type -ne "sendreceive") {
+              throw "Onboarding did not retain the exact send-receive folder."
+            }
+            $folderPath = [IO.Path]::GetFullPath([string]$folder[0].path)
+            if (-not [string]::Equals($folderPath, $libraryRoot, [StringComparison]::OrdinalIgnoreCase)) {
+              throw "Onboarding configured the wrong library path."
+            }
+            $folderDeviceIds = @($folder[0].device | ForEach-Object { [string]$_.id })
+            $localDeviceId = (& $syncthing.FullName device-id "--home=$syncthingHome" | Select-Object -Last 1).Trim()
+            if (
+              $folderDeviceIds -notcontains $localDeviceId -or
+              $folderDeviceIds -notcontains "MTECQEG-YI6OB3G-LI5UG6T-VTGJGQ2-MBBUWW2-G4VVCNS-3DGDGL6-AV4JJAQ"
+            ) { throw "Onboarding did not share the folder with both exact devices." }
+          } finally {
+            if (Test-Path (Join-Path $syncthingHome "config.xml")) {
+              try {
+                [xml]$shutdownConfig = Get-Content (Join-Path $syncthingHome "config.xml") -Raw
+                $apiKey = [string]$shutdownConfig.configuration.gui.apikey
+                Invoke-RestMethod `
+                  -Uri "http://127.0.0.1:8384/rest/system/shutdown" `
+                  -Method Post `
+                  -Headers @{ "X-API-Key" = $apiKey } `
+                  -TimeoutSec 5 | Out-Null
+              } catch {
+                if ($null -ne $syncthing) {
+                  Get-CimInstance Win32_Process -Filter "Name = 'syncthing.exe'" |
+                    Where-Object { $_.CommandLine -like "*$syncthingHome*" } |
+                    ForEach-Object { Stop-Process -Id $_.ProcessId -Force -ErrorAction SilentlyContinue }
+                }
+              }
+            }
+            $env:LOCALAPPDATA = $previousLocalAppData
+            $env:APPDATA = $previousAppData
+          }
 
       - name: Verify package
         shell: pwsh
@@ -111,16 +228,95 @@ jobs:
           $package = (Resolve-Path "windows/build/package-win-x64").Path
           $destination = Join-Path $env:RUNNER_TEMP "lattice-installer-smoke"
           $testAppData = Join-Path $env:RUNNER_TEMP "lattice-installer-appdata"
+          $installer = Join-Path $package "Install Lattice.ps1"
           $previousAppData = $env:APPDATA
           try {
             $env:APPDATA = $testAppData
-            & (Join-Path $package "Install Lattice.ps1") -Destination $destination -NoLaunch
-            if (-not (Test-Path (Join-Path $destination "Lattice.exe"))) { throw "Installer did not copy Lattice.exe" }
-            if (-not (Test-Path (Join-Path $destination "Lattice.ico"))) { throw "Installer did not copy Lattice.ico" }
+            & powershell.exe `
+              -NoLogo `
+              -NoProfile `
+              -ExecutionPolicy Bypass `
+              -File $installer `
+              -Destination $destination `
+              -NoLaunch
+            if ($LASTEXITCODE -ne 0) { throw "Windows PowerShell 5.1 installer smoke failed with code $LASTEXITCODE" }
+            $activePath = Join-Path $destination "active-version.json"
+            if (-not (Test-Path $activePath)) { throw "Installer did not write active-version.json" }
+            $active = Get-Content $activePath -Raw | ConvertFrom-Json
+            if ($active.schemaVersion -ne 1 -or $active.version -ne "2.0.0") {
+              throw "Installer selected an unexpected active version: $($active.version)"
+            }
+            $versionRoot = Join-Path (Join-Path $destination "versions") ([string]$active.version)
+            $installedExecutable = Join-Path $versionRoot "Lattice.exe"
+            if (-not (Test-Path $installedExecutable)) { throw "Installer did not copy the versioned Lattice.exe" }
+            if (-not (Test-Path (Join-Path $versionRoot "Lattice.ico"))) { throw "Installer did not copy the versioned Lattice.ico" }
+            if (-not (Test-Path (Join-Path $versionRoot "update-package.json"))) { throw "Installer did not retain update-package.json" }
             $shortcut = Join-Path $testAppData "Microsoft\Windows\Start Menu\Programs\Lattice.lnk"
             if (-not (Test-Path $shortcut)) { throw "Installer did not create the Lattice shortcut" }
+            $shell = New-Object -ComObject WScript.Shell
+            $shortcutTarget = $shell.CreateShortcut($shortcut).TargetPath
+            if (-not [string]::Equals(
+              [IO.Path]::GetFullPath($shortcutTarget),
+              [IO.Path]::GetFullPath($installedExecutable),
+              [StringComparison]::OrdinalIgnoreCase
+            )) { throw "Lattice shortcut does not target the active version" }
           } finally {
             $env:APPDATA = $previousAppData
+          }
+
+      - name: Launch packaged native shell and capture UI proof
+        shell: pwsh
+        run: |
+          $destination = Join-Path $env:RUNNER_TEMP "lattice-installer-smoke"
+          $active = Get-Content (Join-Path $destination "active-version.json") -Raw | ConvertFrom-Json
+          $executable = Join-Path (Join-Path (Join-Path $destination "versions") ([string]$active.version)) "Lattice.exe"
+          $libraryRoot = (Resolve-Path ".").Path
+          $smokeRoot = Join-Path $env:RUNNER_TEMP "lattice-native-smoke"
+          $stdout = Join-Path $env:RUNNER_TEMP "lattice-native.stdout.log"
+          $stderr = Join-Path $env:RUNNER_TEMP "lattice-native.stderr.log"
+          Remove-Item $smokeRoot -Recurse -Force -ErrorAction SilentlyContinue
+          New-Item $smokeRoot -ItemType Directory -Force | Out-Null
+
+          $process = Start-Process $executable `
+            -ArgumentList @(
+              "--smoke-test",
+              "--library-root", $libraryRoot,
+              "--smoke-output", $smokeRoot
+            ) `
+            -RedirectStandardOutput $stdout `
+            -RedirectStandardError $stderr `
+            -PassThru
+          if (-not $process.WaitForExit(90000)) {
+            Stop-Process -Id $process.Id -Force -ErrorAction SilentlyContinue
+            throw "The packaged native shell did not finish its bounded smoke test."
+          }
+          if ($process.ExitCode -ne 0) {
+            $out = if (Test-Path $stdout) { Get-Content $stdout -Raw } else { "" }
+            $err = if (Test-Path $stderr) { Get-Content $stderr -Raw } else { "" }
+            throw "The packaged native shell failed with code $($process.ExitCode). stdout: $out stderr: $err"
+          }
+
+          $reportPath = Join-Path $smokeRoot "lattice-smoke.json"
+          $screenshotPath = Join-Path $smokeRoot "lattice-webview.png"
+          if (-not (Test-Path $reportPath)) { throw "Native smoke report is missing" }
+          if (-not (Test-Path $screenshotPath)) { throw "Native WebView screenshot is missing" }
+          $report = Get-Content $reportPath -Raw | ConvertFrom-Json
+          if (
+            $report.schemaVersion -ne 1 -or
+            $report.ok -ne $true -or
+            $report.application -ne "Lattice" -or
+            $report.shell -ne "Windows WPF" -or
+            $report.stage -ne "ready" -or
+            $report.web.ready -ne $true -or
+            $report.web.brand -ne "Lattice" -or
+            $report.web.hasAddButton -ne $true -or
+            $report.web.hasNativeAddBridge -ne $true
+          ) { throw "Native smoke report did not prove the shared Lattice UI contract" }
+          $png = [IO.File]::ReadAllBytes($screenshotPath)
+          $signature = [byte[]](137, 80, 78, 71, 13, 10, 26, 10)
+          if ($png.Length -lt 1024) { throw "Native WebView screenshot is unexpectedly small" }
+          for ($index = 0; $index -lt $signature.Length; $index++) {
+            if ($png[$index] -ne $signature[$index]) { throw "Native WebView screenshot is not a PNG" }
           }
 
       - name: Smoke-test packaged local service
@@ -206,7 +402,16 @@ jobs:
         uses: actions/upload-artifact@v4
         with:
           name: Lattice-Windows-win-x64
-          path: windows/build/package-win-x64
-          include-hidden-files: true
+          path: artifacts/Lattice-Windows-win-x64.zip
           if-no-files-found: error
-          retention-days: 14
+          retention-days: 30
+
+      - name: Upload native shell smoke evidence
+        uses: actions/upload-artifact@v4
+        with:
+          name: Lattice-Windows-smoke-evidence
+          path: |
+            ${{ runner.temp }}/lattice-native-smoke/lattice-smoke.json
+            ${{ runner.temp }}/lattice-native-smoke/lattice-webview.png
+          if-no-files-found: error
+          retention-days: 30

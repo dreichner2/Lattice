@@ -14,6 +14,7 @@ ROOT = Path(__file__).resolve().parents[1]
 LAYOUT_FILE = "library-layout.json"
 TAXONOMY_FILE = "library-taxonomy.json"
 SUBJECT_ID_PATTERN = re.compile(r"^[a-z0-9]+(?:-[a-z0-9]+)*$")
+MAX_ASSIGNED_SUBJECTS = 64
 
 
 def _relative_path(value: Any) -> str | None:
@@ -79,6 +80,11 @@ def _validate_taxonomy(root: Path, errors: list[str]) -> None:
         errors.append(f"{TAXONOMY_FILE} subjects must be a non-empty array")
         subject_ids: set[str] = set()
     else:
+        if len(raw_subjects) > MAX_ASSIGNED_SUBJECTS:
+            errors.append(
+                f"{TAXONOMY_FILE} subjects must not exceed "
+                f"{MAX_ASSIGNED_SUBJECTS} entries"
+            )
         subject_ids = set()
         for index, subject in enumerate(raw_subjects):
             if not isinstance(subject, dict):
@@ -110,16 +116,27 @@ def _validate_taxonomy(root: Path, errors: list[str]) -> None:
         if not isinstance(mapping, dict):
             errors.append(f"{TAXONOMY_FILE} {key} must be an object")
             continue
-        for source_id, subject_id in mapping.items():
+        for source_id, assignment in mapping.items():
             if (
                 not isinstance(source_id, str)
                 or not source_id
                 or source_id != source_id.strip()
             ):
                 errors.append(f"{TAXONOMY_FILE} {key} contains an invalid key")
-            if not isinstance(subject_id, str) or subject_id not in subject_ids:
+            assigned_subjects = [assignment] if isinstance(assignment, str) else assignment
+            if (
+                not isinstance(assigned_subjects, list)
+                or not assigned_subjects
+                or len(assigned_subjects) > len(subject_ids)
+                or any(
+                    not isinstance(subject_id, str) or subject_id not in subject_ids
+                    for subject_id in assigned_subjects
+                )
+                or len(set(assigned_subjects)) != len(assigned_subjects)
+            ):
                 errors.append(
-                    f"{TAXONOMY_FILE} {key}.{source_id} references an unknown subject"
+                    f"{TAXONOMY_FILE} {key}.{source_id} must reference one or more "
+                    "unique defined subjects"
                 )
 
 

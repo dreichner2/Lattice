@@ -263,6 +263,13 @@ function compactSubject(subject) {
   return String(subject || "Other").replace(" & ", " · ");
 }
 
+function subjectSummary(item) {
+  const subjects = Array.isArray(item?.subjects) && item.subjects.length
+    ? item.subjects
+    : [item?.subject || "Other"];
+  return subjects.join(" · ");
+}
+
 function slugId(value) {
   return String(value || "other").toLowerCase().replace(/[^a-z0-9]+/g, "-").replace(/^-|-$/g, "") || "other";
 }
@@ -285,24 +292,48 @@ function normalizeLibraryPayload(payload) {
     topics.set(normalized.id, normalized);
   });
 
+  const normalizeAssignedSubjects = (item, fallback = null) => {
+    const suppliedIds = Array.isArray(item.subjectIds)
+      ? item.subjectIds
+      : Array.isArray(item.subject_ids)
+        ? item.subject_ids
+        : [];
+    let subjectIds = suppliedIds
+      .filter((subjectId) => typeof subjectId === "string" && subjectId)
+      .filter((subjectId, index, values) => values.indexOf(subjectId) === index);
+    if (!subjectIds.length && fallback?.subjectIds?.length) subjectIds = [...fallback.subjectIds];
+    if (!subjectIds.length) subjectIds = [item.subjectId || item.subject_id || "other"];
+
+    const suppliedNames = Array.isArray(item.subjects) ? item.subjects : [];
+    const subjects = subjectIds.map((subjectId, index) => {
+      const name = subjectNames.get(subjectId)
+        || suppliedNames[index]
+        || (index === 0 ? item.subject : "")
+        || "Other";
+      if (!subjectNames.has(subjectId)) {
+        const subject = { id: subjectId, name };
+        library.subjects.push(subject);
+        subjectNames.set(subject.id, subject.name);
+      }
+      return name;
+    });
+    item.subjectIds = subjectIds;
+    item.subjects = subjects;
+    item.subjectId = subjectIds[0];
+    item.subject = subjects[0];
+  };
+
   library.works.forEach((work) => {
     const legacyTopic = !work.topic && !work.topicId;
     work.topic = work.topic || work.shelf || (legacyTopic ? work.subject : "") || "Unsorted";
     work.topicId = work.topicId || work.shelfId || (legacyTopic ? work.subjectId : "") || slugId(work.topic);
-    work.subjectId = work.subjectId || "other";
-    work.subject = work.subject || subjectNames.get(work.subjectId) || "Other";
-    if (!subjectNames.has(work.subjectId)) {
-      const subject = { id: work.subjectId, name: work.subject };
-      library.subjects.push(subject);
-      subjectNames.set(subject.id, subject.name);
-    }
+    normalizeAssignedSubjects(work);
     if (!topics.has(work.topicId)) topics.set(work.topicId, { id: work.topicId, name: work.topic });
   });
   const workById = new Map(library.works.map((work) => [work.id, work]));
   library.materials.forEach((material) => {
     const work = workById.get(material.workId);
-    material.subjectId = material.subjectId || work?.subjectId || "other";
-    material.subject = material.subject || work?.subject || subjectNames.get(material.subjectId) || "Other";
+    normalizeAssignedSubjects(material, work);
     material.topicId = material.topicId || work?.topicId || slugId(material.topic || "Unsorted");
     material.topic = material.topic || work?.topic || "Unsorted";
   });
@@ -621,12 +652,27 @@ function importMetadataValue(metadata, key, fallback = "") {
 
 function normalizeImportMetadata(metadata) {
   if (!metadata || typeof metadata !== "object") return null;
-  const subjectId = metadata.subjectId || metadata.subject_id || "other";
-  const subject = (state.library?.subjects || []).find((entry) => entry.id === subjectId);
+  const rawSubjectIds = Array.isArray(metadata.subjectIds)
+    ? metadata.subjectIds
+    : Array.isArray(metadata.subject_ids)
+      ? metadata.subject_ids
+      : [metadata.subjectId || metadata.subject_id || "other"];
+  const subjectIds = rawSubjectIds
+    .filter((subjectId) => typeof subjectId === "string" && subjectId)
+    .filter((subjectId, index, values) => values.indexOf(subjectId) === index);
+  if (!subjectIds.length) subjectIds.push("other");
+  const subjects = subjectIds.map((subjectId, index) => (
+    (state.library?.subjects || []).find((entry) => entry.id === subjectId)?.name
+    || (Array.isArray(metadata.subjects) ? metadata.subjects[index] : "")
+    || (index === 0 ? metadata.subject : "")
+    || "Other"
+  ));
   return {
     ...metadata,
-    subjectId,
-    subject: metadata.subject || subject?.name || "Other",
+    subjectIds,
+    subjects,
+    subjectId: subjectIds[0],
+    subject: subjects[0],
     topics: Array.isArray(metadata.topics) ? metadata.topics : [],
   };
 }
@@ -658,25 +704,35 @@ function metadataEditor(item) {
   );
   form.append(compact);
 
-  const subjectField = node("label", "import-field");
-  subjectField.append(node("span", "", "Subject"));
-  const select = document.createElement("select");
-  select.name = "subjectId";
-  (state.library?.subjects || []).forEach((subject) => {
-    const option = document.createElement("option");
-    option.value = subject.id;
-    option.textContent = subject.name;
-    option.selected = subject.id === metadata.subjectId;
-    select.append(option);
+  const subjectField = document.createElement("fieldset");
+  subjectField.className = "import-field import-subject-field";
+  const subjectLegend = document.createElement("legend");
+  subjectLegend.textContent = "Subjects";
+  const subjectOptions = node("div", "import-subject-options");
+  const selectedSubjects = new Set(metadata.subjectIds || [metadata.subjectId || "other"]);
+  const availableSubjects = state.library?.subjects?.length
+    ? state.library.subjects
+    : [{ id: metadata.subjectId || "other", name: metadata.subject || "Other" }];
+  availableSubjects.forEach((subject) => {
+    const option = node("label", "import-subject-option");
+    const checkbox = document.createElement("input");
+    checkbox.type = "checkbox";
+    checkbox.name = "subjectIds";
+    checkbox.value = subject.id;
+    checkbox.checked = selectedSubjects.has(subject.id);
+    if (subject.known === false) {
+      checkbox.disabled = true;
+      option.classList.add("is-from-newer-taxonomy");
+      option.title = "Preserved from another device; update Lattice before changing this subject.";
+    }
+    option.append(checkbox, node("span", "", subject.name));
+    subjectOptions.append(option);
   });
-  if (!select.options.length) {
-    const option = document.createElement("option");
-    option.value = metadata.subjectId || "other";
-    option.textContent = metadata.subject || "Other";
-    select.append(option);
-  }
-  subjectField.append(select);
-  form.append(subjectField, textField("Topics", "topics", importMetadataValue(metadata, "topics"), "Comma-separated topics"));
+  const subjectHelp = node("small", "import-field-help", "Choose every broad subject this item belongs to.");
+  subjectField.append(subjectLegend, subjectOptions, subjectHelp);
+  const topicsField = textField("Topics", "topics", importMetadataValue(metadata, "topics"), "Comma-separated topics");
+  topicsField.classList.add("import-topics-field");
+  form.append(subjectField, topicsField);
 
   const actions = node("div", "import-form-actions");
   actions.append(
@@ -691,6 +747,15 @@ function metadataEditor(item) {
   form.append(actions);
   form.addEventListener("submit", async (event) => {
     event.preventDefault();
+    const firstSubject = form.querySelector('input[name="subjectIds"]');
+    const hasSubject = Boolean(form.querySelector('input[name="subjectIds"]:checked'));
+    if (firstSubject) {
+      firstSubject.setCustomValidity(hasSubject ? "" : "Choose at least one subject.");
+      if (!hasSubject) {
+        firstSubject.reportValidity();
+        return;
+      }
+    }
     await saveImportMetadata(item, new FormData(form));
   });
   if (item.status === "saving") {
@@ -743,9 +808,10 @@ async function saveImportMetadata(item, formData) {
     authors: String(formData.get("authors") || "").trim(),
     year: String(formData.get("year") || "").trim(),
     edition: String(formData.get("edition") || "").trim(),
-    subjectId: String(formData.get("subjectId") || "other"),
+    subjectIds: formData.getAll("subjectIds").map((subjectId) => String(subjectId)),
     topics,
   };
+  body.subjectId = body.subjectIds[0] || "other";
   item.draft = body;
   item.status = "saving";
   renderImportQueue();
@@ -880,6 +946,8 @@ async function pollImportStatus(item) {
               authors: work.authors,
               year: work.year || null,
               edition: work.edition || "",
+              subjectIds: work.subjectIds,
+              subjects: work.subjects,
               subjectId: work.subjectId,
               subject: work.subject,
               topics: work.topics || [],
@@ -946,6 +1014,8 @@ function openWorkMetadataEditor(work) {
         authors: work.authors,
         year: work.year || "",
         edition: work.edition || "",
+        subjectIds: work.subjectIds || [work.subjectId || "other"],
+        subjects: work.subjects || [work.subject || "Other"],
         subjectId: work.subjectId || "other",
         subject: work.subject || "Other",
         topics: work.topics || (work.topic ? [work.topic] : []),
@@ -1957,7 +2027,7 @@ function makeCard(work) {
   const info = node("div", "book-info");
   info.append(node("h3", "book-title", work.title), node("p", "book-author", work.authors));
   const meta = node("div", "book-meta");
-  meta.append(node("span", "", work.subject), node("span", "", work.edition), node("span", "", humanBytes(work.totalBytes)));
+  meta.append(node("span", "", subjectSummary(work)), node("span", "", work.edition), node("span", "", humanBytes(work.totalBytes)));
   const status = workStatus(work.id);
   if (status !== "unread") meta.append(node("span", "book-status", statusLabel(status)));
   if (!work.isAvailable) meta.append(node("span", "book-status is-missing", "Missing"));
@@ -2002,7 +2072,7 @@ function makeMaterialCard(material) {
   const info = node("div", "book-info");
   info.append(node("h3", "book-title", material.title), node("p", "book-author", `${work.title} · ${material.authors}`));
   const meta = node("div", "book-meta");
-  meta.append(node("span", "", material.subject), node("span", "", material.format), node("span", "", humanBytes(material.bytes)), node("span", "book-status", material.materialLabel));
+  meta.append(node("span", "", subjectSummary(material)), node("span", "", material.format), node("span", "", humanBytes(material.bytes)), node("span", "book-status", material.materialLabel));
   info.append(meta);
   const actions = node("div", "card-actions");
   actions.append(
@@ -2024,14 +2094,14 @@ function filteredMaterials() {
   const requestedType = state.view.startsWith("material:") ? state.view.split(":", 2)[1] : null;
   const materials = state.library.materials.filter((material) => {
     if (requestedType && material.materialType !== requestedType) return false;
-    if (state.subject !== "all" && material.subjectId !== state.subject) return false;
+    if (state.subject !== "all" && !material.subjectIds.includes(state.subject)) return false;
     if (state.topic !== "all" && material.topicId !== state.topic) return false;
     if (!query) return true;
     const haystack = [
       material.title,
       material.workTitle,
       material.authors,
-      material.subject,
+      ...material.subjects,
       material.topic,
       material.path,
       material.format,
@@ -2055,7 +2125,7 @@ function filteredWorks() {
   if (!state.library) return [];
   const query = state.query.trim().toLowerCase();
   let works = state.library.works.filter((work) => {
-    if (state.subject !== "all" && work.subjectId !== state.subject) return false;
+    if (state.subject !== "all" && !work.subjectIds.includes(state.subject)) return false;
     if (state.topic !== "all" && work.topicId !== state.topic) return false;
     if (state.view === "favorites" && !state.favorites.has(work.id)) return false;
     if (state.view === "reading" && workStatus(work.id) !== "reading") return false;
@@ -2064,7 +2134,7 @@ function filteredWorks() {
     const haystack = [
       work.title,
       work.authors,
-      work.subject,
+      ...work.subjects,
       work.topic,
       ...(Array.isArray(work.topics) ? work.topics : []),
       work.edition,
@@ -2291,7 +2361,7 @@ function renderShelves() {
 
 function renderSubjects() {
   const counts = Object.fromEntries(
-    state.library.subjects.map((subject) => [subject.id, state.library.works.filter((work) => work.subjectId === subject.id).length]),
+    state.library.subjects.map((subject) => [subject.id, state.library.works.filter((work) => work.subjectIds.includes(subject.id)).length]),
   );
   const items = state.library.subjects
     .filter((subject) => counts[subject.id] > 0)
@@ -2315,7 +2385,7 @@ function renderSubjectChips() {
 
 function renderTopicChips() {
   const available = state.library.topics.filter((topic) => state.subject === "all"
-    || state.library.works.some((work) => work.subjectId === state.subject && work.topicId === topic.id));
+    || state.library.works.some((work) => work.subjectIds.includes(state.subject) && work.topicId === topic.id));
   const all = button(`chip${state.topic === "all" ? " is-active" : ""}`, "All topics", () => setTopic("all", true));
   const chips = available.map((topic) => button(
     `chip${state.topic === topic.id ? " is-active" : ""}`,
@@ -2423,7 +2493,7 @@ function renderDrawer(work) {
   metadataHeading.append(node("h3", "", "Library information"));
   const metadataGrid = node("div", "metadata-grid");
   [
-    ["Subject", work.subject],
+    ["Subjects", subjectSummary(work)],
     ["Topic", work.topic],
     ["Access", work.access],
     ["Size", humanBytes(work.totalBytes)],

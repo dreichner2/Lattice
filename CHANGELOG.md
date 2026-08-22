@@ -1,6 +1,6 @@
 # Changelog
 
-## 2.0 — In development
+## 2.0.0 — 2026-08-21
 
 ### Added
 
@@ -27,6 +27,8 @@
 - Exact local-server instance verification and parent-process shutdown.
 - Bundled UI/service resources and atomic application replacement.
 - Expanded macOS, Python, JavaScript, storage, and protocol tests.
+- A polished Windows-native frame around the shared Lattice shelf and a
+  verified clone-to-app onboarding path for the Syncthing hub.
 
 ### Changed
 
@@ -47,8 +49,14 @@
   Codex and manual edits may change only descriptive metadata.
 - Codex enrichment receives filenames and extracted publication metadata, not
   document bytes or full text, and cannot prevent a local import from finishing.
+- Codex executable discovery rejects relative, current-directory,
+  library-owned, and symlinked-into-library command paths.
 - Native path validation now resolves symlinks and matches the selected library
-  boundary.
+  boundary, including imported lecture PDF, EPUB, and TXT files.
 - The app refuses to attach to a service for another library folder.
 - EPUB resource count, expansion size, and compression-ratio limits reduce
   archive-bomb risk.
+- Windows update manifests are production-key signed; candidate servers are
+  isolated, full interface readiness is required, activation is monotonic
+  across concurrent candidates, and installer authority is published before
+  shortcut replacement.

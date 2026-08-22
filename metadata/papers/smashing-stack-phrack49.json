@@ -5,6 +5,7 @@
   "source": "User-supplied exact URL",
   "source_url": "https://inst.eecs.berkeley.edu/~cs161/archive/fa08/papers/stack_smashing.pdf",
   "license": "UC Berkeley CS161 course mirror of Phrack article",
+  "subject_ids": ["computer-science"],
   "sha256": "0c550af6f81215e1b4909f4e8e99e44c7bb18967835c0dbd559191a65d01a275",
   "bytes": 408599,
   "downloaded_at": "2026-08-21T18:53:23.829444+00:00"

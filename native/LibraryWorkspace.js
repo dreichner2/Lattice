@@ -12,7 +12,7 @@
   };
   const normalizeDocument = detail => {
     const path = safeText(detail?.path, 4000);
-    if (!path || !/^(books|papers)\/.+\.(pdf|epub|txt)$/i.test(path)) return null;
+    if (!path || !/^(books|papers|lectures)\/.+\.(pdf|epub|txt)$/i.test(path)) return null;
     if (path.includes("\\") || path.split("/").some(part => !part || part === "." || part === "..")) return null;
     return {
       workId: safeText(detail.workId, 1000) || null,

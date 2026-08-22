@@ -146,11 +146,49 @@ reader, and PDF access in a native WPF/WebView2 window. It includes its own
 loopback-only server, so the packaged app does not require Python or .NET to be
 installed on your cousin's computer.
 
-Download the `Lattice-Windows-win-x64` artifact from a successful **Lattice
-Windows desktop app** workflow, extract it, and run `Lattice.exe`. On first launch,
-select the synchronized Git checkout—the same folder Syncthing uses and the one
-containing `CATALOG.md`. The app remembers that selection and can switch folders
-later from its toolbar.
+For the fast path, install Git for Windows first, then run these commands in
+PowerShell:
+
+```powershell
+winget install --id Git.Git -e --source winget
+```
+
+Close and reopen PowerShell if Git was just installed, then run:
+
+```powershell
+git clone https://github.com/dreichner2/cs-library.git "$HOME\Lattice"
+cd "$HOME\Lattice"
+& ".\windows\setup\Install Lattice and Connect.cmd"
+```
+
+The setup downloads and installs the pinned Lattice `v2.0.0` release for the
+current user, installs official Syncthing `2.1.3` through WinGet when needed,
+selects this clone as the library, configures the Mac mini hub and shared folder
+on the Windows side, starts both apps, and copies the Windows Syncthing Device ID.
+It does not use OneDrive. The interactive happy path is designed to take less
+than two minutes; download, package-install, security-scan, and first-sync time
+depend on the PC and connection and are not included in that estimate.
+
+One mutual-approval step cannot be automated safely: send the displayed Device
+ID privately to the Mac mini owner. The owner must add that Windows device and
+share the existing **Lattice** folder with it. Both devices must be online at the
+same time for the first transfer. No content folders need to be created by hand.
+
+Installed Windows builds use versioned directories under
+`%LOCALAPPDATA%\Programs\Lattice\versions`. The updater accepts only a newer,
+stable release whose exact manifest bytes pass the embedded release-key
+signature check and whose versioned GitHub asset matches the signed size and
+SHA-256. A candidate becomes active only after its own isolated loopback service
+and the complete shared WebView interface have both passed health checks.
+Promotion re-checks the active authority so a slower older candidate cannot
+replace a newer version; the previous healthy version remains available for
+rollback.
+
+This release-signing check is independent of Windows Authenticode. The current
+executable is not Authenticode-signed, so Microsoft Defender SmartScreen or Smart
+App Control may warn or block it on some Windows configurations. Do not disable
+Windows security controls to install Lattice; stop and contact the maintainer if
+Windows blocks it.
 
 To build it on Windows:
 
@@ -195,8 +233,20 @@ ephemeral, read-only, and launched with local tools disabled. Suggestions
 remain editable. If Codex is missing, signed out,
 unavailable, or returns invalid data, the import still succeeds with local
 fallback metadata under **Other**. Each computer that wants this optional
-enrichment signs in to Codex locally; no credential file or API key is copied
-into Lattice. See [Importing and metadata sidecars](docs/IMPORTING.md).
+enrichment signs in to Codex locally with that person's own ChatGPT account:
+
+```powershell
+powershell -ExecutionPolicy ByPass -c "irm https://chatgpt.com/codex/install.ps1 | iex"
+codex login
+codex login status
+```
+
+Lattice's core shelf, reader, search, drag-and-drop import, and manual metadata
+work without Codex. Never share a ChatGPT login or copy a Codex credential file
+between computers. See the official [Codex authentication
+guide](https://learn.chatgpt.com/docs/auth), the
+[`gpt-5.6-luna` model page](https://developers.openai.com/api/docs/models/gpt-5.6-luna),
+and [Importing and metadata sidecars](docs/IMPORTING.md).
 
 The repository tracks hidden placeholders for `books/`, `papers/`, `lectures/`,
 and known nested collections, but ignores their payloads. A clone therefore has

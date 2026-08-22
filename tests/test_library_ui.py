@@ -19,6 +19,7 @@ ROOT = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(ROOT / "scripts"))
 
 import library_ui  # noqa: E402
+import build_video_catalog  # noqa: E402
 
 
 def write_test_taxonomy(root: Path) -> None:
@@ -49,6 +50,8 @@ def write_test_epub(path: Path) -> None:
     <item id="two" href="text/two.xhtml" media-type="application/xhtml+xml"/>
     <item id="style" href="styles/book.css" media-type="text/css"/>
     <item id="image" href="images/diagram.svg" media-type="image/svg+xml" properties="cover-image"/>
+    <item id="kobo" href="js/kobo.js" media-type="text/javascript"/>
+    <item id="reader-wasm" href="js/reader.wasm" media-type="application/wasm"/>
   </manifest>
   <spine><itemref idref="one"/><itemref idref="two"/></spine>
 </package>""",
@@ -63,13 +66,16 @@ def write_test_epub(path: Path) -> None:
         )
         archive.writestr(
             "EPUB/text/one.xhtml",
-            """<html xmlns="http://www.w3.org/1999/xhtml"><head><link rel="stylesheet" href="../styles/book.css"/></head><body><h1 id="start">The Beginning</h1><p id="details">Readable text.</p><img src="../images/diagram.svg"/></body></html>""",
+            """<html xmlns="http://www.w3.org/1999/xhtml"><head><link rel="stylesheet" href="../styles/book.css"/><script src="../js/kobo.js"></script><script>document.body.dataset.executed = 'yes';</script></head><body><h1 id="start">The Beginning</h1><p id="details">Readable text.</p><img src="../images/diagram.svg"/></body></html>""",
         )
         archive.writestr(
             "EPUB/text/two.xhtml",
             """<html xmlns="http://www.w3.org/1999/xhtml"><body><h1>The End</h1></body></html>""",
         )
         archive.writestr("EPUB/styles/book.css", "body { color: #222; }")
+        archive.writestr("EPUB/js/kobo.js", "document.body.dataset.koboExecuted = 'yes';")
+        archive.writestr("EPUB/js/reader.wasm", b"\x00asm\x01\x00\x00\x00")
+        archive.writestr("EPUB/js/undeclared.mjs", "throw new Error('must not run');")
         archive.writestr(
             "EPUB/images/diagram.svg",
             "<svg xmlns=\"http://www.w3.org/2000/svg\" width=\"10\" height=\"10\"><rect width=\"10\" height=\"10\"/></svg>",
@@ -128,22 +134,30 @@ class CatalogTests(unittest.TestCase):
             self.assertEqual(self.library["stats"]["indexedArtifacts"], 112)
             self.assertFalse(self.library["stats"]["allPresent"])
             return
-        self.assertEqual(self.library["stats"]["works"], 96)
-        self.assertEqual(self.library["stats"]["artifacts"], 125)
-        self.assertEqual(self.library["stats"]["present"], 125)
+        # A synchronized library can contain user-imported arrivals beyond the
+        # curated baseline. Keep the baseline strict without making a healthy
+        # add/import operation break the repository test suite.
+        self.assertGreaterEqual(self.library["stats"]["works"], 96)
+        self.assertGreaterEqual(self.library["stats"]["artifacts"], 125)
+        self.assertEqual(
+            self.library["stats"]["present"],
+            self.library["stats"]["artifacts"],
+        )
         self.assertEqual(self.library["stats"]["subjects"], 12)
         self.assertTrue(self.library["stats"]["allPresent"])
-        self.assertEqual(
-            self.library["stats"]["materialCounts"],
-            {
-                "book": 58,
-                "lecture": 20,
-                "course-volume": 7,
-                "paper": 36,
-                "specification": 2,
-                "standard": 2,
-            },
-        )
+        baseline_materials = {
+            "book": 58,
+            "lecture": 20,
+            "course-volume": 7,
+            "paper": 36,
+            "specification": 2,
+            "standard": 2,
+        }
+        for material, minimum in baseline_materials.items():
+            self.assertGreaterEqual(
+                self.library["stats"]["materialCounts"].get(material, 0),
+                minimum,
+            )
 
     def test_every_artifact_is_present_and_unique(self) -> None:
         if self.library["stats"]["artifacts"] == 0:
@@ -165,7 +179,7 @@ class CatalogTests(unittest.TestCase):
             {
                 "courses": 58,
                 "lectures": 1452,
-                "subjects": 12,
+                "subjects": 14,
                 "institutions": 5,
                 "duplicatesRemoved": 3,
                 "sources": 4,
@@ -180,7 +194,7 @@ class CatalogTests(unittest.TestCase):
                 {"id": "andrej-karpathy", "label": "Andrej Karpathy", "courseCount": 1},
             ],
         )
-        self.assertEqual(len(catalog["subjects"]), 12)
+        self.assertEqual(len(catalog["subjects"]), 14)
         course_ids = [course["id"] for course in catalog["courses"]]
         video_ids = [
             lecture["id"]
@@ -195,6 +209,38 @@ class CatalogTests(unittest.TestCase):
         self.assertTrue(
             all(course["source"] == {"id": "mit", "label": "MIT"} for course in catalog["courses"] if course["institution"] in mit_institutions)
         )
+
+    def test_video_subjects_match_the_multidisciplinary_generator(self) -> None:
+        expected = {
+            "mit-6-004-spring-2017": "Computer Engineering",
+            "mit-6-002-spring-2007": "Electrical Engineering",
+            "mit-res-6-008-spring-2011": "Electrical Engineering",
+            "mit-res-6-010-spring-2013": "Electrical Engineering",
+            "mit-6-003-fall-2011": "Electrical Engineering",
+            "mit-res-6-007-spring-2011": "Electrical Engineering",
+            "mit-6-02-fall-2012": "Electrical Engineering",
+            "mit-6-451-spring-2005": "Electrical Engineering",
+            "mit-6-450-fall-2006": "Electrical Engineering",
+            "mit-6-0002-fall-2016": "Statistics & Data Science",
+            "mit-6-041-fall-2010": "Statistics & Data Science",
+            "mit-6-262-spring-2011": "Statistics & Data Science",
+            "mit-18-404j-fall-2020": "Algorithms & Theory",
+        }
+        by_id = {course["id"]: course for course in self.lecture_catalog["courses"]}
+        for course_id, subject in expected.items():
+            with self.subTest(course_id=course_id):
+                course = by_id[course_id]
+                self.assertEqual(course["subject"], subject)
+                self.assertEqual(course["stage"], build_video_catalog.subject_stage(subject))
+                self.assertEqual(
+                    build_video_catalog.mit_subject(
+                        {
+                            "title": course["title"],
+                            "coursenum": re.sub(r"^MIT ", "", course["code"]),
+                        }
+                    ),
+                    subject,
+                )
 
     def test_video_catalog_includes_core_full_course_tracks(self) -> None:
         by_id = {course["id"]: course for course in self.lecture_catalog["courses"]}
@@ -370,8 +416,10 @@ class ServerTests(unittest.TestCase):
             )
         with urllib.request.urlopen(self.base + "/api/library", timeout=3) as response:
             payload = json.loads(response.read())
-            expected_works = 83 if payload["stats"]["artifacts"] == 0 else 96
-            self.assertEqual(payload["stats"]["works"], expected_works)
+            if payload["stats"]["artifacts"] == 0:
+                self.assertEqual(payload["stats"]["works"], 83)
+            else:
+                self.assertGreaterEqual(payload["stats"]["works"], 96)
             self.assertTrue(payload["actionToken"])
 
     def test_lecture_api_and_controller(self) -> None:
@@ -492,6 +540,13 @@ class EpubReaderTests(unittest.TestCase):
         self.assertEqual(package["toc"][1]["depth"], 1)
         self.assertTrue(package["coverUrl"].endswith("/EPUB/images/diagram.svg"))
         self.assertEqual(media_types["EPUB/text/one.xhtml"], "application/xhtml+xml")
+        self.assertNotIn("EPUB/js/kobo.js", media_types)
+        self.assertNotIn("EPUB/js/reader.wasm", media_types)
+
+    def test_scripted_kobo_epub_is_valid_import_input(self) -> None:
+        embedded = library_ui._validate_import_payload(self.epub_path, ".epub")
+        self.assertEqual(embedded["title"], "Fixture EPUB")
+        self.assertEqual(embedded["authors"], ["Test Author"])
 
     def test_epub_api_and_same_origin_resource_route(self) -> None:
         query = urllib.parse.urlencode({"path": "books/fixture.epub"})
@@ -505,6 +560,27 @@ class EpubReaderTests(unittest.TestCase):
             self.assertIn("script-src 'none'", response.headers["Content-Security-Policy"])
             self.assertTrue(response.headers["Content-Type"].startswith("text/html"))
         self.assertIn(b"Readable text", chapter)
+
+        markup = (ROOT / "ui" / "index.html").read_text(encoding="utf-8")
+        frame = re.search(r'<iframe[^>]+id="epubFrame"[^>]*>', markup)
+        self.assertIsNotNone(frame)
+        self.assertIn('sandbox="allow-same-origin"', frame.group(0))
+        self.assertNotIn("allow-scripts", frame.group(0))
+
+        key = library_ui.encode_epub_key("books/fixture.epub")
+        for entry in ("EPUB/js/kobo.js", "EPUB/js/reader.wasm", "EPUB/js/undeclared.mjs"):
+            resource_url = f"{self.base}/epub/{key}/{entry}"
+            for method in ("GET", "HEAD"):
+                with self.subTest(entry=entry, method=method):
+                    request = urllib.request.Request(resource_url, method=method)
+                    with self.assertRaises(urllib.error.HTTPError) as caught:
+                        urllib.request.urlopen(request, timeout=3)
+                    self.assertEqual(caught.exception.code, 404)
+                    self.assertNotIn(
+                        caught.exception.headers.get_content_type(),
+                        library_ui.EPUB_ACTIVE_MEDIA_TYPES,
+                    )
+                    caught.exception.close()
 
         style_url = package["chapters"][0]["url"].rsplit("/", 2)[0] + "/styles/book.css"
         with urllib.request.urlopen(self.base + style_url, timeout=3) as response:

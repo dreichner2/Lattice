@@ -254,10 +254,7 @@ final class ReaderBridge: NSObject, WKScriptMessageHandlerWithReply {
     }
 
     private func isSafeReaderPath(_ path: String) -> Bool {
-        let pieces = path.replacingOccurrences(of: "\\", with: "/").split(separator: "/", omittingEmptySubsequences: false)
-        guard pieces.count >= 2, ["books", "papers"].contains(String(pieces[0])) else { return false }
-        guard pieces.allSatisfy({ !$0.isEmpty && $0 != "." && $0 != ".." }) else { return false }
-        return ["pdf", "epub", "txt"].contains(URL(fileURLWithPath: path).pathExtension.lowercased())
+        LibraryIdentity.isReadableRelativePath(path)
     }
 }
 

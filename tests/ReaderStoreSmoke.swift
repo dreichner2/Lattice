@@ -13,6 +13,22 @@ struct ReaderStoreSmoke {
         let readable = books.appendingPathComponent("fixture.pdf")
         try Data("%PDF-1.1\n%%EOF\n".utf8).write(to: readable)
         precondition(LibraryIdentity.resolveLibraryFile(relativePath: "books/fixture.pdf", root: libraryRoot) == readable.resolvingSymlinksInPath())
+        let lectures = libraryRoot.appendingPathComponent("lectures", isDirectory: true)
+        try FileManager.default.createDirectory(at: lectures, withIntermediateDirectories: true)
+        for (name, contents) in [
+            ("session.pdf", "%PDF-1.1\n%%EOF\n"),
+            ("session.epub", "fixture epub"),
+            ("session.txt", "fixture transcript"),
+        ] {
+            let lecture = lectures.appendingPathComponent(name)
+            try Data(contents.utf8).write(to: lecture)
+            let relative = "lectures/\(name)"
+            precondition(LibraryIdentity.isReadableRelativePath(relative))
+            precondition(LibraryIdentity.resolveLibraryFile(relativePath: relative, root: libraryRoot) == lecture.resolvingSymlinksInPath())
+            precondition(LibraryIdentity.relativePath(for: lecture, root: libraryRoot) == relative)
+        }
+        precondition(!LibraryIdentity.isReadableRelativePath("lectures/session.html"))
+        precondition(!LibraryIdentity.isReadableRelativePath("lectures/../outside.pdf"))
         let outside = temporary.appendingPathComponent("outside.pdf")
         try Data("%PDF-1.1\n%%EOF\n".utf8).write(to: outside)
         let linked = books.appendingPathComponent("linked.pdf")

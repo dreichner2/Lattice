@@ -5,6 +5,7 @@
   "source": "User-supplied exact URL",
   "source_url": "https://www2.math.upenn.edu/~wilf/gfologyLinked2.pdf",
   "license": "Freely distributed by author (A K Peters 2nd ed.)",
+  "subject_ids": ["mathematics"],
   "sha256": "fa522a14f9b1631232ff6b34bc092686803b71cc8154cbf31c7ac523a75108dc",
   "bytes": 1613715,
   "downloaded_at": "2026-08-21T18:53:20.735368+00:00"

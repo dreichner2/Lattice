@@ -5,6 +5,7 @@
   "source": "User-supplied exact URL",
   "source_url": "http://webdam.inria.fr/Alice/pdfs/all.pdf",
   "license": "Free web edition hosted by authors (webdam.inria.fr)",
+  "subject_ids": ["computer-science"],
   "sha256": "5d633e4514799a123616c565beeaa498d9900f615969273b320a969fb0c336a0",
   "bytes": 3112558,
   "downloaded_at": "2026-08-21T18:53:18.818420+00:00"
