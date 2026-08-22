@@ -352,7 +352,7 @@ final class ReaderStore {
     func exportMarkdown(to url: URL) throws {
         let documentsByID = Dictionary(uniqueKeysWithValues: try documents().map { ($0.id, $0) })
         let notes = try annotations()
-        var lines = ["# CS Library Reading Notebook", "", "Exported \(ISO8601DateFormatter().string(from: Date()))", ""]
+        var lines = ["# Lattice Reading Notebook", "", "Exported \(ISO8601DateFormatter().string(from: Date()))", ""]
         for group in Dictionary(grouping: notes, by: \ReaderAnnotation.documentID).sorted(by: {
             (documentsByID[$0.key]?.title ?? $0.key) < (documentsByID[$1.key]?.title ?? $1.key)
         }) {

@@ -1,6 +1,7 @@
 # Library Rules
 
-These rules keep the shelf clean after the current reorganization.
+These rules keep Lattice consistent across subjects, computers, and
+metadata sources.
 
 ## 1. One logical work, one catalog row
 
@@ -23,9 +24,9 @@ Payload names must:
 
 The title and full author list belong in metadata, not in the filename.
 
-## 3. Metadata is separate from reading material
+## 3. Curated and private metadata are separate from reading material
 
-Each local payload has exactly one JSON record at the mirrored path under
+Each curated payload has exactly one JSON record at the mirrored path under
 `metadata/`, with the payload extension replaced by `.json`:
 
 ```text
@@ -38,14 +39,42 @@ At minimum, a record must include `title`, `path`, `license`, `bytes`, and a
 and acquisition dates stay in the same record. Unknown legacy provenance is
 written as unknown; it is never guessed.
 
-## 4. Duplicate policy
+That mirrored `metadata/` form is the Git-tracked authority for curated catalog
+material. Normal UI imports instead write a private sidecar adjacent to the
+payload, appending `.library.json` to the complete filename:
+
+```text
+books/example.pdf                 → books/example.pdf.library.json
+papers/example.epub               → papers/example.epub.library.json
+```
+
+Keeping the payload extension prevents same-stem PDF and EPUB imports from
+colliding. Sidecars are ignored by Git and synchronized through Syncthing. They
+must follow schema version 1 and retain server-owned path, byte count, SHA-256,
+access, and import-provenance fields.
+
+## 4. Subjects and topics are different
+
+`library-taxonomy.json` is the authority for stable, broad subject IDs. A
+**subject** is a discipline such as computer science, electrical engineering,
+computer engineering, mathematics, or physics. A **topic** is a narrower,
+editable description such as distributed systems, circuit analysis, or linear
+algebra.
+
+The existing curated catalog defaults to `computer-science`, with topic-level
+defaults and selected work overrides recorded in the taxonomy. A new import
+defaults to `other` when neither local metadata nor a validated suggestion gives
+a known subject. Add new subject IDs to the taxonomy rather than inventing a
+one-off value in a sidecar.
+
+## 5. Duplicate policy
 
 `python3 scripts/fetch.py audit` must report zero exact duplicate groups.
 Logical redundancy is reviewed separately because a merged book and its source
 chapters will not share a byte hash. If a redundant item is removed, prefer a
 recoverable move to Trash and record what remains authoritative.
 
-## 5. Source and access policy
+## 6. Source and access policy
 
 - Prefer an author, publisher, standards body, university, or recognized open
   repository.
@@ -58,7 +87,15 @@ recoverable move to Trash and record what remains authoritative.
 - OpenStax material is excluded from generative-AI ingestion unless OpenStax
   grants applicable permission.
 
-## 6. Remote policy
+The optional Codex import assistant may receive only the filename, selected
+material kind, locally extracted embedded publication metadata, and allowed
+subject list. It must not receive payload bytes or full text. Its descriptive
+suggestions remain editable and untrusted; it cannot
+change access, path, byte count, SHA-256, or import provenance. Import must still
+finish with deterministic local fallback metadata if Codex is absent, signed
+out, unavailable, or invalid.
+
+## 7. Remote policy
 
 Git tracks the catalog, study guide, rules, source metadata, provenance, hash
 manifests, tooling, and hidden `.gitkeep` files that create the required
@@ -68,17 +105,28 @@ deliberate: the shelf contains mixed rights and should not be republished merely
 because the repository is private.
 
 Syncthing is the private payload transport. Its repository-root `.stignore`
-allowlists only `books/`, `papers/`, and `lectures/`; catalog metadata and app
-source continue to come from GitHub. Syncthing must not be used to mirror
-`.git/`, build output, or a live SQLite database.
+allowlists only `books/`, `papers/`, and `lectures/`. Private `.library.json`
+sidecars sync because they sit inside those roots; curated catalog metadata,
+taxonomy, and app source continue to come from GitHub. Syncthing must not be
+used to mirror `.git/`, build output, Codex credentials, or a live SQLite
+database.
 
-Do not force-add a book or paper payload. If a separate content backup is ever
+Do not force-add a book, paper, lecture, or private sidecar. If a separate
+content backup is ever
 needed, choose a storage system and rights policy explicitly rather than
 silently turning GitHub into an ebook host.
 
-## 7. Safe update sequence
+## 8. Safe update sequence
 
-After adding, replacing, or removing material:
+For an ordinary private import:
+
+1. Drag the file into the app or choose **Add**.
+2. Select the payload kind and review the generated title, subject, and topics.
+3. Confirm that the item opens and its sidecar reports the expected path and
+   subject.
+4. Let Syncthing finish before editing the same item from the other computer.
+
+For an intentional curated-catalog addition, replacement, or removal:
 
 1. Normalize the filename and create/update its metadata record.
 2. Update the one logical row in `CATALOG.md` and the study guide if relevant.

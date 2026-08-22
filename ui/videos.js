@@ -173,7 +173,7 @@
     function persistProgress() {
       const completedSaved = writeStorage(STORAGE.completed, [...state.completed]);
       const positionsSaved = writeStorage(STORAGE.positions, state.positions);
-      if (!completedSaved || !positionsSaved) options.announce?.("Video progress could not be saved on this Mac", true);
+      if (!completedSaved || !positionsSaved) options.announce?.("Video progress could not be saved on this computer", true);
     }
 
     function courseMatches(course) {

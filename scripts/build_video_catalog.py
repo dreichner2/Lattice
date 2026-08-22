@@ -1,12 +1,12 @@
 #!/usr/bin/env python3
-"""Build the checked-in catalog of free, embeddable CS lecture videos.
+"""Build Lattice's checked-in catalog of free, embeddable lecture videos.
 
 The catalog stores links and metadata only. Video bytes remain on the official
 publisher's YouTube channel. MIT OpenCourseWare courses are discovered from
 MIT's public search API and course pages; a small set of additional official
 course playlists fills important curriculum gaps.
 
-This refresh command requires yt-dlp, but the CS Library app does not::
+This refresh command requires yt-dlp, but Lattice does not::
 
     python3 -m pip install yt-dlp
     python3 scripts/build_video_catalog.py

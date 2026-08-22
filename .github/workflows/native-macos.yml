@@ -5,8 +5,6 @@ on:
   push:
     branches:
       - main
-      - codex/native-epub-reader
-      - codex/best-in-class-library
   workflow_dispatch:
 
 permissions:
@@ -30,7 +28,7 @@ jobs:
           node --check native/ImmersiveEPUB.js
           node --check native/LibraryWorkspace.js
           node --check ui/app.js
-          node --test tests/test_immersive_epub.mjs tests/test_library_workspace.mjs
+          node --test tests/*.mjs
 
       - name: Validate durable reader store
         run: |
@@ -44,25 +42,25 @@ jobs:
             -o /tmp/reader-store-smoke
           /tmp/reader-store-smoke
 
-      - name: Build and verify CS Library.app
+      - name: Build and verify Lattice.app
         run: |
           ./scripts/build-macos-app.sh
-          test -x "CS Library.app/Contents/MacOS/CS Library"
-          test -f "CS Library.app/Contents/Resources/ui/index.html"
-          test -f "CS Library.app/Contents/Resources/ui/app.js"
-          test -f "CS Library.app/Contents/Resources/server/library_ui.py"
-          test -f "CS Library.app/Contents/Resources/ImmersiveEPUB.js"
-          test -f "CS Library.app/Contents/Resources/LibraryWorkspace.js"
-          /usr/bin/codesign --verify --deep --strict "CS Library.app"
-          /usr/bin/plutil -lint "CS Library.app/Contents/Info.plist"
+          test -x "Lattice.app/Contents/MacOS/Lattice"
+          test -f "Lattice.app/Contents/Resources/ui/index.html"
+          test -f "Lattice.app/Contents/Resources/ui/app.js"
+          test -f "Lattice.app/Contents/Resources/server/library_ui.py"
+          test -f "Lattice.app/Contents/Resources/ImmersiveEPUB.js"
+          test -f "Lattice.app/Contents/Resources/LibraryWorkspace.js"
+          /usr/bin/codesign --verify --deep --strict "Lattice.app"
+          /usr/bin/plutil -lint "Lattice.app/Contents/Info.plist"
 
       - name: Package verified app
-        run: /usr/bin/ditto -c -k --keepParent "CS Library.app" "CS-Library-macOS.zip"
+        run: /usr/bin/ditto -c -k --keepParent "Lattice.app" "Lattice-macOS.zip"
 
       - name: Upload verified app
         uses: actions/upload-artifact@v4
         with:
-          name: CS-Library-macOS-${{ github.sha }}
-          path: CS-Library-macOS.zip
+          name: Lattice-macOS-${{ github.sha }}
+          path: Lattice-macOS.zip
           if-no-files-found: error
           retention-days: 14

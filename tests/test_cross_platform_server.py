@@ -9,6 +9,7 @@ import urllib.error
 import urllib.parse
 import urllib.request
 from pathlib import Path
+from unittest import mock
 
 
 ROOT = Path(__file__).resolve().parents[1]
@@ -55,6 +56,9 @@ class CrossPlatformServerTests(unittest.TestCase):
                 ]
             ),
             encoding="utf-8",
+        )
+        (self.root / "library-taxonomy.json").write_bytes(
+            (ROOT / "library-taxonomy.json").read_bytes()
         )
         (self.ui / "index.html").write_text("<h1>Fixture</h1>", encoding="utf-8")
         (self.ui / "styles.css").write_text("", encoding="utf-8")
@@ -165,6 +169,44 @@ class CrossPlatformServerTests(unittest.TestCase):
             self.server.state_store.snapshot("different-library", "localStorage"),
             {},
         )
+
+    def test_parent_owned_desktop_service_never_reuses_another_instance(self) -> None:
+        class FakeServer:
+            server_address = ("127.0.0.1", 8770)
+            library_id = "test-library"
+
+            def __init__(self) -> None:
+                self.served = False
+                self.closed = False
+
+            def serve_forever(self, poll_interval: float) -> None:
+                self.served = poll_interval == 0.25
+
+            def server_close(self) -> None:
+                self.closed = True
+
+        fake = FakeServer()
+        with mock.patch.object(
+            cross_platform_server,
+            "find_matching_server",
+            side_effect=AssertionError("a parent-owned service must not attach to another instance"),
+        ), mock.patch.object(
+            cross_platform_server,
+            "create_server",
+            return_value=fake,
+        ) as create, mock.patch("signal.signal"):
+            result = cross_platform_server.run_server(
+                8766,
+                root=self.root,
+                ui_root=self.ui,
+                state_database=self.database,
+                parent_pid=12345,
+                open_browser=False,
+            )
+        self.assertEqual(result, 0)
+        self.assertTrue(fake.served)
+        self.assertTrue(fake.closed)
+        self.assertEqual(create.call_args.kwargs["parent_pid"], 12345)
 
 
 if __name__ == "__main__":

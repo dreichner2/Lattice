@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Run CS Library with Windows desktop support and durable web-reader state.
+"""Run Lattice with Windows desktop support and durable web-reader state.
 
 The catalog, path validation, EPUB safety, and loopback HTTP boundary remain in
 ``library_ui``. This module adds a small SQLite mirror for the shared web UI,
@@ -175,7 +175,7 @@ class ReaderStateStore:
                 (library_id,),
             ).fetchall()
         return {
-            "application": "CS Library",
+            "application": "Lattice",
             "schemaVersion": 1,
             "libraryId": library_id,
             "exportedAt": datetime.now(timezone.utc).isoformat(),
@@ -410,12 +410,15 @@ def run_server(
     root = root.expanduser().resolve()
     candidates = [port] if port == 0 else list(range(port, min(port + 20, 65536)))
     expected_library_id = library_ui.library_identity(root)
-    for candidate in candidates:
-        if candidate and (running_url := find_matching_server(candidate, expected_library_id)):
-            print(f"CS Library is already running at {running_url}", flush=True)
-            if open_browser:
-                webbrowser.open(running_url)
-            return 0
+    # A desktop parent owns the child service lifetime. Never attach a second
+    # app instance to a service that will exit when the first app closes.
+    if parent_pid is None:
+        for candidate in candidates:
+            if candidate and (running_url := find_matching_server(candidate, expected_library_id)):
+                print(f"Lattice is already running at {running_url}", flush=True)
+                if open_browser:
+                    webbrowser.open(running_url)
+                return 0
 
     server: CrossPlatformLibraryServer | None = None
     for candidate in candidates:
@@ -431,11 +434,11 @@ def run_server(
         except OSError:
             continue
     if server is None:
-        print("Could not find an available local port for CS Library.", file=sys.stderr, flush=True)
+        print("Could not find an available local port for Lattice.", file=sys.stderr, flush=True)
         return 1
 
     url = f"http://127.0.0.1:{int(server.server_address[1])}"
-    print(f"CS Library is ready: {url}", flush=True)
+    print(f"Lattice is ready: {url}", flush=True)
     print(f"Library ID: {server.library_id}", flush=True)
     if open_browser:
         threading.Timer(0.25, webbrowser.open, args=(url,)).start()
@@ -456,7 +459,7 @@ def run_server(
 
 def build_parser() -> argparse.ArgumentParser:
     parser = argparse.ArgumentParser(description=__doc__)
-    parser.add_argument("--root", type=Path, default=Path.cwd(), help="CS Library folder")
+    parser.add_argument("--root", type=Path, default=Path.cwd(), help="Lattice folder")
     parser.add_argument("--ui-root", type=Path, default=None, help="Bundled UI directory")
     parser.add_argument("--port", type=int, default=8766, help="Preferred local port")
     parser.add_argument("--state-db", type=Path, default=default_state_database())

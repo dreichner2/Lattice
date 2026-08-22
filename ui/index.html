@@ -5,7 +5,7 @@
     <meta name="viewport" content="width=device-width, initial-scale=1">
     <meta name="color-scheme" content="light dark">
     <meta name="theme-color" content="#f4f2ed">
-    <title>CS Library</title>
+    <title>Lattice</title>
     <link rel="stylesheet" href="/styles.css">
     <link rel="stylesheet" href="/video-styles.css">
   </head>
@@ -17,8 +17,8 @@
             <span></span><span></span><span></span>
           </div>
           <div class="brand-copy">
-            <strong>CS Library</strong>
-            <small>Local study system</small>
+            <strong>Lattice</strong>
+            <small>A shared knowledge library</small>
           </div>
         </div>
 
@@ -61,8 +61,13 @@
         </div>
 
         <div class="nav-section">
-          <p class="nav-label">Subject shelves</p>
-          <nav id="shelfNav" class="shelf-nav" aria-label="Subject shelves"></nav>
+          <p class="nav-label">Subjects</p>
+          <nav id="subjectNav" class="shelf-nav" aria-label="Broad subjects"></nav>
+        </div>
+
+        <div class="nav-section">
+          <p class="nav-label">Topics</p>
+          <nav id="shelfNav" class="shelf-nav" aria-label="Topic shelves"></nav>
         </div>
 
         <div class="sidebar-footer">
@@ -102,8 +107,8 @@
               <span class="sync-dot" aria-hidden="true"></span>
               <span id="syncText">Connecting…</span>
             </div>
+            <button class="topbar-add-button" id="addButton" type="button"><span aria-hidden="true">＋</span> Add</button>
             <button class="icon-button" id="themeButton" type="button" aria-label="Switch color theme">◒</button>
-            <button class="avatar" type="button" aria-label="Personal local library">DR</button>
           </div>
         </header>
 
@@ -111,11 +116,12 @@
           <section class="hero" aria-labelledby="pageTitle">
             <div class="hero-copy">
               <p class="eyebrow" id="heroEyebrow"><span></span> Private · local · searchable</p>
-              <h1 id="pageTitle">Your computer science library</h1>
-              <p class="hero-description" id="heroDescription">A focused workspace for books, papers, specifications, and course notes—with reading progress, native EPUB and PDF access, and live sync from this Mac.</p>
+              <h1 id="pageTitle">Knowledge, shared simply</h1>
+              <p class="hero-description" id="heroDescription">A private home for books, papers, lecture notes, and references across every subject—with focused reading tools and live updates between your computers.</p>
               <div class="hero-actions">
                 <button class="button button-primary" id="randomButton" type="button">Choose my next read <span aria-hidden="true">↗</span></button>
                 <button class="button button-quiet" id="focusSearchButton" type="button">Search the shelf</button>
+                <button class="button button-quiet" id="heroAddButton" type="button">Add material</button>
               </div>
               <div class="hero-trust" id="heroTrust" aria-label="Library qualities">
                 <span><i aria-hidden="true"></i> Loopback only</span>
@@ -125,7 +131,7 @@
             </div>
             <div class="hero-stats" aria-label="Library statistics">
               <div class="stat"><span class="stat-label" id="workStatLabel">Collection</span><strong id="workStat">—</strong><span id="workStatNote">logical works</span></div>
-              <div class="stat"><span class="stat-label" id="artifactStatLabel">Materials</span><strong id="artifactStat">—</strong><span id="artifactStatNote">files on Mac</span></div>
+              <div class="stat"><span class="stat-label" id="artifactStatLabel">Materials</span><strong id="artifactStat">—</strong><span id="artifactStatNote">local files</span></div>
               <div class="stat"><span class="stat-label" id="sizeStatLabel">Footprint</span><strong id="sizeStat">—</strong><span id="sizeStatNote">local shelf</span></div>
               <div class="stat integrity-stat"><span class="stat-label" id="integrityStatLabel">Integrity</span><strong id="integrityStat">—</strong><span id="integrityStatNote">files available</span></div>
             </div>
@@ -149,13 +155,17 @@
             </div>
 
             <div class="toolbar" aria-label="Catalog controls">
-              <div class="subject-chips" id="subjectChips" aria-label="Subject filters"></div>
+              <div class="catalog-filter-groups">
+                <div class="filter-row"><span>Subject</span><div class="subject-chips" id="subjectChips" aria-label="Subject filters"></div></div>
+                <div class="filter-row"><span>Topic</span><div class="subject-chips" id="topicChips" aria-label="Topic filters"></div></div>
+              </div>
               <div class="toolbar-right">
                 <label class="sort-control"><span>Sort by</span>
                   <select id="sortSelect">
                     <option value="title">Title</option>
                     <option value="author">Author</option>
-                    <option value="subject">Shelf</option>
+                    <option value="subject">Subject</option>
+                    <option value="topic">Topic</option>
                     <option value="recent">Recently opened</option>
                   </select>
                 </label>
@@ -169,8 +179,8 @@
 
             <div class="empty-state" id="emptyState" hidden>
               <div class="empty-mark" aria-hidden="true">⌕</div>
-              <h3>No books found</h3>
-              <p>Try another title, author, file type, or subject.</p>
+              <h3>No materials found</h3>
+              <p>Try another title, creator, file type, subject, or topic.</p>
               <button class="button button-quiet" id="clearFiltersButton" type="button">Clear filters</button>
             </div>
           </section>
@@ -188,7 +198,7 @@
               <span class="video-source-mark" aria-hidden="true">▶</span>
               <div>
                 <strong>Official streams, one focused player</strong>
-                <p>Videos stay with their publishers. CS Library stores only course metadata and your completion marks on this Mac.</p>
+                <p>Videos stay with their publishers. Lattice stores only course metadata and your completion marks on this computer.</p>
               </div>
               <button class="text-button" id="videoSourcesButton" type="button">Source notes</button>
             </div>
@@ -225,17 +235,67 @@
           </section>
 
           <footer class="page-footer">
-            <span>CS Library</span>
+            <span>Lattice</span>
             <p>Private by design. The interface runs on this computer and serves only the files already on your shelf.</p>
           </footer>
         </div>
       </main>
     </div>
 
+    <input id="addFilesInput" type="file" accept=".pdf,.epub,.txt,application/pdf,application/epub+zip,text/plain" multiple hidden>
+
+    <div class="drop-overlay" id="dropOverlay" aria-hidden="true">
+      <div class="drop-overlay-card">
+        <span class="drop-overlay-icon" aria-hidden="true">＋</span>
+        <strong>Drop files into Lattice</strong>
+        <p>PDF, EPUB, and TXT files stay on your computers.</p>
+      </div>
+    </div>
+
+    <div class="import-shell" id="importShell" aria-hidden="true">
+      <button class="import-backdrop" id="importBackdrop" type="button" aria-label="Close Add material"></button>
+      <section class="import-panel" role="dialog" aria-modal="true" aria-labelledby="importTitle">
+        <header class="import-header">
+          <div>
+            <p>Add to Lattice</p>
+            <h2 id="importTitle">Bring something to the shelf</h2>
+          </div>
+          <button class="import-close" id="importCloseButton" type="button" aria-label="Close Add material">×</button>
+        </header>
+
+        <div class="import-body">
+          <fieldset class="import-kind-picker" id="importKindPicker">
+            <legend>What are you adding?</legend>
+            <label><input type="radio" name="importKind" value="book" checked><span aria-hidden="true">▥</span><strong>Books</strong><small>Textbooks and ebooks</small></label>
+            <label><input type="radio" name="importKind" value="paper"><span aria-hidden="true">▤</span><strong>Papers</strong><small>Articles and research</small></label>
+            <label><input type="radio" name="importKind" value="lecture"><span aria-hidden="true">▷</span><strong>Lecture notes</strong><small>Course handouts and notes</small></label>
+          </fieldset>
+
+          <button class="import-drop-zone" id="importDropZone" type="button">
+            <span class="import-drop-mark" aria-hidden="true">＋</span>
+            <strong>Choose files or drop them here</strong>
+            <small>PDF, EPUB, or TXT · multiple files welcome</small>
+          </button>
+
+          <div class="ai-readiness" id="aiReadiness" data-status="checking" role="status">
+            <span class="ai-readiness-dot" aria-hidden="true"></span>
+            <div><strong>Checking Luna metadata…</strong><small>Files are added even when AI is unavailable.</small></div>
+          </div>
+
+          <div class="import-queue" id="importQueue" aria-live="polite"></div>
+        </div>
+
+        <footer class="import-footer">
+          <p>Only the filename and embedded ebook details are used for AI metadata. The book contents are not sent.</p>
+          <button class="button button-primary" id="importChooseButton" type="button">Choose files</button>
+        </footer>
+      </section>
+    </div>
+
     <div class="drawer-scrim" id="drawerScrim"></div>
-    <aside class="detail-drawer" id="detailDrawer" aria-label="Book details" aria-hidden="true">
+    <aside class="detail-drawer" id="detailDrawer" aria-label="Material details" aria-hidden="true">
       <div class="drawer-header">
-        <p>Book details</p>
+        <p>Material details</p>
         <button class="icon-button" id="drawerClose" type="button" aria-label="Close details">×</button>
       </div>
       <div class="drawer-body" id="drawerBody"></div>
@@ -250,7 +310,7 @@
             <button class="reader-tool-button" id="readerTocButton" type="button" aria-expanded="false" hidden><span aria-hidden="true">☷</span> Contents</button>
           </div>
           <div class="reader-heading">
-            <p id="readerKicker">Reading in CS Library</p>
+            <p id="readerKicker">Reading in Lattice</p>
             <h2 id="readerTitle">Reader</h2>
           </div>
           <div class="reader-actions">
@@ -407,7 +467,7 @@
     </div>
 
     <div class="toast-region" id="toastRegion" aria-live="polite"></div>
-    <script src="/videos.js" defer></script>
-    <script src="/app.js" defer></script>
+    <script src="/videos.js?v=lattice-20260821" defer></script>
+    <script src="/app.js?v=lattice-20260821" defer></script>
   </body>
 </html>

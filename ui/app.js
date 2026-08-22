@@ -22,6 +22,14 @@ const DEFAULT_EPUB_SETTINGS = Object.freeze({
   tone: "paper",
 });
 
+const IMPORT_ACCEPTED = /\.(pdf|epub|txt)$/i;
+const IMPORT_STATUS_COMPLETE = new Set(["complete", "completed", "ready", "succeeded", "success", "fallback", "manual"]);
+const IMPORT_STATUS_FAILED = new Set(["failed", "error"]);
+// A bounded server queue can legitimately take several minutes for a large
+// multi-file drop. Poll long enough for every queued item to reach a terminal
+// state instead of presenting a still-running job as a fallback after ~2 min.
+const IMPORT_POLL_LIMIT = 900;
+
 const APP_MODE = new URLSearchParams(window.location.search).get("app");
 const IS_NATIVE_APP = APP_MODE === "1";
 const IS_WINDOWS = APP_MODE === "windows" || navigator.userAgent.includes("Windows");
@@ -35,6 +43,7 @@ const state = {
   query: "",
   view: "all",
   subject: "all",
+  topic: "all",
   sort: "title",
   layout: readStorage(STORAGE.layout, "grid"),
   favorites: new Set(readStorage(STORAGE.favorites, [])),
@@ -46,6 +55,7 @@ const state = {
   eventSource: null,
   refreshTimer: null,
   refreshing: false,
+  refreshPending: null,
   readerPath: "",
   readerWorkId: "",
   readerMode: "",
@@ -66,9 +76,18 @@ const state = {
   epubBookmarks: readStorage(STORAGE.epubBookmarks, {}) || {},
   videoCatalog: null,
   videoLibrary: null,
+  imports: [],
+  importKind: "book",
+  importDialogLastFocus: null,
+  aiStatus: null,
+  dragDepth: 0,
 };
 
 const elements = {
+  appShell: $(".app-shell"),
+  addButton: $("#addButton"),
+  addFilesInput: $("#addFilesInput"),
+  aiReadiness: $("#aiReadiness"),
   allCount: $("#allCount"),
   allFileCount: $("#allFileCount"),
   artifactStat: $("#artifactStat"),
@@ -82,6 +101,7 @@ const elements = {
   favoriteCount: $("#favoriteCount"),
   finishedCount: $("#finishedCount"),
   focusSearch: $("#focusSearchButton"),
+  heroAddButton: $("#heroAddButton"),
   heroDescription: $("#heroDescription"),
   heroEyebrow: $("#heroEyebrow"),
   heroTrust: $("#heroTrust"),
@@ -119,6 +139,7 @@ const elements = {
   sectionEyebrow: $("#sectionEyebrow"),
   sectionTitle: $("#sectionTitle"),
   shelfNav: $("#shelfNav"),
+  subjectNav: $("#subjectNav"),
   sidebarStatusDot: $("#sidebarStatusDot"),
   sidebarStatusText: $("#sidebarStatusText"),
   sizeStat: $("#sizeStat"),
@@ -126,6 +147,7 @@ const elements = {
   sizeStatNote: $("#sizeStatNote"),
   sort: $("#sortSelect"),
   subjectChips: $("#subjectChips"),
+  topicChips: $("#topicChips"),
   theme: $("#themeButton"),
   syncPill: $("#syncPill"),
   syncText: $("#syncText"),
@@ -165,6 +187,14 @@ const elements = {
   epubTocPanel: $("#epubTocPanel"),
   epubTocSearch: $("#epubTocSearch"),
   epubToneOptions: $("#epubToneOptions"),
+  dropOverlay: $("#dropOverlay"),
+  importBackdrop: $("#importBackdrop"),
+  importChoose: $("#importChooseButton"),
+  importClose: $("#importCloseButton"),
+  importDropZone: $("#importDropZone"),
+  importKindPicker: $("#importKindPicker"),
+  importQueue: $("#importQueue"),
+  importShell: $("#importShell"),
 };
 
 function readStorage(key, fallback) {
@@ -225,12 +255,59 @@ function monogram(title) {
     .split(/\s+/)
     .filter(Boolean)
     .filter((word, index) => index > 0 || !["the", "a", "an"].includes(word.toLowerCase()));
-  if (!words.length) return "CS";
+  if (!words.length) return "L";
   return words.slice(0, 2).map((word) => word[0].toUpperCase()).join("");
 }
 
 function compactSubject(subject) {
-  return subject.replace(" & ", " · ");
+  return String(subject || "Other").replace(" & ", " · ");
+}
+
+function slugId(value) {
+  return String(value || "other").toLowerCase().replace(/[^a-z0-9]+/g, "-").replace(/^-|-$/g, "") || "other";
+}
+
+function normalizeLibraryPayload(payload) {
+  const library = payload && typeof payload === "object" ? payload : {};
+  library.works = Array.isArray(library.works) ? library.works : [];
+  library.materials = Array.isArray(library.materials) ? library.materials : [];
+  library.subjects = (Array.isArray(library.subjects) ? library.subjects : [])
+    .map((subject) => typeof subject === "string"
+      ? { id: slugId(subject), name: subject }
+      : { ...subject, id: subject.id || slugId(subject.name || subject.label), name: subject.name || subject.label || "Other" });
+  const subjectNames = new Map(library.subjects.map((subject) => [subject.id, subject.name]));
+
+  const topics = new Map();
+  (Array.isArray(library.topics) ? library.topics : []).forEach((topic) => {
+    const normalized = typeof topic === "string"
+      ? { id: slugId(topic), name: topic }
+      : { ...topic, id: topic.id || slugId(topic.name || topic.label), name: topic.name || topic.label || "Other" };
+    topics.set(normalized.id, normalized);
+  });
+
+  library.works.forEach((work) => {
+    const legacyTopic = !work.topic && !work.topicId;
+    work.topic = work.topic || work.shelf || (legacyTopic ? work.subject : "") || "Unsorted";
+    work.topicId = work.topicId || work.shelfId || (legacyTopic ? work.subjectId : "") || slugId(work.topic);
+    work.subjectId = work.subjectId || "other";
+    work.subject = work.subject || subjectNames.get(work.subjectId) || "Other";
+    if (!subjectNames.has(work.subjectId)) {
+      const subject = { id: work.subjectId, name: work.subject };
+      library.subjects.push(subject);
+      subjectNames.set(subject.id, subject.name);
+    }
+    if (!topics.has(work.topicId)) topics.set(work.topicId, { id: work.topicId, name: work.topic });
+  });
+  const workById = new Map(library.works.map((work) => [work.id, work]));
+  library.materials.forEach((material) => {
+    const work = workById.get(material.workId);
+    material.subjectId = material.subjectId || work?.subjectId || "other";
+    material.subject = material.subject || work?.subject || subjectNames.get(material.subjectId) || "Other";
+    material.topicId = material.topicId || work?.topicId || slugId(material.topic || "Unsorted");
+    material.topic = material.topic || work?.topic || "Unsorted";
+  });
+  library.topics = [...topics.values()];
+  return library;
 }
 
 function primaryFile(work) {
@@ -392,7 +469,7 @@ function setLiveStatus(mode, message) {
   elements.syncPill.dataset.status = mode;
   elements.syncText.textContent = message;
   elements.sidebarStatusDot.dataset.status = mode;
-  elements.sidebarStatusText.textContent = mode === "live" ? "Watching books & papers" : message;
+  elements.sidebarStatusText.textContent = mode === "live" ? "Watching shared materials" : message;
 }
 
 function workStatus(id) {
@@ -435,6 +512,526 @@ async function localAction(path, action) {
   const payload = await response.json();
   if (!response.ok) throw new Error(payload.error || "Local action failed");
   return payload;
+}
+
+async function responsePayload(response) {
+  try {
+    return await response.json();
+  } catch {
+    return {};
+  }
+}
+
+function selectedImportKind() {
+  return elements.importKindPicker.querySelector('input[name="importKind"]:checked')?.value || "book";
+}
+
+function setAIReadiness(status, title, detail) {
+  elements.aiReadiness.dataset.status = status;
+  const strong = $("strong", elements.aiReadiness);
+  const small = $("small", elements.aiReadiness);
+  strong.textContent = title;
+  small.textContent = detail;
+}
+
+async function refreshAIStatus() {
+  setAIReadiness("checking", "Checking Luna metadata…", "Files are added even when AI is unavailable.");
+  try {
+    const response = await fetch("/api/ai/status", { cache: "no-store" });
+    const payload = await responsePayload(response);
+    if (!response.ok) throw new Error(payload.error || `AI status failed (${response.status})`);
+    const ready = payload.ready === true || (payload.available === true && payload.authenticated !== false);
+    state.aiStatus = { ...payload, ready };
+    if (ready) {
+      setAIReadiness("ready", "Luna metadata is ready", "New files will be named and categorized automatically.");
+    } else {
+      setAIReadiness("fallback", "Local metadata fallback", payload.message || "Sign in to Codex to enable automatic details. You can still edit everything here.");
+    }
+  } catch {
+    state.aiStatus = { ready: false };
+    setAIReadiness("fallback", "Local metadata fallback", "Luna is unavailable right now. Files still import and their details remain editable.");
+  }
+}
+
+function openImportDialog({ chooseImmediately = false } = {}) {
+  if (!document.body.classList.contains("import-open")) state.importDialogLastFocus = document.activeElement;
+  document.body.classList.add("import-open");
+  [elements.appShell, elements.drawer, elements.readerShell].forEach((element) => { element.inert = true; });
+  elements.importShell.setAttribute("aria-hidden", "false");
+  renderImportQueue();
+  refreshAIStatus();
+  if (chooseImmediately) elements.addFilesInput.click();
+  else elements.importClose.focus();
+}
+
+function closeImportDialog() {
+  document.body.classList.remove("import-open");
+  elements.importShell.setAttribute("aria-hidden", "true");
+  [elements.appShell, elements.drawer, elements.readerShell].forEach((element) => { element.inert = false; });
+  elements.addFilesInput.value = "";
+  const target = state.importDialogLastFocus;
+  state.importDialogLastFocus = null;
+  const targetIsVisible = target
+    && document.contains(target)
+    && !target.hidden
+    && !target.closest('[aria-hidden="true"], [inert]');
+  if (targetIsVisible) target.focus();
+  else elements.addButton.focus();
+}
+
+function chooseImportFiles() {
+  state.importKind = selectedImportKind();
+  elements.addFilesInput.value = "";
+  elements.addFilesInput.click();
+}
+
+window.sharedLibraryChooseFiles = () => openImportDialog();
+
+function runImportPrimaryAction() {
+  const waiting = state.imports.filter((item) => item.status === "waiting");
+  if (!waiting.length) {
+    chooseImportFiles();
+    return;
+  }
+  const kind = selectedImportKind();
+  waiting.forEach((item) => {
+    item.kind = kind;
+    uploadImport(item);
+  });
+}
+
+function importStatusLabel(item) {
+  if (item.status === "waiting") return "Waiting";
+  if (item.status === "uploading") return "Copying to the shared shelf…";
+  if (item.status === "enriching") return item.statusMessage || "Luna is filling in the details…";
+  if (item.status === "saving") return "Saving details…";
+  if (item.status === "failed") return item.error || "Could not add this file";
+  if (item.error) return item.error;
+  if (item.duplicate) return "Already on the shelf";
+  if (item.aiFallback) return "Added with editable local details";
+  if (item.status === "complete") return "Ready on the shelf";
+  return "Preparing…";
+}
+
+function importMetadataValue(metadata, key, fallback = "") {
+  const value = metadata?.[key];
+  if (Array.isArray(value)) return value.join(", ");
+  return value === null || value === undefined ? fallback : String(value);
+}
+
+function normalizeImportMetadata(metadata) {
+  if (!metadata || typeof metadata !== "object") return null;
+  const subjectId = metadata.subjectId || metadata.subject_id || "other";
+  const subject = (state.library?.subjects || []).find((entry) => entry.id === subjectId);
+  return {
+    ...metadata,
+    subjectId,
+    subject: metadata.subject || subject?.name || "Other",
+    topics: Array.isArray(metadata.topics) ? metadata.topics : [],
+  };
+}
+
+function metadataEditor(item) {
+  const metadata = item.draft || item.metadata || {};
+  const form = node("form", "import-metadata-form");
+  form.dataset.path = item.path;
+
+  const textField = (label, name, value, placeholder = "") => {
+    const wrapper = node("label", "import-field");
+    wrapper.append(node("span", "", label));
+    const input = document.createElement("input");
+    input.name = name;
+    input.value = value;
+    input.placeholder = placeholder;
+    wrapper.append(input);
+    return wrapper;
+  };
+
+  form.append(
+    textField("Title", "title", importMetadataValue(metadata, "title", item.file?.name || ""), "Title"),
+    textField("Authors or creators", "authors", importMetadataValue(metadata, "authors"), "Separate names with commas"),
+  );
+  const compact = node("div", "import-field-row");
+  compact.append(
+    textField("Year", "year", importMetadataValue(metadata, "year"), "YYYY"),
+    textField("Edition", "edition", importMetadataValue(metadata, "edition"), "Optional"),
+  );
+  form.append(compact);
+
+  const subjectField = node("label", "import-field");
+  subjectField.append(node("span", "", "Subject"));
+  const select = document.createElement("select");
+  select.name = "subjectId";
+  (state.library?.subjects || []).forEach((subject) => {
+    const option = document.createElement("option");
+    option.value = subject.id;
+    option.textContent = subject.name;
+    option.selected = subject.id === metadata.subjectId;
+    select.append(option);
+  });
+  if (!select.options.length) {
+    const option = document.createElement("option");
+    option.value = metadata.subjectId || "other";
+    option.textContent = metadata.subject || "Other";
+    select.append(option);
+  }
+  subjectField.append(select);
+  form.append(subjectField, textField("Topics", "topics", importMetadataValue(metadata, "topics"), "Comma-separated topics"));
+
+  const actions = node("div", "import-form-actions");
+  actions.append(
+    button("button button-quiet", "Cancel", () => {
+      item.editing = false;
+      renderImportQueue();
+    }),
+  );
+  const submit = node("button", "button button-primary", "Save details");
+  submit.type = "submit";
+  actions.append(submit);
+  form.append(actions);
+  form.addEventListener("submit", async (event) => {
+    event.preventDefault();
+    await saveImportMetadata(item, new FormData(form));
+  });
+  if (item.status === "saving") {
+    form.querySelectorAll("input, select, button").forEach((control) => { control.disabled = true; });
+  }
+  return form;
+}
+
+function renderImportQueue() {
+  const waitingCount = state.imports.filter((item) => item.status === "waiting").length;
+  elements.importChoose.textContent = waitingCount
+    ? `Add ${waitingCount} ${waitingCount === 1 ? "file" : "files"}`
+    : "Choose files";
+  if (!state.imports.length) {
+    elements.importQueue.replaceChildren(node("p", "import-queue-empty", "Files you add will appear here with their progress and editable details."));
+    return;
+  }
+  const rows = state.imports.map((item) => {
+    const row = node("article", `import-item is-${item.status}${item.aiFallback ? " is-fallback" : ""}`);
+    const statusIcon = node("span", "import-item-status", item.status === "complete" ? "✓" : item.status === "failed" ? "!" : "↻");
+    statusIcon.setAttribute("aria-hidden", "true");
+    const copy = node("div", "import-item-copy");
+    copy.append(
+      node("strong", "", item.metadata?.title || item.file?.name || item.path || "Imported material"),
+      node("small", "", importStatusLabel(item)),
+    );
+    const controls = node("div", "import-item-controls");
+    if ((item.status === "complete" || item.status === "failed") && item.path && item.editableMetadata) {
+      controls.append(button("import-edit-button", item.editing ? "Editing" : "Edit details", () => {
+        item.editing = !item.editing;
+        renderImportQueue();
+      }));
+    }
+    row.append(statusIcon, copy, controls);
+    if (item.editing && item.path) row.append(metadataEditor(item));
+    return row;
+  });
+  elements.importQueue.replaceChildren(...rows);
+}
+
+async function saveImportMetadata(item, formData) {
+  if (item.status === "saving") return;
+  const topics = String(formData.get("topics") || "")
+    .split(",")
+    .map((topic) => topic.trim())
+    .filter(Boolean);
+  const body = {
+    path: item.path,
+    title: String(formData.get("title") || "").trim(),
+    authors: String(formData.get("authors") || "").trim(),
+    year: String(formData.get("year") || "").trim(),
+    edition: String(formData.get("edition") || "").trim(),
+    subjectId: String(formData.get("subjectId") || "other"),
+    topics,
+  };
+  item.draft = body;
+  item.status = "saving";
+  renderImportQueue();
+  try {
+    const response = await fetch("/api/metadata", {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json",
+        "X-Library-Token": state.token,
+      },
+      body: JSON.stringify(body),
+    });
+    const payload = await responsePayload(response);
+    if (!response.ok) throw new Error(payload.error || `Metadata save failed (${response.status})`);
+    item.metadata = normalizeImportMetadata(payload.metadata || { ...item.metadata, ...body });
+    item.draft = null;
+    item.editing = false;
+    item.status = "complete";
+    item.aiFallback = false;
+    item.error = "";
+    renderImportQueue();
+    await refreshLibrary(null, { quiet: true });
+    announce("Details saved to the shared shelf");
+  } catch (error) {
+    item.status = "complete";
+    item.error = error.message;
+    item.editing = true;
+    renderImportQueue();
+    announce(error.message, true);
+  }
+}
+
+function importItemForFile(file, kind) {
+  return {
+    id: globalThis.crypto?.randomUUID?.() || `${Date.now()}-${Math.random()}`,
+    file,
+    kind,
+    status: "waiting",
+    path: "",
+    jobId: "",
+    metadata: null,
+    duplicate: false,
+    aiFallback: false,
+    statusMessage: "",
+    editing: false,
+    editableMetadata: false,
+    draft: null,
+    error: "",
+  };
+}
+
+function queueImportFiles(fileList, { waitForKind = false } = {}) {
+  const files = [...fileList];
+  const accepted = files.filter((file) => IMPORT_ACCEPTED.test(file.name));
+  const rejected = files.length - accepted.length;
+  if (rejected) announce(`${rejected} unsupported ${rejected === 1 ? "file was" : "files were"} skipped`, true);
+  if (!accepted.length) return;
+  openImportDialog();
+  const kind = selectedImportKind();
+  const items = accepted.map((file) => importItemForFile(file, kind));
+  state.imports.unshift(...items);
+  renderImportQueue();
+  if (waitForKind) {
+    announce(`Choose a material type, then add ${items.length === 1 ? "this file" : "these files"}`);
+    return;
+  }
+  items.forEach((item) => uploadImport(item));
+}
+
+async function uploadImport(item) {
+  item.status = "uploading";
+  renderImportQueue();
+  try {
+    const response = await fetch("/api/import", {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/octet-stream",
+        "X-Library-Token": state.token,
+        "X-Library-Filename": encodeURIComponent(item.file.name),
+        "X-Library-Kind": item.kind,
+      },
+      body: item.file,
+    });
+    const payload = await responsePayload(response);
+    if (!response.ok) throw new Error(payload.error || `Import failed (${response.status})`);
+    item.path = payload.path || "";
+    item.jobId = payload.jobId || "";
+    item.metadata = normalizeImportMetadata(payload.metadata);
+    item.duplicate = payload.duplicate === true;
+    item.editableMetadata = payload.editableMetadata === true;
+    // A duplicate can still carry a recovery job when its synchronized
+    // sidecar was left pending by an earlier shutdown. Poll every real job.
+    item.status = item.jobId ? "enriching" : "complete";
+    item.aiFallback = !item.jobId && !item.duplicate && state.aiStatus?.ready === false;
+    renderImportQueue();
+    await refreshLibrary(null, { quiet: true });
+    if (item.status === "enriching") await pollImportStatus(item);
+    else announce(item.duplicate ? `${item.file.name} is already on the shelf` : `${item.file.name} was added`);
+  } catch (error) {
+    item.status = "failed";
+    item.error = error.message;
+    renderImportQueue();
+    announce(`${item.file.name}: ${error.message}`, true);
+  }
+}
+
+function wait(milliseconds) {
+  return new Promise((resolve) => window.setTimeout(resolve, milliseconds));
+}
+
+async function pollImportStatus(item) {
+  let consecutiveErrors = 0;
+  for (let attempt = 0; attempt < IMPORT_POLL_LIMIT; attempt += 1) {
+    await wait(attempt < 8 ? 750 : 1500);
+    try {
+      const query = new URLSearchParams({ id: item.jobId, path: item.path });
+      const response = await fetch(`/api/import-status?${query}`, {
+        cache: "no-store",
+        headers: { "X-Library-Token": state.token },
+      });
+      const payload = await responsePayload(response);
+      if (!response.ok) {
+        if (response.status === 404) {
+          await refreshLibrary(null, { quiet: true });
+          const work = state.library?.works?.find((candidate) => candidate.files?.some((file) => file.path === item.path));
+          const metadataStatus = String(work?.metadataStatus || "");
+          if (["ai-enriched", "local-fallback", "manual"].includes(metadataStatus)) {
+            item.status = "complete";
+            item.aiFallback = metadataStatus === "local-fallback";
+            item.metadata = normalizeImportMetadata({
+              title: work.title,
+              authors: work.authors,
+              year: work.year || null,
+              edition: work.edition || "",
+              subjectId: work.subjectId,
+              subject: work.subject,
+              topics: work.topics || [],
+            });
+            item.error = "";
+            renderImportQueue();
+            return;
+          }
+        }
+        throw new Error(payload.error || `Metadata status failed (${response.status})`);
+      }
+      if (payload.id) item.jobId = String(payload.id);
+      consecutiveErrors = 0;
+      const status = String(payload.status || payload.state || "pending").toLowerCase();
+      item.statusMessage = String(payload.message || "");
+      if (payload.metadata) item.metadata = normalizeImportMetadata(payload.metadata);
+      if (IMPORT_STATUS_COMPLETE.has(status)) {
+        item.status = "complete";
+        item.aiFallback = status === "fallback" || payload.fallback === true || payload.ai === "fallback";
+        renderImportQueue();
+        await refreshLibrary(null, { quiet: true });
+        announce(`${item.file.name} is ready`);
+        return;
+      }
+      if (IMPORT_STATUS_FAILED.has(status)) {
+        item.status = "failed";
+        item.aiFallback = false;
+        item.error = payload.message || payload.error || "The file was added, but its details could not be saved";
+        renderImportQueue();
+        await refreshLibrary(null, { quiet: true });
+        announce(`${item.file.name} was added, but its details need attention`, true);
+        return;
+      }
+    } catch (error) {
+      consecutiveErrors += 1;
+      item.statusMessage = consecutiveErrors < 5
+        ? "Metadata connection interrupted; retrying…"
+        : "Still reconnecting to the local metadata service…";
+      item.error = "";
+      renderImportQueue();
+      continue;
+    }
+  }
+  item.status = "enriching";
+  item.statusMessage = "Automatic metadata is still pending; Lattice will keep checking.";
+  renderImportQueue();
+  window.setTimeout(() => {
+    if (item.status === "enriching") void pollImportStatus(item);
+  }, 15000);
+}
+
+function openWorkMetadataEditor(work) {
+  const file = primaryFile(work);
+  let item = state.imports.find((candidate) => candidate.path === file.path);
+  if (!item) {
+    item = {
+      id: `edit-${work.id}`,
+      file: { name: file.title || file.path.split("/").pop() },
+      kind: work.materialType || "book",
+      status: "complete",
+      path: file.path,
+      metadata: {
+        title: work.title,
+        authors: work.authors,
+        year: work.year || "",
+        edition: work.edition || "",
+        subjectId: work.subjectId || "other",
+        subject: work.subject || "Other",
+        topics: work.topics || (work.topic ? [work.topic] : []),
+      },
+      duplicate: false,
+      aiFallback: false,
+      editableMetadata: work.editableMetadata === true,
+      draft: null,
+      editing: true,
+      error: "",
+    };
+    state.imports.unshift(item);
+  } else {
+    item.editing = true;
+  }
+  closeDrawer();
+  openImportDialog();
+  renderImportQueue();
+}
+
+function isFileDrag(event) {
+  return [...(event.dataTransfer?.types || [])].includes("Files") || Boolean(event.dataTransfer?.files?.length);
+}
+
+function showDropOverlay() {
+  elements.dropOverlay.setAttribute("aria-hidden", "false");
+  document.body.classList.add("file-dragging");
+}
+
+function hideDropOverlay() {
+  state.dragDepth = 0;
+  elements.dropOverlay.setAttribute("aria-hidden", "true");
+  document.body.classList.remove("file-dragging");
+}
+
+function bindImportEvents() {
+  elements.addButton.addEventListener("click", () => openImportDialog());
+  elements.heroAddButton.addEventListener("click", () => openImportDialog());
+  elements.importChoose.addEventListener("click", runImportPrimaryAction);
+  elements.importDropZone.addEventListener("click", chooseImportFiles);
+  elements.importClose.addEventListener("click", closeImportDialog);
+  elements.importBackdrop.addEventListener("click", closeImportDialog);
+  elements.importKindPicker.addEventListener("change", () => { state.importKind = selectedImportKind(); });
+  elements.addFilesInput.addEventListener("change", () => queueImportFiles(elements.addFilesInput.files));
+  elements.importShell.addEventListener("keydown", (event) => {
+    if (event.key !== "Tab") return;
+    const panel = $(".import-panel", elements.importShell);
+    const focusable = $$('button:not([disabled]), input:not([disabled]), select:not([disabled]), [tabindex]:not([tabindex="-1"])', panel)
+      .filter((element) => !element.hidden && element.getAttribute("aria-hidden") !== "true");
+    if (!focusable.length) return;
+    const first = focusable[0];
+    const last = focusable.at(-1);
+    if (event.shiftKey && document.activeElement === first) {
+      event.preventDefault();
+      last.focus();
+    } else if (!event.shiftKey && document.activeElement === last) {
+      event.preventDefault();
+      first.focus();
+    }
+  });
+
+  window.addEventListener("dragenter", (event) => {
+    if (!isFileDrag(event)) return;
+    event.preventDefault();
+    state.dragDepth += 1;
+    showDropOverlay();
+  });
+  window.addEventListener("dragover", (event) => {
+    if (!isFileDrag(event)) return;
+    event.preventDefault();
+    if (event.dataTransfer) event.dataTransfer.dropEffect = "copy";
+    showDropOverlay();
+  });
+  window.addEventListener("dragleave", (event) => {
+    if (!state.dragDepth) return;
+    event.preventDefault();
+    state.dragDepth = Math.max(0, state.dragDepth - 1);
+    if (!state.dragDepth) hideDropOverlay();
+  });
+  window.addEventListener("drop", (event) => {
+    event.preventDefault();
+    const files = event.dataTransfer?.files;
+    const dialogWasOpen = document.body.classList.contains("import-open");
+    hideDropOverlay();
+    if (files?.length) queueImportFiles(files, { waitForKind: !dialogWasOpen });
+  });
 }
 
 function showReaderShell(title, kicker, mode) {
@@ -1232,7 +1829,7 @@ function normalizedReaderPath(currentDocument, target) {
     decoded = target.split("#", 1)[0].split("?", 1)[0];
   }
   decoded = decoded.replace(/^\/(document|content)\//, "").replace(/^\//, "");
-  const rootRelative = /^(books|papers|notes|manifests)\//.test(decoded) || /^[A-Z][A-Z_]+\.md$/.test(decoded);
+  const rootRelative = /^(books|papers|lectures|notes|manifests)\//.test(decoded) || /^[A-Z][A-Z_]+\.md$/.test(decoded);
   const parts = rootRelative ? [] : currentDocument.split("/").slice(0, -1);
   decoded.split("/").forEach((part) => {
     if (!part || part === ".") return;
@@ -1326,7 +1923,7 @@ function makeCover(work, drawer = false) {
 
   const top = node("div", "cover-top");
   top.append(
-    node("span", "cover-shelf", compactSubject(work.subject)),
+    node("span", "cover-shelf", compactSubject(work.topic || work.subject)),
     node("span", `format-badge${work.cataloged ? "" : " is-new"}`, work.cataloged ? (work.isCollection ? `${work.fileCount} FILES` : work.formats[0]) : "NEW"),
   );
   const bottom = node("div", "cover-bottom");
@@ -1345,7 +1942,7 @@ function toggleFavorite(work) {
 }
 
 function makeCard(work) {
-  const card = node("article", `book-card subject-${work.subjectId}${work.cataloged ? "" : " is-new-arrival"}${work.isAvailable ? "" : " is-unavailable"}`);
+  const card = node("article", `book-card subject-${work.topicId || work.subjectId}${work.cataloged ? "" : " is-new-arrival"}${work.isAvailable ? "" : " is-unavailable"}`);
   card.dataset.id = work.id;
   const favorite = button(
     `favorite-button${state.favorites.has(work.id) ? " is-favorite" : ""}`,
@@ -1360,7 +1957,7 @@ function makeCard(work) {
   const info = node("div", "book-info");
   info.append(node("h3", "book-title", work.title), node("p", "book-author", work.authors));
   const meta = node("div", "book-meta");
-  meta.append(node("span", "", work.edition), node("span", "", humanBytes(work.totalBytes)));
+  meta.append(node("span", "", work.subject), node("span", "", work.edition), node("span", "", humanBytes(work.totalBytes)));
   const status = workStatus(work.id);
   if (status !== "unread") meta.append(node("span", "book-status", statusLabel(status)));
   if (!work.isAvailable) meta.append(node("span", "book-status is-missing", "Missing"));
@@ -1380,7 +1977,7 @@ function makeCard(work) {
 
 function makeMaterialCard(material) {
   const work = state.workById.get(material.workId);
-  const card = node("article", `book-card material-card subject-${material.subjectId}${work.cataloged ? "" : " is-new-arrival"}`);
+  const card = node("article", `book-card material-card subject-${material.topicId || material.subjectId}${work.cataloged ? "" : " is-new-arrival"}`);
   card.dataset.material = material.path;
   const favorite = button(
     `favorite-button${state.favorites.has(work.id) ? " is-favorite" : ""}`,
@@ -1405,7 +2002,7 @@ function makeMaterialCard(material) {
   const info = node("div", "book-info");
   info.append(node("h3", "book-title", material.title), node("p", "book-author", `${work.title} · ${material.authors}`));
   const meta = node("div", "book-meta");
-  meta.append(node("span", "", material.format), node("span", "", humanBytes(material.bytes)), node("span", "book-status", material.materialLabel));
+  meta.append(node("span", "", material.subject), node("span", "", material.format), node("span", "", humanBytes(material.bytes)), node("span", "book-status", material.materialLabel));
   info.append(meta);
   const actions = node("div", "card-actions");
   actions.append(
@@ -1428,12 +2025,14 @@ function filteredMaterials() {
   const materials = state.library.materials.filter((material) => {
     if (requestedType && material.materialType !== requestedType) return false;
     if (state.subject !== "all" && material.subjectId !== state.subject) return false;
+    if (state.topic !== "all" && material.topicId !== state.topic) return false;
     if (!query) return true;
     const haystack = [
       material.title,
       material.workTitle,
       material.authors,
       material.subject,
+      material.topic,
       material.path,
       material.format,
       material.materialLabel,
@@ -1445,6 +2044,7 @@ function filteredMaterials() {
     title: (a, b) => a.title.localeCompare(b.title),
     author: (a, b) => a.authors.localeCompare(b.authors) || a.title.localeCompare(b.title),
     subject: (a, b) => a.subject.localeCompare(b.subject) || a.title.localeCompare(b.title),
+    topic: (a, b) => a.topic.localeCompare(b.topic) || a.title.localeCompare(b.title),
     recent: (a, b) => (state.recent[b.workId] || 0) - (state.recent[a.workId] || 0) || a.title.localeCompare(b.title),
   };
   materials.sort(sorters[state.sort] || sorters.title);
@@ -1456,6 +2056,7 @@ function filteredWorks() {
   const query = state.query.trim().toLowerCase();
   let works = state.library.works.filter((work) => {
     if (state.subject !== "all" && work.subjectId !== state.subject) return false;
+    if (state.topic !== "all" && work.topicId !== state.topic) return false;
     if (state.view === "favorites" && !state.favorites.has(work.id)) return false;
     if (state.view === "reading" && workStatus(work.id) !== "reading") return false;
     if (state.view === "finished" && workStatus(work.id) !== "finished") return false;
@@ -1464,6 +2065,8 @@ function filteredWorks() {
       work.title,
       work.authors,
       work.subject,
+      work.topic,
+      ...(Array.isArray(work.topics) ? work.topics : []),
       work.edition,
       work.access,
       ...work.files.flatMap((file) => [file.title, file.path, file.format]),
@@ -1475,6 +2078,7 @@ function filteredWorks() {
     title: (a, b) => a.title.localeCompare(b.title),
     author: (a, b) => a.authors.localeCompare(b.authors) || a.title.localeCompare(b.title),
     subject: (a, b) => a.subject.localeCompare(b.subject) || a.title.localeCompare(b.title),
+    topic: (a, b) => a.topic.localeCompare(b.topic) || a.title.localeCompare(b.title),
     recent: (a, b) => (state.recent[b.id] || 0) - (state.recent[a.id] || 0) || a.title.localeCompare(b.title),
   };
   works.sort(sorters[state.sort] || sorters.title);
@@ -1502,7 +2106,7 @@ function updateSectionHeading() {
     files: ["Every local artifact", "All files"],
     favorites: ["Your hand-picked shelf", "Favorites"],
     reading: ["Your active stack", "Currently reading"],
-    finished: ["Your completed shelf", "Finished books"],
+    finished: ["Your completed shelf", "Finished works"],
   };
   let [eyebrow, title] = viewNames[state.view] || viewNames.all;
   if (state.view.startsWith("material:")) {
@@ -1518,6 +2122,13 @@ function updateSectionHeading() {
     if (subject) {
       eyebrow = "Subject shelf";
       title = subject.name;
+    }
+  }
+  if (state.topic !== "all") {
+    const topic = state.library.topics.find((item) => item.id === state.topic);
+    if (topic) {
+      eyebrow = state.subject === "all" ? "Topic shelf" : `${title} · topic`;
+      title = topic.name;
     }
   }
   elements.sectionEyebrow.textContent = eyebrow;
@@ -1554,11 +2165,11 @@ function renderHero() {
   if (isVideos) {
     const catalog = state.videoCatalog;
     replaceHeroEyebrow("Free · source-traceable · in-app playback");
-    elements.pageTitle.textContent = "Your computer science lecture hall";
-    elements.heroDescription.textContent = "A broad, searchable archive of complete university courses and individual lectures—streamed from official publishers inside one focused study workspace.";
+    elements.pageTitle.textContent = "Your shared lecture hall";
+    elements.heroDescription.textContent = "A broad, searchable archive of complete courses and individual lectures—streamed from official publishers inside one focused study workspace.";
     elements.random.firstChild.textContent = "Choose a lecture for me ";
     elements.focusSearch.textContent = "Search the lectures";
-    replaceHeroTrust(["Official course sources", "Privacy-enhanced embeds", "Completion stays on Mac"]);
+    replaceHeroTrust(["Official course sources", "Privacy-enhanced embeds", "Completion stays local"]);
     elements.workStatLabel.textContent = "Courses";
     elements.workStat.textContent = catalog ? new Intl.NumberFormat().format(catalog.stats.courses) : "—";
     elements.workStatNote.textContent = "complete course tracks";
@@ -1574,17 +2185,17 @@ function renderHero() {
     return;
   }
   replaceHeroEyebrow("Private · local · searchable");
-  elements.pageTitle.textContent = "Your computer science library";
-  elements.heroDescription.textContent = "A focused workspace for books, papers, specifications, and course notes—with reading progress, native EPUB and PDF access, and live sync from this Mac.";
+  elements.pageTitle.textContent = "Knowledge, shared simply";
+  elements.heroDescription.textContent = "A private home for books, papers, lecture notes, and references across every subject—with focused reading tools and live updates between your computers.";
   elements.random.firstChild.textContent = "Choose my next read ";
   elements.focusSearch.textContent = "Search the shelf";
-  replaceHeroTrust(["Loopback only", "Files stay on Mac", "No account required"]);
+  replaceHeroTrust(["Loopback only", "Files stay local", "Shared by Syncthing"]);
   elements.workStatLabel.textContent = "Collection";
   elements.workStat.textContent = state.library?.stats.works ?? "—";
   elements.workStatNote.textContent = "logical works";
   elements.artifactStatLabel.textContent = "Materials";
   elements.artifactStat.textContent = state.library?.stats.artifacts ?? "—";
-  elements.artifactStatNote.textContent = "files on Mac";
+  elements.artifactStatNote.textContent = "local files";
   elements.sizeStatLabel.textContent = "Footprint";
   elements.sizeStat.textContent = state.library ? humanBytes(state.library.stats.bytes) : "—";
   elements.sizeStatNote.textContent = "local shelf";
@@ -1613,9 +2224,11 @@ function renderViewMode() {
 function setView(view) {
   state.view = view;
   state.subject = "all";
+  state.topic = "all";
   syncNavigation();
   if (view !== "videos") {
     renderSubjectChips();
+    renderTopicChips();
     renderCards();
   }
   renderViewMode();
@@ -1624,9 +2237,22 @@ function setView(view) {
 
 function setSubject(subjectId, preserveView = false) {
   state.subject = subjectId;
+  state.topic = "all";
   if (!preserveView) state.view = "all";
   syncNavigation();
   renderSubjectChips();
+  renderTopicChips();
+  renderCards();
+  renderViewMode();
+  closeMobileMenu();
+}
+
+function setTopic(topicId, preserveView = false) {
+  state.topic = topicId;
+  if (!preserveView) state.view = "all";
+  syncNavigation();
+  renderSubjectChips();
+  renderTopicChips();
   renderCards();
   renderViewMode();
   closeMobileMenu();
@@ -1636,6 +2262,7 @@ function syncNavigation() {
   $$(".nav-item").forEach((item) => item.classList.toggle("is-active", item.dataset.view === state.view));
   $$(".material-item").forEach((item) => item.classList.toggle("is-active", item.dataset.view === state.view));
   $$(".subject-item").forEach((item) => item.classList.toggle("is-active", state.view === "all" && item.dataset.subject === state.subject));
+  $$(".topic-item").forEach((item) => item.classList.toggle("is-active", state.view === "all" && item.dataset.topic === state.topic));
 }
 
 function renderMaterials() {
@@ -1651,15 +2278,30 @@ function renderMaterials() {
 
 function renderShelves() {
   const counts = Object.fromEntries(
-    state.library.subjects.map((subject) => [subject.id, state.library.works.filter((work) => work.subjectId === subject.id).length]),
+    state.library.topics.map((topic) => [topic.id, state.library.works.filter((work) => work.topicId === topic.id).length]),
   );
-  const items = state.library.subjects.map((subject) => {
-    const item = button("shelf-item subject-item", "", () => setSubject(subject.id), `Open ${subject.name} shelf`);
-    item.dataset.subject = subject.id;
-    item.append(node("span", "shelf-dot"), node("span", "", subject.name), node("span", "nav-count", counts[subject.id]));
+  const items = state.library.topics.map((topic) => {
+    const item = button("shelf-item topic-item", "", () => setTopic(topic.id), `Open ${topic.name} topic`);
+    item.dataset.topic = topic.id;
+    item.append(node("span", "shelf-dot"), node("span", "", topic.name), node("span", "nav-count", counts[topic.id]));
     return item;
   });
   elements.shelfNav.replaceChildren(...items);
+}
+
+function renderSubjects() {
+  const counts = Object.fromEntries(
+    state.library.subjects.map((subject) => [subject.id, state.library.works.filter((work) => work.subjectId === subject.id).length]),
+  );
+  const items = state.library.subjects
+    .filter((subject) => counts[subject.id] > 0)
+    .map((subject) => {
+      const item = button("shelf-item subject-item", "", () => setSubject(subject.id), `Open ${subject.name}`);
+      item.dataset.subject = subject.id;
+      item.append(node("span", "shelf-dot"), node("span", "", subject.name), node("span", "nav-count", counts[subject.id]));
+      return item;
+    });
+  elements.subjectNav.replaceChildren(...items);
 }
 
 function renderSubjectChips() {
@@ -1669,6 +2311,18 @@ function renderSubjectChips() {
     return chip;
   });
   elements.subjectChips.replaceChildren(all, ...chips);
+}
+
+function renderTopicChips() {
+  const available = state.library.topics.filter((topic) => state.subject === "all"
+    || state.library.works.some((work) => work.subjectId === state.subject && work.topicId === topic.id));
+  const all = button(`chip${state.topic === "all" ? " is-active" : ""}`, "All topics", () => setTopic("all", true));
+  const chips = available.map((topic) => button(
+    `chip${state.topic === topic.id ? " is-active" : ""}`,
+    topic.name,
+    () => setTopic(topic.id, true),
+  ));
+  elements.topicChips.replaceChildren(all, ...chips);
 }
 
 function renderRecent() {
@@ -1700,7 +2354,7 @@ function setStatus(work, status) {
 
 function renderDrawer(work) {
   const body = node("div", "");
-  const lead = node("div", `drawer-lead subject-${work.subjectId}`);
+  const lead = node("div", `drawer-lead subject-${work.topicId || work.subjectId}`);
   const title = node("div", "drawer-title");
   title.append(node("h2", "", work.title), node("p", "", work.authors));
   const pills = node("div", "drawer-pills");
@@ -1722,6 +2376,7 @@ function renderDrawer(work) {
     actions.append(macAction);
   }
   actions.append(button("button button-quiet", state.favorites.has(work.id) ? "♥ Favorited" : "♡ Favorite", () => toggleFavorite(work)));
+  if (work.editableMetadata === true) actions.append(button("button button-quiet", "Edit details", () => openWorkMetadataEditor(work)));
   const finderAction = button("button button-quiet", FILE_MANAGER_LABEL, () => revealFile(firstFile), `Reveal in ${FILE_MANAGER_LABEL}`);
   finderAction.disabled = !firstFile.exists;
   actions.append(finderAction);
@@ -1765,10 +2420,11 @@ function renderDrawer(work) {
 
   const metadataSection = node("section", "drawer-section");
   const metadataHeading = node("div", "drawer-section-title");
-  metadataHeading.append(node("h3", "", "Shelf information"));
+  metadataHeading.append(node("h3", "", "Library information"));
   const metadataGrid = node("div", "metadata-grid");
   [
-    ["Shelf", work.subject],
+    ["Subject", work.subject],
+    ["Topic", work.topic],
     ["Access", work.access],
     ["Size", humanBytes(work.totalBytes)],
     ["Local path", work.localPath],
@@ -1819,9 +2475,11 @@ function clearFilters() {
   state.query = "";
   state.view = "all";
   state.subject = "all";
+  state.topic = "all";
   elements.search.value = "";
   syncNavigation();
   renderSubjectChips();
+  renderTopicChips();
   renderCards();
 }
 
@@ -1840,6 +2498,7 @@ function initializeTheme() {
 }
 
 function bindEvents() {
+  bindImportEvents();
   window.addEventListener("cs-library-reader-restore", event => {
     const saved = event.detail;
     if (!saved || saved.path !== state.readerPath) return;
@@ -1961,6 +2620,10 @@ function bindEvents() {
       elements.search.focus();
     }
     if (event.key === "Escape") {
+      if (document.body.classList.contains("import-open")) {
+        closeImportDialog();
+        return;
+      }
       if (state.videoLibrary?.handleEscape()) return;
       if (state.readerMode === "epub" && (elements.epubReader.classList.contains("toc-open") || elements.epubReader.classList.contains("settings-open"))) closeEpubPanels();
       else if (state.readerMode === "epub" && state.epubFocused) setEpubFocus(false);
@@ -1977,7 +2640,8 @@ function bindEvents() {
 
 function initializeLibrary(payload) {
   const readerPath = state.readerPath;
-  state.library = payload;
+  state.library = normalizeLibraryPayload(payload);
+  payload = state.library;
   state.token = payload.actionToken;
   state.revision = Number(payload.revision || state.revision || 0);
   state.workById = new Map(payload.works.map((work) => [work.id, work]));
@@ -1987,8 +2651,10 @@ function initializeLibrary(payload) {
   elements.integrityStat.textContent = `${payload.stats.present}/${payload.stats.indexedArtifacts || payload.stats.artifacts}`;
   renderNavigationCounts();
   renderMaterials();
+  renderSubjects();
   renderShelves();
   renderSubjectChips();
+  renderTopicChips();
   renderRecent();
   renderCards();
   if (state.selectedId) {
@@ -2015,7 +2681,14 @@ function describeShelfChange(change) {
 }
 
 async function refreshLibrary(change = null, { quiet = false } = {}) {
-  if (state.refreshing) return;
+  if (state.refreshing) {
+    const pending = state.refreshPending;
+    state.refreshPending = {
+      change: change || pending?.change || null,
+      quiet: quiet && (pending?.quiet ?? true),
+    };
+    return;
+  }
   state.refreshing = true;
   try {
     const response = await fetch("/api/library", { cache: "no-store" });
@@ -2035,6 +2708,9 @@ async function refreshLibrary(change = null, { quiet = false } = {}) {
     if (!quiet) announce(error.message, true);
   } finally {
     state.refreshing = false;
+    const pending = state.refreshPending;
+    state.refreshPending = null;
+    if (pending) void refreshLibrary(pending.change, { quiet: pending.quiet });
   }
 }
 

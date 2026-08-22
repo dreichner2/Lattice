@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Build and audit a local CS study library from authorized sources.
+"""Build and audit a local Lattice collection from authorized sources.
 
 The standard-library-only CLI searches arXiv, downloads official RFC text,
 fetches curated books and course sets, imports an exact authorized URL, and
@@ -31,6 +31,8 @@ ARXIV_API = "https://export.arxiv.org/api/query"
 RFC_TEXT_URL = "https://www.rfc-editor.org/rfc/rfc{number}.txt"
 USER_AGENT = "cs-library-fetch/2.0 (personal open-access study library)"
 ATOM = {"atom": "http://www.w3.org/2005/Atom"}
+READABLE_PAYLOAD_SUFFIXES = frozenset({".pdf", ".epub", ".txt"})
+SYNCED_SIDECAR_SUFFIX = ".library.json"
 
 OPEN_BOOKS: dict[str, dict[str, Any]] = {
     "intro-cs": {
@@ -879,7 +881,7 @@ def append_catalog(
 ) -> None:
     catalog = REPO_ROOT / "CATALOG.md"
     marker = f"<!-- work: {identifier} -->"
-    existing = catalog.read_text(encoding="utf-8") if catalog.exists() else "# CS Library Catalog\n"
+    existing = catalog.read_text(encoding="utf-8") if catalog.exists() else "# Lattice Catalog\n"
     local_path = path.relative_to(REPO_ROOT).as_posix()
     # Manual shelf organization may use a friendlier work identifier than the
     # downloader. The local target is the stable duplicate boundary.
@@ -1163,21 +1165,34 @@ def cmd_url(args: argparse.Namespace) -> int:
 
 def library_payloads() -> list[Path]:
     payloads: list[Path] = []
-    for folder in ("books", "papers"):
+    for folder in ("books", "papers", "lectures"):
         root = REPO_ROOT / folder
         if not root.exists():
             continue
         for path in sorted(root.rglob("*")):
-            if not path.is_file() or path.name.startswith("."):
+            if (
+                not path.is_file()
+                or path.name.startswith(".")
+                or path.suffix.lower() not in READABLE_PAYLOAD_SUFFIXES
+            ):
                 continue
             payloads.append(path)
     return payloads
 
 
+def synced_metadata_path(payload: Path) -> Path:
+    return payload.with_name(payload.name + SYNCED_SIDECAR_SUFFIX)
+
+
+def existing_metadata_path(payload: Path) -> Path:
+    tracked = metadata_path(payload)
+    return tracked if tracked.is_file() else synced_metadata_path(payload)
+
+
 def cmd_list(_args: argparse.Namespace) -> int:
     payloads = library_payloads()
     for path in payloads:
-        record_path = metadata_path(path)
+        record_path = existing_metadata_path(path)
         title = path.name
         if record_path.exists():
             try:
@@ -1199,7 +1214,7 @@ def cmd_verify(args: argparse.Namespace) -> int:
         checked += 1
         relative = path.relative_to(REPO_ROOT)
         problems: list[str] = []
-        record_path = metadata_path(path)
+        record_path = existing_metadata_path(path)
         metadata: dict[str, Any] = {}
         if not record_path.exists():
             problems.append("missing metadata record")
@@ -1268,6 +1283,10 @@ def cmd_audit(_args: argparse.Namespace) -> int:
     payloads = library_payloads()
     payload_by_relative = {path.relative_to(REPO_ROOT).as_posix(): path for path in payloads}
     metadata_files = sorted((REPO_ROOT / "metadata").rglob("*.json"))
+    for folder in ("books", "papers", "lectures"):
+        directory = REPO_ROOT / folder
+        if directory.is_dir():
+            metadata_files.extend(sorted(directory.rglob(f"*{SYNCED_SIDECAR_SUFFIX}")))
     issues: list[str] = []
     metadata_paths: set[str] = set()
 
@@ -1284,11 +1303,13 @@ def cmd_audit(_args: argparse.Namespace) -> int:
         if relative in metadata_paths:
             issues.append(f"duplicate metadata path: {relative}")
         metadata_paths.add(relative)
-        expected_record = metadata_path(REPO_ROOT / relative)
-        if expected_record != record_path:
+        payload = REPO_ROOT / relative
+        expected_records = {metadata_path(payload), synced_metadata_path(payload)}
+        if record_path not in expected_records:
             issues.append(
                 f"misplaced metadata: {record_path.relative_to(REPO_ROOT)} "
-                f"(expected {expected_record.relative_to(REPO_ROOT)})"
+                f"(expected {metadata_path(payload).relative_to(REPO_ROOT)} or "
+                f"{synced_metadata_path(payload).relative_to(REPO_ROOT)})"
             )
         if relative not in payload_by_relative:
             issues.append(f"metadata points to missing payload: {relative}")
@@ -1296,8 +1317,8 @@ def cmd_audit(_args: argparse.Namespace) -> int:
     for relative, path in payload_by_relative.items():
         if relative not in metadata_paths:
             issues.append(f"payload has no metadata: {relative}")
-        if len(path.name) > 48:
-            issues.append(f"filename is longer than 48 characters: {relative}")
+        if len(path.name) > 100:
+            issues.append(f"filename is longer than 100 characters: {relative}")
         if not re.fullmatch(r"[a-z0-9]+(?:-[a-z0-9]+)*\.(?:pdf|epub|zip|tgz|txt)", path.name):
             issues.append(f"filename is not normalized kebab-case: {relative}")
 

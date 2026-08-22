@@ -1,8 +1,14 @@
-# Computer Science Study Guide
+# Lattice — Computer Science Study Guide
 
-This guide turns the shelf into a curriculum. The goal is not to read every
-page in order; it is to combine one primary text, targeted references, and a
-project at each stage until the ideas are usable without the book open.
+This is the first subject-specific guide in Lattice. It turns the current
+computer-science collection into a curriculum without making computer science
+the boundary of the app. Electrical engineering, computer engineering,
+mathematics, physics, and other subjects use the same taxonomy and can gain
+their own guides over time.
+
+The goal is not to read every page in order; it is to combine one primary text,
+targeted references, and a project at each stage until the ideas are usable
+without the book open.
 
 ## Pick your entry route
 

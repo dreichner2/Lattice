@@ -21,6 +21,10 @@ sys.path.insert(0, str(ROOT / "scripts"))
 import library_ui  # noqa: E402
 
 
+def write_test_taxonomy(root: Path) -> None:
+    (root / "library-taxonomy.json").write_bytes((ROOT / "library-taxonomy.json").read_bytes())
+
+
 def write_test_epub(path: Path) -> None:
     with zipfile.ZipFile(path, "w", compression=zipfile.ZIP_DEFLATED) as archive:
         archive.writestr("mimetype", "application/epub+zip")
@@ -212,7 +216,7 @@ class CatalogTests(unittest.TestCase):
 
     def test_video_directory_contains_metadata_not_media(self) -> None:
         paths = [path.relative_to(ROOT / "lectures").as_posix() for path in (ROOT / "lectures").rglob("*") if path.is_file()]
-        self.assertEqual(paths, ["catalog.json"])
+        self.assertEqual(sorted(paths), [".gitkeep", "catalog.json"])
 
     def test_video_ui_uses_privacy_enhanced_embeds_and_local_progress(self) -> None:
         markup = (ROOT / "ui" / "index.html").read_text(encoding="utf-8")
@@ -355,7 +359,8 @@ class ServerTests(unittest.TestCase):
         with urllib.request.urlopen(self.base + "/", timeout=3) as response:
             self.assertEqual(response.status, 200)
             markup = response.read()
-            self.assertIn(b"Your computer science library", markup)
+            self.assertIn(b"Lattice", markup)
+            self.assertIn(b"A shared knowledge library", markup)
             self.assertIn(b"Video lectures", markup)
             self.assertEqual(response.headers["X-Frame-Options"], "DENY")
             self.assertEqual(response.headers["Referrer-Policy"], "strict-origin-when-cross-origin")
@@ -462,6 +467,7 @@ class EpubReaderTests(unittest.TestCase):
             encoding="utf-8",
         )
         write_test_lecture_catalog(self.root)
+        write_test_taxonomy(self.root)
         self.server = library_ui.create_server(0, root=self.root)
         self.port = int(self.server.server_address[1])
         self.base = f"http://127.0.0.1:{self.port}"
@@ -553,6 +559,7 @@ class LiveRefreshTests(unittest.TestCase):
             encoding="utf-8",
         )
         write_test_lecture_catalog(self.root)
+        write_test_taxonomy(self.root)
         self.server = library_ui.create_server(0, root=self.root)
         self.port = int(self.server.server_address[1])
         self.base = f"http://127.0.0.1:{self.port}"

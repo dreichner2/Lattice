@@ -8,6 +8,10 @@ The native Mac app stores user-created reading data at:
 ~/Library/Application Support/CS Library/Library.sqlite
 ```
 
+`CS Library` is the retained storage identifier from earlier releases. The
+visible application is **Lattice**, but the support directory does not
+move; this preserves existing notes, progress, and backups during upgrade.
+
 Backups are written to:
 
 ```text
@@ -102,7 +106,7 @@ browser localStorage as the authoritative native reader database.
 
 ## Recovery
 
-1. Quit CS Library.
+1. Quit Lattice.
 2. Preserve `Library.sqlite`, `Library.sqlite-wal`, and `Library.sqlite-shm` if
    present.
 3. Use the Diagnostics command to run `PRAGMA integrity_check` when the app can

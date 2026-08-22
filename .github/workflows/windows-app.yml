@@ -1,4 +1,4 @@
-name: Windows desktop app
+name: Lattice Windows desktop app
 
 on:
   pull_request:
@@ -8,8 +8,16 @@ on:
       - "scripts/**"
       - "tests/**"
       - "ui/**"
+      - "assets/**"
+      - "manifests/**"
+      - "metadata/**"
       - ".stignore"
+      - "CATALOG.md"
+      - "LIBRARY_RULES.md"
+      - "README.md"
+      - "STUDY_GUIDE.md"
       - "library-layout.json"
+      - "library-taxonomy.json"
       - "books/**"
       - "papers/**"
       - "lectures/**"
@@ -23,8 +31,16 @@ on:
       - "scripts/**"
       - "tests/**"
       - "ui/**"
+      - "assets/**"
+      - "manifests/**"
+      - "metadata/**"
       - ".stignore"
+      - "CATALOG.md"
+      - "LIBRARY_RULES.md"
+      - "README.md"
+      - "STUDY_GUIDE.md"
       - "library-layout.json"
+      - "library-taxonomy.json"
       - "books/**"
       - "papers/**"
       - "lectures/**"
@@ -64,10 +80,23 @@ jobs:
       - name: Verify package
         shell: pwsh
         run: |
-          if (-not (Test-Path "artifacts/CS-Library-Windows-win-x64.zip")) { throw "Archive missing" }
-          if (-not (Test-Path "windows/build/package-win-x64/CS Library.exe")) { throw "App missing" }
-          if (-not (Test-Path "windows/build/package-win-x64/Server/CSLibraryServer.exe")) { throw "Server missing" }
+          if (-not (Test-Path "artifacts/Lattice-Windows-win-x64.zip")) { throw "Archive missing" }
+          if (-not (Test-Path "windows/build/package-win-x64/Lattice.exe")) { throw "App missing" }
+          if (-not (Test-Path "windows/build/package-win-x64/Lattice.ico")) { throw "Application icon missing" }
+          if (-not (Test-Path "windows/build/package-win-x64/Server/LatticeServer.exe")) { throw "Server missing" }
+          if (-not (Test-Path "windows/build/package-win-x64/Install Lattice.ps1")) { throw "Installer missing" }
           if (-not (Test-Path "windows/build/package-win-x64/.stignore")) { throw "Syncthing rules missing" }
+          if (-not (Test-Path "windows/build/package-win-x64/library-taxonomy.json")) { throw "Taxonomy missing" }
+          foreach ($file in @("SharedReaderState.js", "ImmersiveEPUB.js")) {
+            if (-not (Test-Path (Join-Path "windows/build/package-win-x64/native" $file))) {
+              throw "Bundled native bridge file missing: $file"
+            }
+          }
+          foreach ($file in @("index.html", "app.js", "styles.css", "video-styles.css", "videos.js")) {
+            if (-not (Test-Path (Join-Path "windows/build/package-win-x64/ui" $file))) {
+              throw "Bundled interface file missing: $file"
+            }
+          }
           $layout = Get-Content "library-layout.json" -Raw | ConvertFrom-Json
           foreach ($directory in @($layout.content_directories)) {
             $packageDirectory = Join-Path "windows/build/package-win-x64" ([string]$directory)
@@ -76,10 +105,93 @@ jobs:
             }
           }
 
+      - name: Smoke-test portable installer and embedded icon
+        shell: pwsh
+        run: |
+          $package = (Resolve-Path "windows/build/package-win-x64").Path
+          $destination = Join-Path $env:RUNNER_TEMP "lattice-installer-smoke"
+          $testAppData = Join-Path $env:RUNNER_TEMP "lattice-installer-appdata"
+          $previousAppData = $env:APPDATA
+          try {
+            $env:APPDATA = $testAppData
+            & (Join-Path $package "Install Lattice.ps1") -Destination $destination -NoLaunch
+            if (-not (Test-Path (Join-Path $destination "Lattice.exe"))) { throw "Installer did not copy Lattice.exe" }
+            if (-not (Test-Path (Join-Path $destination "Lattice.ico"))) { throw "Installer did not copy Lattice.ico" }
+            $shortcut = Join-Path $testAppData "Microsoft\Windows\Start Menu\Programs\Lattice.lnk"
+            if (-not (Test-Path $shortcut)) { throw "Installer did not create the Lattice shortcut" }
+          } finally {
+            $env:APPDATA = $previousAppData
+          }
+
+      - name: Smoke-test packaged local service
+        shell: pwsh
+        run: |
+          $package = (Resolve-Path "windows/build/package-win-x64").Path
+          $libraryRoot = (Resolve-Path ".").Path
+          $stdout = Join-Path $env:RUNNER_TEMP "lattice-server.stdout.log"
+          $stderr = Join-Path $env:RUNNER_TEMP "lattice-server.stderr.log"
+          $state = Join-Path $env:RUNNER_TEMP "lattice-reader-state.sqlite3"
+          $parent = $null
+          $server = $null
+          try {
+            $parent = Start-Process powershell.exe `
+              -ArgumentList @("-NoProfile", "-Command", "Start-Sleep -Seconds 120") `
+              -PassThru
+            $server = Start-Process (Join-Path $package "Server\LatticeServer.exe") `
+              -ArgumentList @(
+                "--root", $libraryRoot,
+                "--ui-root", (Join-Path $package "ui"),
+                "--state-db", $state,
+                "--port", "0",
+                "--parent-pid", $parent.Id.ToString(),
+                "--no-browser"
+              ) `
+              -RedirectStandardOutput $stdout `
+              -RedirectStandardError $stderr `
+              -PassThru
+
+            $url = $null
+            for ($attempt = 0; $attempt -lt 80 -and -not $url; $attempt++) {
+              Start-Sleep -Milliseconds 250
+              if (Test-Path $stdout) {
+                $text = Get-Content $stdout -Raw
+                $match = [regex]::Match(
+                  $text,
+                  "(?:Lattice|Shared Library|CS Library) is (?:ready:|already running at )(?<url>http://127\.0\.0\.1:\d+)"
+                )
+                if ($match.Success) { $url = $match.Groups["url"].Value }
+              }
+              $server.Refresh()
+              if ($server.HasExited -and -not $url) {
+                $detail = if (Test-Path $stderr) { Get-Content $stderr -Raw } else { "" }
+                throw "Packaged server exited before readiness: $detail"
+              }
+            }
+            if (-not $url) { throw "Packaged server did not report readiness" }
+
+            $health = Invoke-RestMethod "$url/api/health" -TimeoutSec 5
+            if ($health.status -ne "ok") { throw "Unexpected health status: $($health.status)" }
+            if (-not [string]::Equals(
+              [IO.Path]::GetFullPath([string]$health.root),
+              [IO.Path]::GetFullPath($libraryRoot),
+              [StringComparison]::OrdinalIgnoreCase
+            )) { throw "Packaged server selected the wrong library root: $($health.root)" }
+
+            Start-Sleep -Seconds 4
+            $parent.Refresh()
+            $server.Refresh()
+            if ($parent.HasExited) { throw "Parent liveness probe terminated its parent process" }
+            if ($server.HasExited) { throw "Packaged server did not remain alive" }
+          } finally {
+            if ($server) { Stop-Process -Id $server.Id -Force -ErrorAction SilentlyContinue }
+            if ($parent) { Stop-Process -Id $parent.Id -Force -ErrorAction SilentlyContinue }
+          }
+
       - name: Upload Windows app
         uses: actions/upload-artifact@v4
         with:
-          name: CS-Library-Windows-win-x64
-          path: artifacts/CS-Library-Windows-win-x64.zip
+          name: Lattice-Windows-win-x64
+          path: windows/build/package-win-x64
+          include-hidden-files: true
           if-no-files-found: error
           retention-days: 14

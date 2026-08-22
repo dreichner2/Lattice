@@ -22,10 +22,12 @@ __pycache__/
 !/lectures/**/.gitkeep
 !/lectures/catalog.json
 
-# Local UI/runtime state never belongs in the repository.
+# Local UI/runtime state never belongs in the repository. Keep the legacy app
+# name ignored while existing builds migrate to the Lattice display name.
 /.library-cache/
 /work/
 /CS Library.app/
+/Lattice.app/
 /artifacts/
 /windows/build/
 /windows/CSLibrary.Windows/bin/

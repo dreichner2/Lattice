@@ -1,13 +1,20 @@
-# CS Library Catalog
+# Lattice Catalog
 
 > **93 logical works · 123 verified artifacts · 0 exact duplicates**
 > Last reorganized and fully verified: 2026-08-21
 
-This is the authoritative shelf index. Every title links directly to the local
-PDF, EPUB, text, or course folder on this Mac. Official webpages live in a
-separate `Source` column. Binary payloads are intentionally not published to
-GitHub—see [Library rules](LIBRARY_RULES.md)—but every payload has tracked
-metadata under `metadata/` and a checksum in `manifests/library.sha256`.
+This is the authoritative index for Lattice's initial computer-science
+collection. Every title links directly to the local PDF, EPUB, text, or course
+folder. Official webpages live in a separate `Source` column. Binary payloads
+are intentionally not published to GitHub—see [Library rules](LIBRARY_RULES.md)—but
+every curated payload has tracked metadata under `metadata/` and a checksum in
+`manifests/library.sha256`.
+
+Broad subject IDs and current catalog defaults are defined in
+[`library-taxonomy.json`](library-taxonomy.json). Shelf headings below remain
+useful topic groupings; they are not the complete list of supported subjects.
+Private imports in any subject use adjacent `.library.json` sidecars and do not
+need a row here.
 
 ## Jump to a shelf
 

@@ -22,6 +22,8 @@ final class AppDelegate: NSObject, NSApplicationDelegate, WKNavigationDelegate, 
     private var readerBridge: ReaderBridge!
     private var currentServerURL: URL?
     private var pendingOpenURLs: [URL] = []
+    private var webInterfaceReady = false
+    private var pendingAddMaterials = false
 
     func applicationDidFinishLaunching(_ notification: Notification) {
         NSApp.setActivationPolicy(.regular)
@@ -66,7 +68,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, WKNavigationDelegate, 
     }
 
     func application(_ application: NSApplication, open urls: [URL]) {
-        guard libraryRoot != nil else {
+        guard libraryRoot != nil, currentServerURL != nil else {
             pendingOpenURLs.append(contentsOf: urls)
             return
         }
@@ -91,8 +93,8 @@ final class AppDelegate: NSObject, NSApplicationDelegate, WKNavigationDelegate, 
         guard interactively else { return nil }
 
         let panel = NSOpenPanel()
-        panel.title = "Choose your CS Library folder"
-        panel.message = "Select the folder containing CATALOG.md, metadata, books, and papers."
+        panel.title = "Choose your Lattice folder"
+        panel.message = "Select the folder containing CATALOG.md, library-taxonomy.json, metadata, and the synchronized content folders."
         panel.prompt = "Use Library"
         panel.canChooseDirectories = true
         panel.canChooseFiles = false
@@ -101,8 +103,8 @@ final class AppDelegate: NSObject, NSApplicationDelegate, WKNavigationDelegate, 
         guard panel.runModal() == .OK, let url = panel.url else { return nil }
         guard isLibraryRoot(url) else {
             showNonfatalError(
-                title: "That folder is not a CS Library",
-                message: "The selected folder must contain CATALOG.md and a metadata folder."
+                title: "That folder is not a Lattice library",
+                message: "The selected folder must contain CATALOG.md, library-taxonomy.json, and a metadata folder."
             )
             return locateLibraryRoot(interactively: true)
         }
@@ -112,6 +114,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, WKNavigationDelegate, 
     private func isLibraryRoot(_ url: URL) -> Bool {
         var isDirectory: ObjCBool = false
         return FileManager.default.fileExists(atPath: url.appendingPathComponent("CATALOG.md").path)
+            && FileManager.default.fileExists(atPath: url.appendingPathComponent("library-taxonomy.json").path)
             && FileManager.default.fileExists(atPath: url.appendingPathComponent("metadata").path, isDirectory: &isDirectory)
             && isDirectory.boolValue
     }
@@ -158,7 +161,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, WKNavigationDelegate, 
             backing: .buffered,
             defer: false
         )
-        window.title = "CS Library"
+        window.title = "Lattice"
         window.titleVisibility = .hidden
         window.titlebarAppearsTransparent = true
         window.minSize = NSSize(width: 880, height: 600)
@@ -250,13 +253,13 @@ final class AppDelegate: NSObject, NSApplicationDelegate, WKNavigationDelegate, 
         guard let python = pythonCandidates.first(where: manager.isExecutableFile(atPath:)) else {
             showFatalError(
                 title: "Python 3 is required",
-                message: "Install Python 3 from python.org or Homebrew, then reopen CS Library. The books and reading database remain untouched."
+                message: "Install Python 3 from python.org or Homebrew, then reopen Lattice. The library and reading database remain untouched."
             )
             return
         }
 
         guard let serverScript = bundledServerScript() else {
-            showFatalError(title: "The local library server is missing", message: "Rebuild CS Library.app from the repository.")
+            showFatalError(title: "The local library server is missing", message: "Rebuild Lattice.app from the repository.")
             return
         }
         let uiRoot = bundledUIRoot() ?? libraryRoot.appendingPathComponent("ui", isDirectory: true)
@@ -329,6 +332,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, WKNavigationDelegate, 
 
     private func loadLibrary(at url: URL) {
         currentServerURL = url
+        webInterfaceReady = false
         webView.load(URLRequest(url: url, cachePolicy: .reloadIgnoringLocalCacheData, timeoutInterval: 12))
         if !pendingOpenURLs.isEmpty {
             let pending = pendingOpenURLs
@@ -374,8 +378,20 @@ final class AppDelegate: NSObject, NSApplicationDelegate, WKNavigationDelegate, 
         return nil
     }
 
+    func webView(_ webView: WKWebView, didStartProvisionalNavigation navigation: WKNavigation!) {
+        webInterfaceReady = false
+    }
+
+    func webView(_ webView: WKWebView, didFinish navigation: WKNavigation!) {
+        webInterfaceReady = true
+        if pendingAddMaterials {
+            pendingAddMaterials = false
+            showAddMaterialsDialog()
+        }
+    }
+
     func webView(_ webView: WKWebView, didFailProvisionalNavigation navigation: WKNavigation!, withError error: Error) {
-        showNonfatalError(title: "CS Library could not load", message: error.localizedDescription)
+        showNonfatalError(title: "Lattice could not load", message: error.localizedDescription)
     }
 
     // MARK: File import/export and diagnostics
@@ -387,73 +403,178 @@ final class AppDelegate: NSObject, NSApplicationDelegate, WKNavigationDelegate, 
         UserDefaults.standard.set(canonical.path, forKey: savedRootKey)
         let alert = NSAlert()
         alert.messageText = "Library folder changed"
-        alert.informativeText = "Reopen CS Library to use \(canonical.path)."
+        alert.informativeText = "Reopen Lattice to use \(canonical.path)."
         alert.addButton(withTitle: "Quit and Reopen Later")
         alert.runModal()
         NSApp.terminate(nil)
     }
 
     @objc private func addBooks(_ sender: Any?) {
-        let panel = NSOpenPanel()
-        panel.title = "Add reading material"
-        panel.prompt = "Add to Library"
-        panel.allowsMultipleSelection = true
-        panel.canChooseFiles = true
-        panel.canChooseDirectories = false
-        panel.allowedContentTypes = [UTType.pdf, UTType.epub, UTType.plainText]
-        guard panel.runModal() == .OK else { return }
-        importFiles(panel.urls)
+        guard webInterfaceReady else {
+            pendingAddMaterials = true
+            return
+        }
+        showAddMaterialsDialog()
+    }
+
+    private func showAddMaterialsDialog() {
+        webView?.evaluateJavaScript(
+            "typeof window.sharedLibraryChooseFiles === 'function' && (window.sharedLibraryChooseFiles(), true)"
+        ) { [weak self] value, error in
+            if error != nil || (value as? Bool) != true {
+                self?.showNonfatalError(
+                    title: "Add materials is unavailable",
+                    message: "Reload Lattice and try again."
+                )
+            }
+        }
+    }
+
+    private func chooseMaterialKind() -> String? {
+        let picker = NSPopUpButton(frame: NSRect(x: 0, y: 0, width: 260, height: 28))
+        picker.addItems(withTitles: ["Book", "Paper", "Lecture notes"])
+        let alert = NSAlert()
+        alert.messageText = "What kind of material are you adding?"
+        alert.informativeText = "The selection controls which synchronized shelf receives these files."
+        alert.accessoryView = picker
+        alert.addButton(withTitle: "Add")
+        alert.addButton(withTitle: "Cancel")
+        guard alert.runModal() == .alertFirstButtonReturn else { return nil }
+        return ["book", "paper", "lecture"][picker.indexOfSelectedItem]
     }
 
     private func importFiles(_ urls: [URL]) {
-        let manager = FileManager.default
-        let destinationRoot = libraryRoot.appendingPathComponent("books", isDirectory: true)
-        try? manager.createDirectory(at: destinationRoot, withIntermediateDirectories: true)
-        var imported: [String] = []
-        var failures: [String] = []
+        guard !urls.isEmpty else { return }
+        guard let endpoint = serverEndpoint("/api/library") else {
+            pendingOpenURLs.append(contentsOf: urls)
+            return
+        }
+        guard let kind = chooseMaterialKind() else { return }
+        URLSession.shared.dataTask(with: endpoint) { [weak self] data, response, error in
+            guard let self else { return }
+            guard error == nil,
+                  let http = response as? HTTPURLResponse,
+                  http.statusCode == 200,
+                  let data,
+                  let payload = try? JSONSerialization.jsonObject(with: data) as? [String: Any],
+                  let token = payload["actionToken"] as? String else {
+                DispatchQueue.main.async {
+                    self.showNonfatalError(
+                        title: "Lattice is not ready to import",
+                        message: error?.localizedDescription ?? "Reload the library and try again."
+                    )
+                }
+                return
+            }
+            self.uploadFiles(
+                urls,
+                token: token,
+                kind: kind,
+                index: 0,
+                imported: [],
+                duplicates: [],
+                failures: []
+            )
+        }.resume()
+    }
 
-        for source in urls {
-            let ext = source.pathExtension.lowercased()
-            guard ["pdf", "epub", "txt"].contains(ext) else { failures.append(source.lastPathComponent); continue }
-            if LibraryIdentity.resolveLibraryFile(relativePath: relativePath(for: source), root: libraryRoot) != nil {
-                imported.append(source.lastPathComponent)
-                continue
+    private func serverEndpoint(_ path: String) -> URL? {
+        guard let currentServerURL,
+              var components = URLComponents(url: currentServerURL, resolvingAgainstBaseURL: false) else { return nil }
+        components.path = path
+        components.query = nil
+        components.fragment = nil
+        return components.url
+    }
+
+    private func uploadFiles(
+        _ urls: [URL],
+        token: String,
+        kind: String,
+        index: Int,
+        imported: [String],
+        duplicates: [String],
+        failures: [String]
+    ) {
+        guard index < urls.count else {
+            DispatchQueue.main.async {
+                let alert = NSAlert()
+                if imported.isEmpty, !duplicates.isEmpty, failures.isEmpty {
+                    alert.messageText = "Everything is already on the shelf"
+                } else if imported.isEmpty {
+                    alert.messageText = "No new files were added"
+                } else {
+                    alert.messageText = "Added \(imported.count) new file\(imported.count == 1 ? "" : "s")"
+                }
+                var details: [String] = []
+                if !imported.isEmpty {
+                    details.append("The new files are on the synchronized shelf; Lattice is filling their details now.")
+                }
+                if !duplicates.isEmpty {
+                    details.append("\(duplicates.count) file\(duplicates.count == 1 ? " was" : "s were") already on the shelf.")
+                }
+                if !failures.isEmpty {
+                    details.append("Some files could not be added:\n\(failures.joined(separator: "\n"))")
+                }
+                alert.informativeText = details.joined(separator: "\n\n")
+                alert.addButton(withTitle: "OK")
+                alert.runModal()
             }
-            let base = sanitizedFilename(source.deletingPathExtension().lastPathComponent)
-            var destination = destinationRoot.appendingPathComponent("\(base).\(ext)")
-            var counter = 2
-            while manager.fileExists(atPath: destination.path) {
-                destination = destinationRoot.appendingPathComponent("\(base)-\(counter).\(ext)")
-                counter += 1
-            }
-            do {
-                try manager.copyItem(at: source, to: destination)
-                imported.append(destination.lastPathComponent)
-            } catch {
-                failures.append("\(source.lastPathComponent): \(error.localizedDescription)")
-            }
+            return
         }
 
-        let alert = NSAlert()
-        alert.messageText = imported.isEmpty ? "No files were added" : "Added \(imported.count) file\(imported.count == 1 ? "" : "s")"
-        alert.informativeText = failures.isEmpty
-            ? "New files will appear in New arrivals automatically."
-            : "Some files could not be added:\n\(failures.joined(separator: "\n"))"
-        alert.addButton(withTitle: "OK")
-        alert.runModal()
-    }
-
-    private func relativePath(for url: URL) -> String {
-        let root = LibraryIdentity.canonicalRoot(libraryRoot).path
-        let candidate = url.standardizedFileURL.resolvingSymlinksInPath().path
-        guard candidate.hasPrefix(root + "/") else { return "" }
-        return String(candidate.dropFirst(root.count + 1))
-    }
-
-    private func sanitizedFilename(_ value: String) -> String {
-        let folded = value.folding(options: [.diacriticInsensitive, .caseInsensitive], locale: .current).lowercased()
-        let components = folded.components(separatedBy: CharacterSet.alphanumerics.inverted).filter { !$0.isEmpty }
-        return String((components.joined(separator: "-").isEmpty ? "new-book" : components.joined(separator: "-")).prefix(70))
+        let source = urls[index]
+        let ext = source.pathExtension.lowercased()
+        guard ["pdf", "epub", "txt"].contains(ext), let endpoint = serverEndpoint("/api/import") else {
+            uploadFiles(
+                urls,
+                token: token,
+                kind: kind,
+                index: index + 1,
+                imported: imported,
+                duplicates: duplicates,
+                failures: failures + ["\(source.lastPathComponent): unsupported file type"]
+            )
+            return
+        }
+        let size = (try? source.resourceValues(forKeys: [.fileSizeKey]).fileSize) ?? 0
+        let filenameCharacters = CharacterSet.alphanumerics.union(CharacterSet(charactersIn: ".-_"))
+        let encodedName = source.lastPathComponent.addingPercentEncoding(withAllowedCharacters: filenameCharacters) ?? ""
+        var request = URLRequest(url: endpoint, timeoutInterval: 600)
+        request.httpMethod = "POST"
+        request.setValue(token, forHTTPHeaderField: "X-Library-Token")
+        request.setValue(encodedName, forHTTPHeaderField: "X-Library-Filename")
+        request.setValue(kind, forHTTPHeaderField: "X-Library-Kind")
+        request.setValue("application/octet-stream", forHTTPHeaderField: "Content-Type")
+        request.setValue(String(size), forHTTPHeaderField: "Content-Length")
+        URLSession.shared.uploadTask(with: request, fromFile: source) { [weak self] data, response, error in
+            guard let self else { return }
+            let http = response as? HTTPURLResponse
+            let payload = data.flatMap { try? JSONSerialization.jsonObject(with: $0) as? [String: Any] }
+            if error == nil, http?.statusCode == 201, let path = payload?["path"] as? String {
+                let duplicate = payload?["duplicate"] as? Bool == true
+                self.uploadFiles(
+                    urls,
+                    token: token,
+                    kind: kind,
+                    index: index + 1,
+                    imported: duplicate ? imported : imported + [path],
+                    duplicates: duplicate ? duplicates + [path] : duplicates,
+                    failures: failures
+                )
+            } else {
+                let message = (payload?["error"] as? String) ?? error?.localizedDescription ?? "Import failed"
+                self.uploadFiles(
+                    urls,
+                    token: token,
+                    kind: kind,
+                    index: index + 1,
+                    imported: imported,
+                    duplicates: duplicates,
+                    failures: failures + ["\(source.lastPathComponent): \(message)"]
+                )
+            }
+        }.resume()
     }
 
     @objc private func openLibraryFolder(_ sender: Any?) { NSWorkspace.shared.open(libraryRoot) }
@@ -464,7 +585,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, WKNavigationDelegate, 
 
     private func exportReaderData(extension ext: String, format: String) {
         let panel = NSSavePanel()
-        panel.nameFieldStringValue = "CS-Library-Reading-Data.\(ext)"
+        panel.nameFieldStringValue = "Lattice-Reading-Data.\(ext)"
         panel.allowedContentTypes = ext == "json" ? [.json] : [.plainText]
         panel.prompt = "Export"
         guard panel.runModal() == .OK, let url = panel.url else { return }
@@ -505,7 +626,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, WKNavigationDelegate, 
                 ISO8601DateFormatter().string(from: Date(timeIntervalSince1970: $0))
             } ?? "Never"
             let alert = NSAlert()
-            alert.messageText = diagnostics.integrity == "ok" ? "CS Library is healthy" : "CS Library needs attention"
+            alert.messageText = diagnostics.integrity == "ok" ? "Lattice is healthy" : "Lattice needs attention"
             alert.informativeText = """
             Library: \(libraryRoot.path)
             Library ID: \(expectedLibraryID.prefix(16))…
@@ -562,17 +683,17 @@ final class AppDelegate: NSObject, NSApplicationDelegate, WKNavigationDelegate, 
         let mainMenu = NSMenu()
         let appItem = NSMenuItem()
         let appMenu = NSMenu()
-        appMenu.addItem(withTitle: "About CS Library", action: #selector(NSApplication.orderFrontStandardAboutPanel(_:)), keyEquivalent: "")
+        appMenu.addItem(withTitle: "About Lattice", action: #selector(NSApplication.orderFrontStandardAboutPanel(_:)), keyEquivalent: "")
         appMenu.addItem(.separator())
-        appMenu.addItem(withTitle: "Hide CS Library", action: #selector(NSApplication.hide(_:)), keyEquivalent: "h")
+        appMenu.addItem(withTitle: "Hide Lattice", action: #selector(NSApplication.hide(_:)), keyEquivalent: "h")
         appMenu.addItem(.separator())
-        appMenu.addItem(withTitle: "Quit CS Library", action: #selector(NSApplication.terminate(_:)), keyEquivalent: "q")
+        appMenu.addItem(withTitle: "Quit Lattice", action: #selector(NSApplication.terminate(_:)), keyEquivalent: "q")
         appItem.submenu = appMenu
         mainMenu.addItem(appItem)
 
         let fileItem = NSMenuItem()
         let fileMenu = NSMenu(title: "File")
-        addMenuItem(fileMenu, "Add Books…", #selector(addBooks(_:)), "o", [.command, .shift])
+        addMenuItem(fileMenu, "Add Materials…", #selector(addBooks(_:)), "o", [.command, .shift])
         addMenuItem(fileMenu, "Choose Library Folder…", #selector(chooseLibraryFolder(_:)))
         fileMenu.addItem(.separator())
         addMenuItem(fileMenu, "Open Library Folder", #selector(openLibraryFolder(_:)), "o")

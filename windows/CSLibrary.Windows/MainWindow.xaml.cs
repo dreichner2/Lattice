@@ -10,6 +10,8 @@ namespace CSLibrary.Windows;
 
 public partial class MainWindow : Window
 {
+    // Keep the legacy path so an in-place product rename does not strand the
+    // selected library, WebView profile, or reader-state database.
     private static readonly string SettingsRoot = Path.Combine(
         Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData),
         "CS Library");
@@ -43,7 +45,15 @@ public partial class MainWindow : Window
         try
         {
             var root = Path.GetFullPath(path);
+            var appRoot = Path.TrimEndingDirectorySeparator(Path.GetFullPath(AppContext.BaseDirectory));
+            if (string.Equals(
+                Path.TrimEndingDirectorySeparator(root),
+                appRoot,
+                StringComparison.OrdinalIgnoreCase)) return false;
             return File.Exists(Path.Combine(root, "CATALOG.md"))
+                && File.Exists(Path.Combine(root, "library-taxonomy.json"))
+                && (Directory.Exists(Path.Combine(root, ".git"))
+                    || File.Exists(Path.Combine(root, ".git")))
                 && Directory.Exists(Path.Combine(root, "metadata"))
                 && Directory.Exists(Path.Combine(root, "ui"));
         }
@@ -71,48 +81,49 @@ public partial class MainWindow : Window
             // The chooser below is the safe fallback for an unreadable setting.
         }
 
-        var besideApp = AppContext.BaseDirectory;
-        return IsLibrary(besideApp) ? Path.GetFullPath(besideApp) : null;
+        // The installed package contains UI/catalog resources and an empty
+        // scaffold, so it must never be inferred as the user's shared library.
+        return null;
     }
 
     private string? ChooseLibrary()
     {
-        var dialog = new OpenFolderDialog
+        while (true)
         {
-            Title = "Choose the CS Library folder",
-            Multiselect = false,
-        };
-        if (IsLibrary(_libraryRoot)) dialog.InitialDirectory = _libraryRoot;
-        if (dialog.ShowDialog(this) != true) return null;
-        if (!IsLibrary(dialog.FolderName))
-        {
+            var dialog = new OpenFolderDialog
+            {
+                Title = "Choose the Lattice library folder",
+                Multiselect = false,
+            };
+            if (IsLibrary(_libraryRoot)) dialog.InitialDirectory = _libraryRoot;
+            if (dialog.ShowDialog(this) != true) return null;
+            if (IsLibrary(dialog.FolderName)) return Path.GetFullPath(dialog.FolderName);
+
             MessageBox.Show(
                 this,
-                "That folder is not a CS Library. Choose the folder containing CATALOG.md, metadata, and ui.",
-                "CS Library",
+                "That folder is not a Lattice library. Choose the synchronized clone containing CATALOG.md, library-taxonomy.json, metadata, and ui.",
+                "Lattice",
                 MessageBoxButton.OK,
                 MessageBoxImage.Warning);
-            return ChooseLibrary();
         }
-        return Path.GetFullPath(dialog.FolderName);
     }
 
     private async Task OpenLibraryAsync(string root)
     {
         SetLoading("Opening your library…", "Starting the private local reading service", false);
+        SetBrowserControlsEnabled(false);
         StopOwnedServer();
         _libraryRoot = Path.GetFullPath(root);
         LibraryPathText.Text = _libraryRoot;
-        Directory.CreateDirectory(SettingsRoot);
-        File.WriteAllText(SavedLibraryPath, _libraryRoot + Environment.NewLine);
 
         try
         {
+            Directory.CreateDirectory(SettingsRoot);
+            File.WriteAllText(SavedLibraryPath, _libraryRoot + Environment.NewLine);
             _serverUrl = await StartServerAsync(_libraryRoot, _lifetime.Token);
             await ConfigureWebViewAsync(_libraryRoot);
             Browser.CoreWebView2.Navigate($"{_serverUrl}/?app=windows");
-            StatusText.Text = "Private local library";
-            LoadingOverlay.Visibility = Visibility.Collapsed;
+            StatusText.Text = "Loading your library";
         }
         catch (OperationCanceledException) when (_lifetime.IsCancellationRequested)
         {
@@ -122,21 +133,41 @@ public partial class MainWindow : Window
         {
             SetLoading(
                 "The library could not start",
-                error.Message,
-                true);
+                FriendlyStartupMessage(error),
+                error is not WebView2RuntimeNotFoundException and not FileNotFoundException);
             StatusText.Text = "Needs attention";
         }
     }
 
+    private static string FriendlyStartupMessage(Exception error)
+    {
+        if (error is WebView2RuntimeNotFoundException)
+        {
+            return "Microsoft Edge WebView2 Runtime is required. Install the Evergreen WebView2 Runtime from Microsoft, then reopen Lattice.";
+        }
+        if (error is FileNotFoundException)
+        {
+            return "The local service or bundled interface is missing. Extract the complete Lattice package, then run the app again.";
+        }
+        return error.Message;
+    }
+
     private async Task<string> StartServerAsync(string root, CancellationToken cancellationToken)
     {
-        var server = Path.Combine(AppContext.BaseDirectory, "Server", "CSLibraryServer.exe");
-        if (!File.Exists(server))
+        var server = new[]
+        {
+            Path.Combine(AppContext.BaseDirectory, "Server", "LatticeServer.exe"),
+            Path.Combine(AppContext.BaseDirectory, "Server", "SharedLibraryServer.exe"),
+            Path.Combine(AppContext.BaseDirectory, "Server", "CSLibraryServer.exe"),
+        }.FirstOrDefault(File.Exists);
+        if (server is null)
         {
             throw new FileNotFoundException(
-                "CSLibraryServer.exe is missing. Extract the complete Windows package before running the app.",
-                server);
+                "The Lattice local service is missing. Extract the complete Windows package before running the app.");
         }
+        var uiRoot = Path.Combine(AppContext.BaseDirectory, "ui");
+        if (!File.Exists(Path.Combine(uiRoot, "index.html")))
+            throw new FileNotFoundException("The bundled Lattice interface is missing.", uiRoot);
 
         var ready = new TaskCompletionSource<string>(TaskCreationOptions.RunContinuationsAsynchronously);
         var errors = new StringBuilder();
@@ -150,6 +181,8 @@ public partial class MainWindow : Window
         };
         start.ArgumentList.Add("--root");
         start.ArgumentList.Add(root);
+        start.ArgumentList.Add("--ui-root");
+        start.ArgumentList.Add(uiRoot);
         start.ArgumentList.Add("--port");
         start.ArgumentList.Add("8766");
         start.ArgumentList.Add("--parent-pid");
@@ -162,12 +195,16 @@ public partial class MainWindow : Window
         {
             var line = eventArgs.Data;
             if (line is null) return;
-            const string started = "CS Library is ready: ";
-            const string existing = "CS Library is already running at ";
-            if (line.StartsWith(started, StringComparison.Ordinal))
-                ready.TrySetResult(line[started.Length..].Trim());
-            else if (line.StartsWith(existing, StringComparison.Ordinal))
-                ready.TrySetResult(line[existing.Length..].Trim());
+            var prefix = new[]
+            {
+                "Lattice is ready: ",
+                "Lattice is already running at ",
+                "Shared Library is ready: ",
+                "Shared Library is already running at ",
+                "CS Library is ready: ",
+                "CS Library is already running at ",
+            }.FirstOrDefault(candidate => line.StartsWith(candidate, StringComparison.Ordinal));
+            if (prefix is not null) ready.TrySetResult(line[prefix.Length..].Trim());
         };
         process.ErrorDataReceived += (_, eventArgs) =>
         {
@@ -178,13 +215,29 @@ public partial class MainWindow : Window
         };
         process.Exited += (_, _) =>
         {
-            if (ready.Task.IsCompleted) return;
             string detail;
             lock (errors) detail = errors.ToString().Trim();
-            ready.TrySetException(new InvalidOperationException(
-                string.IsNullOrEmpty(detail)
-                    ? $"The local service exited with code {process.ExitCode}."
-                    : detail));
+            if (!ready.Task.IsCompleted)
+            {
+                ready.TrySetException(new InvalidOperationException(
+                    string.IsNullOrEmpty(detail)
+                        ? $"The local service exited with code {process.ExitCode}."
+                        : detail));
+                return;
+            }
+            if (process.ExitCode != 0 && !_lifetime.IsCancellationRequested)
+            {
+                Dispatcher.InvokeAsync(() =>
+                {
+                    if (!ReferenceEquals(_serverProcess, process)) return;
+                    SetBrowserControlsEnabled(false);
+                    SetLoading(
+                        "The private local service stopped",
+                        string.IsNullOrEmpty(detail) ? "Reopen Lattice to restart it." : detail,
+                        false);
+                    StatusText.Text = "Service stopped";
+                });
+            }
         };
 
         if (!process.Start()) throw new InvalidOperationException("The local service did not start.");
@@ -220,31 +273,71 @@ public partial class MainWindow : Window
             Browser.CoreWebView2.Settings.AreDefaultContextMenusEnabled = true;
             Browser.CoreWebView2.Settings.IsStatusBarEnabled = false;
             Browser.CoreWebView2.NavigationStarting += NavigationStarting;
+            Browser.CoreWebView2.NavigationCompleted += NavigationCompleted;
+            Browser.CoreWebView2.HistoryChanged += (_, _) => UpdateNavigationControls();
             Browser.CoreWebView2.NewWindowRequested += NewWindowRequested;
+            Browser.CoreWebView2.ProcessFailed += (_, eventArgs) =>
+            {
+                SetBrowserControlsEnabled(false);
+                SetLoading(
+                    "The reading window stopped",
+                    $"WebView2 reported {eventArgs.ProcessFailedKind}. Reopen Lattice to recover.",
+                    false);
+                StatusText.Text = "Reader stopped";
+            };
             Browser.CoreWebView2.DocumentTitleChanged += (_, _) =>
             {
                 var title = Browser.CoreWebView2.DocumentTitle;
-                Title = string.IsNullOrWhiteSpace(title) ? "CS Library" : $"{title} — CS Library";
+                Title = string.IsNullOrWhiteSpace(title) ? "Lattice" : $"{title} — Lattice";
             };
+
+            var stateScript = new[]
+            {
+                Path.Combine(AppContext.BaseDirectory, "native", "SharedReaderState.js"),
+                Path.Combine(root, "native", "SharedReaderState.js"),
+            }.FirstOrDefault(File.Exists);
+            if (stateScript is not null)
+            {
+                await Browser.CoreWebView2.AddScriptToExecuteOnDocumentCreatedAsync(
+                    File.ReadAllText(stateScript));
+            }
             _webViewConfigured = true;
         }
-
-        var stateScript = new[]
-        {
-            Path.Combine(root, "native", "SharedReaderState.js"),
-            Path.Combine(AppContext.BaseDirectory, "native", "SharedReaderState.js"),
-        }.FirstOrDefault(File.Exists);
-        if (stateScript is not null)
-            await Browser.CoreWebView2.AddScriptToExecuteOnDocumentCreatedAsync(File.ReadAllText(stateScript));
     }
 
     private void NavigationStarting(object? sender, CoreWebView2NavigationStartingEventArgs e)
     {
-        if (IsLocalUri(e.Uri)) return;
-        if (!Uri.TryCreate(e.Uri, UriKind.Absolute, out var uri)
-            || (uri.Scheme != Uri.UriSchemeHttp && uri.Scheme != Uri.UriSchemeHttps)) return;
+        if (IsLocalUri(e.Uri))
+        {
+            StatusText.Text = "Loading";
+            return;
+        }
         e.Cancel = true;
-        Process.Start(new ProcessStartInfo(uri.AbsoluteUri) { UseShellExecute = true });
+        if (Uri.TryCreate(e.Uri, UriKind.Absolute, out var uri)
+            && (uri.Scheme == Uri.UriSchemeHttp || uri.Scheme == Uri.UriSchemeHttps))
+        {
+            Process.Start(new ProcessStartInfo(uri.AbsoluteUri) { UseShellExecute = true });
+        }
+    }
+
+    private void NavigationCompleted(object? sender, CoreWebView2NavigationCompletedEventArgs e)
+    {
+        if (!e.IsSuccess)
+        {
+            SetBrowserControlsEnabled(false);
+            HomeButton.IsEnabled = _serverUrl is not null;
+            ReloadButton.IsEnabled = Browser.CoreWebView2 is not null;
+            SetLoading(
+                "Lattice could not load",
+                $"The local interface reported {e.WebErrorStatus}. Use Reload above or reopen the app.",
+                false);
+            StatusText.Text = "Load failed";
+            return;
+        }
+
+        LoadingOverlay.Visibility = Visibility.Collapsed;
+        SetBrowserControlsEnabled(true);
+        StatusText.Text = "Private local library";
     }
 
     private void NewWindowRequested(object? sender, CoreWebView2NewWindowRequestedEventArgs e)
@@ -268,6 +361,19 @@ public partial class MainWindow : Window
         LoadingDetail.Text = detail;
         ChooseFolderButton.Visibility = chooseFolder ? Visibility.Visible : Visibility.Collapsed;
         LoadingOverlay.Visibility = Visibility.Visible;
+    }
+
+    private void SetBrowserControlsEnabled(bool enabled)
+    {
+        HomeButton.IsEnabled = enabled;
+        ReloadButton.IsEnabled = enabled;
+        AddMaterialsButton.IsEnabled = enabled;
+        BackButton.IsEnabled = enabled && Browser.CanGoBack;
+    }
+
+    private void UpdateNavigationControls()
+    {
+        BackButton.IsEnabled = Browser.CoreWebView2 is not null && Browser.CanGoBack;
     }
 
     private void StopOwnedServer()
@@ -303,7 +409,51 @@ public partial class MainWindow : Window
         if (_serverUrl is not null) Browser.CoreWebView2?.Navigate($"{_serverUrl}/?app=windows");
     }
 
-    private void Reload_Click(object sender, RoutedEventArgs e) => Browser.Reload();
+    private void Reload_Click(object sender, RoutedEventArgs e)
+    {
+        if (Browser.CoreWebView2 is not null) Browser.Reload();
+    }
+
+    private async void AddMaterials_Click(object sender, RoutedEventArgs e)
+    {
+        if (Browser.CoreWebView2 is null) return;
+        const string script = """
+            (() => {
+              if (typeof window.sharedLibraryChooseFiles === "function") {
+                window.sharedLibraryChooseFiles();
+                return true;
+              }
+              const input = document.getElementById("addFilesInput");
+              if (input instanceof HTMLInputElement) {
+                input.click();
+                return true;
+              }
+              return false;
+            })()
+            """;
+        try
+        {
+            var result = await Browser.CoreWebView2.ExecuteScriptAsync(script);
+            if (!string.Equals(result, "true", StringComparison.OrdinalIgnoreCase))
+            {
+                MessageBox.Show(
+                    this,
+                    "The Add materials control is unavailable in this interface. Reinstall the current Lattice package.",
+                    "Lattice",
+                    MessageBoxButton.OK,
+                    MessageBoxImage.Information);
+            }
+        }
+        catch (Exception error)
+        {
+            MessageBox.Show(
+                this,
+                $"The file chooser could not open. {error.Message}",
+                "Lattice",
+                MessageBoxButton.OK,
+                MessageBoxImage.Warning);
+        }
+    }
 
     private void OpenFolder_Click(object sender, RoutedEventArgs e)
     {

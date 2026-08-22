@@ -4,6 +4,17 @@
 
 ### Added
 
+- Lattice display identity and “A shared knowledge library” descriptor across
+  the macOS, Windows, browser, and
+  Syncthing experiences while preserving established storage and protocol IDs.
+- Versioned cross-subject taxonomy covering computing, engineering,
+  mathematics, statistics and data science, physics, interdisciplinary work,
+  and safe fallback classification.
+- Dedicated Add and drag-and-drop import with collision-safe payload writes and
+  adjacent Syncthing-shared `.library.json` metadata sidecars.
+- Optional `gpt-5.6-luna` metadata suggestions through the authenticated local
+  Codex CLI, with metadata-only inputs, structured validation, and a fully local
+  fallback when Codex is unavailable.
 - Versioned SQLite reader database with migrations, backups, integrity checks,
   JSON import/export, Markdown export, and stable document IDs.
 - Formal WKWebView/native bridge for reader state and commands.
@@ -19,6 +30,10 @@
 
 ### Changed
 
+- The Syncthing display label is now Lattice; the established folder ID
+  remains `cs-library-3b8290f24f15` so paired devices do not need migration.
+- The original computer-science catalog is now one subject collection inside a
+  subject-agnostic library rather than the application-wide identity.
 - Native reader state is no longer primarily stored in UserDefaults or WebKit
   localStorage.
 - The Mac app is no longer required to remain beside the repository after it has
@@ -28,6 +43,10 @@
 
 ### Security
 
+- Import-generated integrity, path, and access fields remain server-owned;
+  Codex and manual edits may change only descriptive metadata.
+- Codex enrichment receives filenames and extracted publication metadata, not
+  document bytes or full text, and cannot prevent a local import from finishing.
 - Native path validation now resolves symlinks and matches the selected library
   boundary.
 - The app refuses to attach to a service for another library folder.
