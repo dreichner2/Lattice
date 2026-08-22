@@ -9,6 +9,8 @@
   a second Add click.
 - A queued file no longer displays a spinning activity indicator before any
   upload or Luna metadata work has started.
+- Luna metadata enrichment now uses the supported Structured Outputs schema
+  subset; uniqueness is still enforced by Lattice before metadata is saved.
 - The zero-argument Windows onboarding launcher now resolves the cloned
   library root correctly under Windows PowerShell 5.1.
 

@@ -2074,7 +2074,6 @@ def _metadata_schema(subject_ids: list[str]) -> dict[str, Any]:
                 "type": "array",
                 "minItems": 1,
                 "maxItems": len(subject_ids),
-                "uniqueItems": True,
                 "items": {"type": "string", "enum": subject_ids},
             },
             "topics": {

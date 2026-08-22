@@ -1252,6 +1252,25 @@ class CodexCommandResolutionTests(unittest.TestCase):
 
 
 class CodexMetadataTests(unittest.TestCase):
+    def test_codex_schema_uses_supported_array_constraints(self) -> None:
+        taxonomy = library_ui.load_taxonomy(ROOT)
+        subject_ids = [subject["id"] for subject in taxonomy["subjects"]]
+        schema = library_ui._metadata_schema(subject_ids)
+        subject_schema = schema["properties"]["subjectIds"]
+        self.assertNotIn("uniqueItems", subject_schema)
+        self.assertEqual(subject_schema["items"]["enum"], subject_ids)
+
+        duplicate_subjects = {
+            "title": "Duplicate categories",
+            "authors": [],
+            "year": None,
+            "edition": "",
+            "subjectIds": ["computer-science", "computer-science"],
+            "topics": [],
+        }
+        with self.assertRaisesRegex(ValueError, "Invalid subjects"):
+            library_ui._validated_descriptive_metadata(duplicate_subjects, taxonomy)
+
     def test_taxonomy_assignments_accept_ordered_subject_lists(self) -> None:
         with tempfile.TemporaryDirectory() as temporary_name:
             root = Path(temporary_name)
