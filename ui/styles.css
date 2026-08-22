@@ -833,7 +833,9 @@ body.import-open {
   font-weight: 780;
 }
 
-.import-item:not(.is-complete):not(.is-failed) .import-item-status {
+.import-item.is-uploading .import-item-status,
+.import-item.is-enriching .import-item-status,
+.import-item.is-saving .import-item-status {
   animation: spin 900ms linear infinite;
 }
 

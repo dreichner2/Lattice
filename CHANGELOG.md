@@ -1,5 +1,17 @@
 # Changelog
 
+## 2.0.1 — 2026-08-21
+
+### Fixed
+
+- Dropping a file onto the main Lattice window now begins the import
+  immediately with the selected material type instead of silently waiting for
+  a second Add click.
+- A queued file no longer displays a spinning activity indicator before any
+  upload or Luna metadata work has started.
+- The zero-argument Windows onboarding launcher now resolves the cloned
+  library root correctly under Windows PowerShell 5.1.
+
 ## 2.0.0 — 2026-08-21
 
 ### Added

@@ -153,7 +153,7 @@ jobs:
             $activePath = Join-Path $installDestination "active-version.json"
             if (-not (Test-Path $activePath)) { throw "Onboarding did not install Lattice." }
             $active = Get-Content $activePath -Raw | ConvertFrom-Json
-            if ($active.version -ne "2.0.0") { throw "Onboarding selected the wrong Lattice version." }
+            if ($active.version -ne "2.0.1") { throw "Onboarding selected the wrong Lattice version." }
             $startupShortcut = Join-Path $testAppData "Microsoft\Windows\Start Menu\Programs\Startup\Lattice Syncthing.lnk"
             if (-not (Test-Path $startupShortcut)) { throw "Onboarding did not create the Syncthing startup shortcut." }
             [xml]$configured = Get-Content $configPath -Raw
@@ -242,7 +242,7 @@ jobs:
             $activePath = Join-Path $destination "active-version.json"
             if (-not (Test-Path $activePath)) { throw "Installer did not write active-version.json" }
             $active = Get-Content $activePath -Raw | ConvertFrom-Json
-            if ($active.schemaVersion -ne 1 -or $active.version -ne "2.0.0") {
+            if ($active.schemaVersion -ne 1 -or $active.version -ne "2.0.1") {
               throw "Installer selected an unexpected active version: $($active.version)"
             }
             $versionRoot = Join-Path (Join-Path $destination "versions") ([string]$active.version)

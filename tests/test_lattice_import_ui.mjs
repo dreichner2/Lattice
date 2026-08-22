@@ -86,10 +86,15 @@ test("overlapping shelf refreshes are coalesced instead of dropped", () => {
   assert.match(APP, /if \(pending\) void refreshLibrary\(pending\.change, \{ quiet: pending\.quiet \}\)/);
 });
 
-test("file drags cannot navigate the host browser or desktop WebView", () => {
+test("file drags cannot navigate the host and begin importing immediately", () => {
   assert.match(APP, /window\.addEventListener\("dragover",[\s\S]*?event\.preventDefault\(\)/);
   assert.match(APP, /window\.addEventListener\("drop",[\s\S]*?event\.preventDefault\(\)/);
-  assert.match(APP, /queueImportFiles\(files,\s*\{ waitForKind:\s*!dialogWasOpen \}\)/);
+  assert.match(APP, /window\.addEventListener\("drop",[\s\S]*?queueImportFiles\(files\)/);
+  assert.doesNotMatch(APP, /waitForKind/);
+  assert.match(APP, /function queueImportFiles\(fileList\)[\s\S]*?items\.forEach\(\(item\) => uploadImport\(item\)\)/);
+  assert.match(APP, /item\.status === "waiting" \? "\+"/);
+  assert.match(STYLES, /\.import-item\.is-uploading \.import-item-status/);
+  assert.doesNotMatch(STYLES, /\.import-item:not\(\.is-complete\):not\(\.is-failed\) \.import-item-status/);
   assert.match(HTML, /id="dropOverlay"/);
   assert.match(STYLES, /\.drop-overlay\s*\{/);
   assert.match(STYLES, /\.import-shell\s*\{/);

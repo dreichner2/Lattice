@@ -632,7 +632,7 @@ function runImportPrimaryAction() {
 }
 
 function importStatusLabel(item) {
-  if (item.status === "waiting") return "Waiting";
+  if (item.status === "waiting") return "Ready to add";
   if (item.status === "uploading") return "Copying to the shared shelf…";
   if (item.status === "enriching") return item.statusMessage || "Luna is filling in the details…";
   if (item.status === "saving") return "Saving details…";
@@ -775,7 +775,11 @@ function renderImportQueue() {
   }
   const rows = state.imports.map((item) => {
     const row = node("article", `import-item is-${item.status}${item.aiFallback ? " is-fallback" : ""}`);
-    const statusIcon = node("span", "import-item-status", item.status === "complete" ? "✓" : item.status === "failed" ? "!" : "↻");
+    const statusIcon = node(
+      "span",
+      "import-item-status",
+      item.status === "complete" ? "✓" : item.status === "failed" ? "!" : item.status === "waiting" ? "+" : "↻",
+    );
     statusIcon.setAttribute("aria-hidden", "true");
     const copy = node("div", "import-item-copy");
     copy.append(
@@ -863,7 +867,7 @@ function importItemForFile(file, kind) {
   };
 }
 
-function queueImportFiles(fileList, { waitForKind = false } = {}) {
+function queueImportFiles(fileList) {
   const files = [...fileList];
   const accepted = files.filter((file) => IMPORT_ACCEPTED.test(file.name));
   const rejected = files.length - accepted.length;
@@ -874,10 +878,6 @@ function queueImportFiles(fileList, { waitForKind = false } = {}) {
   const items = accepted.map((file) => importItemForFile(file, kind));
   state.imports.unshift(...items);
   renderImportQueue();
-  if (waitForKind) {
-    announce(`Choose a material type, then add ${items.length === 1 ? "this file" : "these files"}`);
-    return;
-  }
   items.forEach((item) => uploadImport(item));
 }
 
@@ -1098,9 +1098,8 @@ function bindImportEvents() {
   window.addEventListener("drop", (event) => {
     event.preventDefault();
     const files = event.dataTransfer?.files;
-    const dialogWasOpen = document.body.classList.contains("import-open");
     hideDropOverlay();
-    if (files?.length) queueImportFiles(files, { waitForKind: !dialogWasOpen });
+    if (files?.length) queueImportFiles(files);
   });
 }
 
