@@ -1,8 +1,11 @@
-# CS Library Architecture
+# Lattice Architecture
 
-CS Library is a local-first macOS and Windows reading and study system. The repository keeps
-source code, catalog metadata, provenance records, and integrity manifests in
-Git. Book and paper payloads remain on the selected local computers.
+Lattice is a shared knowledge library and local-first macOS and Windows reading
+and study system. The
+repository keeps source code, the cross-subject taxonomy, curated catalog
+metadata, provenance records, and integrity manifests in Git. Private books,
+papers, lectures, and their adjacent sidecars remain on the selected computers
+and can be synchronized through Syncthing.
 
 ## System boundaries
 
@@ -28,19 +31,60 @@ Git. Book and paper payloads remain on the selected local computers.
 │ Python local service (`scripts/library_ui.py`)                            │
 │  ├─ validates the library root and server instance identity               │
 │  ├─ builds the catalog payload and watches local files                     │
+│  ├─ validates imports and writes collision-safe payloads and sidecars      │
+│  ├─ optionally asks local Codex for metadata-only classification           │
 │  ├─ serves bundled or repository UI resources                             │
 │  ├─ serves byte-ranged PDF/TXT payloads                                   │
 │  ├─ parses and securely serves EPUB resources                             │
 │  └─ exposes token-protected platform file actions                         │
 └───────────────────────────────┬───────────────────────────────────────────┘
-                                │ read-only indexing
+                                │ validated local reads and writes
 ┌───────────────────────────────▼───────────────────────────────────────────┐
 │ Selected library folder                                                   │
-│  ├─ CATALOG.md / metadata / manifests / provenance                        │
-│  ├─ books/                                                                │
-│  └─ papers/                                                               │
+│  ├─ CATALOG.md / library-taxonomy.json / metadata / manifests              │
+│  ├─ books/       payload + `<filename>.library.json`                       │
+│  ├─ papers/      payload + `<filename>.library.json`                       │
+│  └─ lectures/    payload + `<filename>.library.json`                       │
 └───────────────────────────────────────────────────────────────────────────┘
 ```
+
+## Product identity and compatibility IDs
+
+**Lattice** is the visible product and Syncthing label. Existing internal
+identifiers remain stable so upgrades do not orphan data or require device
+re-pairing:
+
+- repository and checkout name: `cs-library`;
+- Syncthing folder ID: `cs-library-3b8290f24f15`;
+- native support directory: `~/Library/Application Support/CS Library/`;
+- Windows state directory: `%LOCALAPPDATA%\CS Library`;
+- web state namespace: `cs-library:*`; and
+- established server protocol and storage identifiers.
+
+The display name may change independently from these compatibility contracts.
+
+## Subjects, topics, and imported metadata
+
+`library-taxonomy.json` is the classification authority. Its stable subject IDs
+span computing, engineering, mathematics, science, interdisciplinary material,
+and an explicit `other` fallback. The existing curated catalog defaults to
+`computer-science`; topic defaults and selected work overrides place known items
+more precisely without rewriting the catalog's useful shelf organization.
+
+Normal UI imports do not modify Git-tracked `CATALOG.md` or `metadata/`. For a
+payload such as `books/example.pdf`, the service writes
+`books/example.pdf.library.json`. Appending the suffix to the full filename
+avoids PDF/EPUB same-stem collisions. The payload and sidecar are inside the
+same Syncthing-allowlisted directory and therefore converge together on paired
+devices. The loader treats sidecars as untrusted input and falls back safely if
+one is missing or invalid.
+
+Optional enrichment invokes the locally installed, authenticated Codex CLI with
+`gpt-5.6-luna`. Only the filename, selected material kind, locally extracted
+publication metadata, and allowed subject list are included in the
+classification prompt; document bytes and full text are not.
+The process runs in a temporary context with read-only sandboxing, and import
+completion never depends on model availability or valid model output.
 
 ## Native reader data
 
@@ -49,6 +93,9 @@ Reader-created data is stored at:
 ```text
 ~/Library/Application Support/CS Library/Library.sqlite
 ```
+
+`CS Library` in this path is an intentionally retained storage ID, not the
+visible application name.
 
 The database is versioned and migrated in place. It contains:
 
@@ -119,13 +166,13 @@ and signs it, verifies resources and code signing, and only then replaces the
 previous app. The previous app is restored if installation fails.
 
 The app bundle contains the shared UI, local Python service, and native reader
-scripts. Books remain external in the selected library folder. Python 3 is still
-a runtime dependency for the local service.
+scripts. Reading payloads and private sidecars remain external in the selected
+library folder. Python 3 is still a runtime dependency for the local service.
 
 ## Windows host
 
 `windows/CSLibrary.Windows` is a .NET 8 WPF shell around WebView2. The packaged
-app starts a PyInstaller-built `CSLibraryServer.exe`, verifies readiness through
+app starts a PyInstaller-built `LatticeServer.exe`, verifies readiness through
 the same protocol/library identity contract, and navigates only to the loopback
 service. External HTTP links open in the system browser.
 
@@ -137,8 +184,9 @@ Syncthing folder so two machines never concurrently synchronize live SQLite
 WAL files.
 
 The Windows CI build publishes a self-contained x64 WPF app, the bundled Python
-service, the metadata/UI skeleton, and empty `books/` and `papers/` directories
-as a portable ZIP. Copyrighted reading payloads are never part of the artifact.
+service, the metadata/UI skeleton, the taxonomy, and empty `books/`, `papers/`,
+and `lectures/` directories as a portable ZIP. Copyrighted reading payloads and
+private sidecars are never part of the artifact.
 
 ## Change rules
 
@@ -146,6 +194,8 @@ When changing a boundary, update its tests and documentation:
 
 - database or bridge: update ReaderStore smoke tests and `READER_DATA.md`;
 - Python protocol: update `test_server_contract.py` and protocol version;
+- taxonomy, scaffold, or sidecar naming: update `library-layout.json`,
+  `library-taxonomy.json`, and `test_library_layout.py`;
 - EPUB behavior: update the Node tests;
 - AppKit/PDFKit: ensure the macOS Actions build passes;
 - WPF/WebView2 or Windows service: ensure the Windows Actions build passes;

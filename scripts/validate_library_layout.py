@@ -1,16 +1,19 @@
 #!/usr/bin/env python3
-"""Validate the clone-ready CS Library and Syncthing directory contract."""
+"""Validate the clone-ready Lattice and Syncthing directory contract."""
 
 from __future__ import annotations
 
 import argparse
 import json
+import re
 from pathlib import Path, PurePosixPath
 from typing import Any
 
 
 ROOT = Path(__file__).resolve().parents[1]
 LAYOUT_FILE = "library-layout.json"
+TAXONOMY_FILE = "library-taxonomy.json"
+SUBJECT_ID_PATTERN = re.compile(r"^[a-z0-9]+(?:-[a-z0-9]+)*$")
 
 
 def _relative_path(value: Any) -> str | None:
@@ -50,6 +53,76 @@ def load_layout(root: Path = ROOT) -> dict[str, Any]:
     return payload
 
 
+def load_taxonomy(root: Path = ROOT) -> dict[str, Any]:
+    path = root / TAXONOMY_FILE
+    payload = json.loads(path.read_text(encoding="utf-8"))
+    if not isinstance(payload, dict):
+        raise ValueError(f"{TAXONOMY_FILE} must contain a JSON object")
+    return payload
+
+
+def _validate_taxonomy(root: Path, errors: list[str]) -> None:
+    try:
+        taxonomy = load_taxonomy(root)
+    except (OSError, ValueError, json.JSONDecodeError) as error:
+        errors.append(f"cannot load {TAXONOMY_FILE}: {error}")
+        return
+
+    if (
+        type(taxonomy.get("schema_version")) is not int
+        or taxonomy.get("schema_version") != 1
+    ):
+        errors.append(f"{TAXONOMY_FILE} schema_version must be 1")
+
+    raw_subjects = taxonomy.get("subjects")
+    if not isinstance(raw_subjects, list) or not raw_subjects:
+        errors.append(f"{TAXONOMY_FILE} subjects must be a non-empty array")
+        subject_ids: set[str] = set()
+    else:
+        subject_ids = set()
+        for index, subject in enumerate(raw_subjects):
+            if not isinstance(subject, dict):
+                errors.append(f"{TAXONOMY_FILE} subjects[{index}] must be an object")
+                continue
+            subject_id = subject.get("id")
+            if not isinstance(subject_id, str) or not SUBJECT_ID_PATTERN.fullmatch(subject_id):
+                errors.append(
+                    f"{TAXONOMY_FILE} subjects[{index}].id must be a lowercase kebab-case ID"
+                )
+            elif subject_id in subject_ids:
+                errors.append(f"{TAXONOMY_FILE} contains duplicate subject ID: {subject_id}")
+            else:
+                subject_ids.add(subject_id)
+            for key in ("name", "description"):
+                value = subject.get(key)
+                if not isinstance(value, str) or not value.strip():
+                    errors.append(
+                        f"{TAXONOMY_FILE} subjects[{index}].{key} must be a non-empty string"
+                    )
+
+    for key in ("default_import_subject_id", "catalog_default_subject_id"):
+        value = taxonomy.get(key)
+        if not isinstance(value, str) or value not in subject_ids:
+            errors.append(f"{TAXONOMY_FILE} {key} must reference a defined subject")
+
+    for key in ("topic_defaults", "work_assignments"):
+        mapping = taxonomy.get(key)
+        if not isinstance(mapping, dict):
+            errors.append(f"{TAXONOMY_FILE} {key} must be an object")
+            continue
+        for source_id, subject_id in mapping.items():
+            if (
+                not isinstance(source_id, str)
+                or not source_id
+                or source_id != source_id.strip()
+            ):
+                errors.append(f"{TAXONOMY_FILE} {key} contains an invalid key")
+            if not isinstance(subject_id, str) or subject_id not in subject_ids:
+                errors.append(
+                    f"{TAXONOMY_FILE} {key}.{source_id} references an unknown subject"
+                )
+
+
 def validate_layout(root: Path = ROOT) -> list[str]:
     root = root.resolve()
     errors: list[str] = []
@@ -58,11 +131,27 @@ def validate_layout(root: Path = ROOT) -> list[str]:
     except (OSError, ValueError, json.JSONDecodeError) as error:
         return [f"cannot load {LAYOUT_FILE}: {error}"]
 
-    if layout.get("schema_version") != 1:
+    if (
+        type(layout.get("schema_version")) is not int
+        or layout.get("schema_version") != 1
+    ):
         errors.append("schema_version must be 1")
 
     content_directories = _path_list(layout, "content_directories", errors)
     required_root_entries = _path_list(layout, "required_root_entries", errors)
+
+    sidecars = layout.get("sidecars")
+    if not isinstance(sidecars, dict):
+        errors.append("sidecars must be an object")
+    else:
+        if sidecars.get("suffix") != ".library.json":
+            errors.append("sidecars.suffix must be '.library.json'")
+        if sidecars.get("append_to_full_filename") is not True:
+            errors.append("sidecars.append_to_full_filename must be true")
+        if sidecars.get("location") != "adjacent":
+            errors.append("sidecars.location must be 'adjacent'")
+        if sidecars.get("shared_via_syncthing") is not True:
+            errors.append("sidecars.shared_via_syncthing must be true")
 
     syncthing = layout.get("syncthing")
     if not isinstance(syncthing, dict):
@@ -85,6 +174,8 @@ def validate_layout(root: Path = ROOT) -> list[str]:
         if not (root / relative).exists():
             errors.append(f"missing required root entry: {relative}")
 
+    _validate_taxonomy(root, errors)
+
     ignore_path = root / ".stignore"
     try:
         patterns = [
@@ -102,6 +193,9 @@ def validate_layout(root: Path = ROOT) -> list[str]:
             errors.append(f".stignore does not include {relative}")
         if (root / relative).is_dir() and f"!/{relative}/**" not in patterns:
             errors.append(f".stignore does not include descendants of {relative}")
+    for required_ignore in ("(?d).gitkeep", "(?d).syncthing.*.tmp", "/lectures/catalog.json"):
+        if required_ignore not in patterns:
+            errors.append(f".stignore must exclude Git-owned or temporary path: {required_ignore}")
     if patterns and patterns[-1] != "*":
         errors.append(".stignore must end with the catch-all '*' rule")
 
@@ -114,7 +208,7 @@ def main() -> int:
         "--root",
         type=Path,
         default=ROOT,
-        help="CS Library root to validate (default: repository root)",
+        help="Lattice root to validate (default: repository root)",
     )
     args = parser.parse_args()
     errors = validate_layout(args.root)
@@ -125,7 +219,7 @@ def main() -> int:
 
     layout = load_layout(args.root.resolve())
     print(
-        "CS Library layout OK: "
+        "Lattice layout OK: "
         f"{len(layout['content_directories'])} content directories; "
         f"Syncthing folder {layout['syncthing']['folder_id']}"
     )

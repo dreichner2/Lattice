@@ -10,12 +10,19 @@
   ],
   "required_root_entries": [
     "CATALOG.md",
+    "library-taxonomy.json",
     "metadata",
     "ui"
   ],
+  "sidecars": {
+    "suffix": ".library.json",
+    "append_to_full_filename": true,
+    "location": "adjacent",
+    "shared_via_syncthing": true
+  },
   "syncthing": {
     "folder_id": "cs-library-3b8290f24f15",
-    "folder_label": "CS Library",
+    "folder_label": "Lattice",
     "folder_type": "sendreceive",
     "shared_paths": [
       "books",

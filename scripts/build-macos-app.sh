@@ -4,13 +4,13 @@ set -euo pipefail
 
 script_dir=${0:A:h}
 library_root=${script_dir:h}
-app_path="$library_root/CS Library.app"
+app_path="$library_root/Lattice.app"
 native_root="$library_root/native"
 ui_root="$library_root/ui"
 server_source="$library_root/scripts/library_ui.py"
 build_root=$(/usr/bin/mktemp -d "${TMPDIR:-/tmp}/cs-library-app.XXXXXX")
-staged_app="$build_root/CS Library.app"
-previous_app="$build_root/Previous CS Library.app"
+staged_app="$build_root/Lattice.app"
+previous_app="$build_root/Previous Lattice.app"
 
 cleanup() {
   /bin/rm -rf "$build_root"
@@ -71,7 +71,7 @@ target_arch=$(/usr/bin/uname -m)
   "$native_root/NativePDFReaderController.swift" \
   "$native_root/NativePDFReaderUI.swift" \
   "$native_root/NativePDFReaderState.swift" \
-  -o "$staged_app/Contents/MacOS/CS Library"
+  -o "$staged_app/Contents/MacOS/Lattice"
 
 iconset="$build_root/AppIcon.iconset"
 base_icon="$build_root/AppIcon.png"
@@ -99,7 +99,7 @@ fi
 /usr/bin/codesign --force --deep --sign - "$staged_app" >/dev/null
 /usr/bin/codesign --verify --deep --strict "$staged_app"
 for bundled in \
-  "$staged_app/Contents/MacOS/CS Library" \
+  "$staged_app/Contents/MacOS/Lattice" \
   "$staged_app/Contents/Resources/ui/index.html" \
   "$staged_app/Contents/Resources/ui/app.js" \
   "$staged_app/Contents/Resources/server/library_ui.py" \

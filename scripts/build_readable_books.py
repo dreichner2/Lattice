@@ -833,7 +833,7 @@ def make_cover(spec: BookSpec, destination: Path) -> None:
     draw.rectangle((0, 0, 94, height), fill=accent)
     draw.rounded_rectangle((1160, 155, 1490, 485), radius=80, outline=highlight, width=8)
     draw.line((1160, 485, 1490, 155), fill=highlight, width=8)
-    draw.text((170, 175), "CS LIBRARY  •  READABLE EDITION", font=load_font(34, bold=True), fill=highlight)
+    draw.text((170, 175), "LATTICE  •  READABLE EDITION", font=load_font(34, bold=True), fill=highlight)
 
     max_title_width = 1180
     title_font = load_font(152, bold=True)

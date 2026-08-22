@@ -1,0 +1,86 @@
+{
+  "schema_version": 1,
+  "default_import_subject_id": "other",
+  "catalog_default_subject_id": "computer-science",
+  "subjects": [
+    {
+      "id": "computer-science",
+      "name": "Computer Science",
+      "description": "Programming, algorithms, software, computing systems, artificial intelligence, and theory."
+    },
+    {
+      "id": "electrical-engineering",
+      "name": "Electrical Engineering",
+      "description": "Circuits, electronics, signals, communications, control, electromagnetics, and power."
+    },
+    {
+      "id": "computer-engineering",
+      "name": "Computer Engineering",
+      "description": "Digital systems, processors, embedded systems, hardware-software interfaces, and architecture."
+    },
+    {
+      "id": "mathematics",
+      "name": "Mathematics",
+      "description": "Pure and applied mathematics, proofs, algebra, analysis, geometry, and discrete mathematics."
+    },
+    {
+      "id": "statistics-data-science",
+      "name": "Statistics & Data Science",
+      "description": "Probability, statistics, data analysis, visualization, and empirical modeling."
+    },
+    {
+      "id": "physics",
+      "name": "Physics",
+      "description": "Classical and modern physics, mechanics, thermodynamics, optics, and quantum theory."
+    },
+    {
+      "id": "mechanical-engineering",
+      "name": "Mechanical Engineering",
+      "description": "Mechanics, materials, thermofluids, dynamics, design, and manufacturing."
+    },
+    {
+      "id": "civil-engineering",
+      "name": "Civil Engineering",
+      "description": "Structures, geotechnics, transportation, water resources, construction, and infrastructure."
+    },
+    {
+      "id": "chemical-engineering",
+      "name": "Chemical Engineering",
+      "description": "Transport, thermodynamics, reactions, process systems, materials, and biochemical engineering."
+    },
+    {
+      "id": "general-engineering",
+      "name": "General Engineering",
+      "description": "Cross-cutting engineering design, methods, standards, ethics, and reference material."
+    },
+    {
+      "id": "interdisciplinary",
+      "name": "Interdisciplinary",
+      "description": "Works intentionally spanning multiple subjects without one dominant discipline."
+    },
+    {
+      "id": "other",
+      "name": "Other",
+      "description": "Unclassified material and subjects not yet represented by a dedicated category."
+    }
+  ],
+  "topic_defaults": {
+    "foundations-programming": "computer-science",
+    "algorithms-data-structures": "computer-science",
+    "systems-networks-security": "computer-science",
+    "software-engineering-design": "computer-science",
+    "mathematics-statistics": "mathematics",
+    "artificial-intelligence-machine-learning": "computer-science",
+    "programming-languages-formal-methods": "computer-science",
+    "computer-graphics-vision": "computer-science",
+    "ethics-professional-practice": "computer-science",
+    "open-textbooks-reference": "computer-science",
+    "research-papers": "computer-science"
+  },
+  "work_assignments": {
+    "books-book-of-proof-3e-pdf": "mathematics",
+    "books-linear-algebra-done-right-4e-pdf": "mathematics",
+    "books-mackay-information-theory-pdf": "electrical-engineering",
+    "books-riscv-spec-unprivileged-pdf": "computer-engineering"
+  }
+}

@@ -10,7 +10,7 @@ final class ReaderBridge: NSObject, WKScriptMessageHandlerWithReply {
           if (window.top !== window || window.csLibraryNativeCall) return;
           window.csLibraryNativeCall = (action, payload = {}) => {
             const handler = window.webkit?.messageHandlers?.\(handlerName);
-            if (!handler) return Promise.reject(new Error('CS Library native bridge is unavailable'));
+            if (!handler) return Promise.reject(new Error('Lattice native bridge is unavailable'));
             return handler.postMessage({ action, payload });
           };
           window.dispatchEvent(new CustomEvent('cs-library-native-ready'));

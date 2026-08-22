@@ -1,4 +1,7 @@
 (?d).DS_Store
+(?d).gitkeep
+(?d).syncthing.*.tmp
+/lectures/catalog.json
 !/books
 !/books/**
 !/papers

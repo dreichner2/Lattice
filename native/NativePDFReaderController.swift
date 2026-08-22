@@ -254,7 +254,7 @@ final class NativePDFReaderController: NSObject, NSTextViewDelegate {
         searchResults = []
         searchIndex = -1
         focusMode = false
-        window?.title = "CS Library"
+        window?.title = "Lattice"
         if notifyWeb {
             closeWebReaderShell()
         }

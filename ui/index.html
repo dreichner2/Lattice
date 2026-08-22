@@ -5,8 +5,9 @@
     <meta name="viewport" content="width=device-width, initial-scale=1">
     <meta name="color-scheme" content="light dark">
     <meta name="theme-color" content="#f4f2ed">
-    <title>CS Library</title>
+    <title>Lattice</title>
     <link rel="stylesheet" href="/styles.css">
+    <link rel="stylesheet" href="/video-styles.css">
   </head>
   <body>
     <div class="app-shell">
@@ -16,8 +17,8 @@
             <span></span><span></span><span></span>
           </div>
           <div class="brand-copy">
-            <strong>CS Library</strong>
-            <small>Local study system</small>
+            <strong>Lattice</strong>
+            <small>A shared knowledge library</small>
           </div>
         </div>
 
@@ -47,6 +48,11 @@
             <span>Finished</span>
             <span class="nav-count" id="finishedCount">0</span>
           </button>
+          <button class="nav-item" type="button" data-view="videos">
+            <span class="nav-icon nav-icon-play" aria-hidden="true">▶</span>
+            <span>Video lectures</span>
+            <span class="nav-count" id="videoCount">—</span>
+          </button>
         </nav>
 
         <div class="nav-section material-section">
@@ -55,8 +61,13 @@
         </div>
 
         <div class="nav-section">
-          <p class="nav-label">Subject shelves</p>
-          <nav id="shelfNav" class="shelf-nav" aria-label="Subject shelves"></nav>
+          <p class="nav-label">Subjects</p>
+          <nav id="subjectNav" class="shelf-nav" aria-label="Broad subjects"></nav>
+        </div>
+
+        <div class="nav-section">
+          <p class="nav-label">Topics</p>
+          <nav id="shelfNav" class="shelf-nav" aria-label="Topic shelves"></nav>
         </div>
 
         <div class="sidebar-footer">
@@ -66,6 +77,7 @@
             <button type="button" data-document="CATALOG.md" data-title="Library catalog">Library catalog <span>Read</span></button>
             <button type="button" data-document="notes/provenance/library-cleanup-2026-08-20.md" data-title="Source & cleanup notes">Source & cleanup <span>Read</span></button>
             <button type="button" data-document="notes/provenance/readable-editions-2026-08-21.md" data-title="Readable edition notes">Readable editions <span>Read</span></button>
+            <button type="button" data-document="notes/provenance/free-video-lectures-2026-08-21.md" data-title="Video lecture sources">Video lecture sources <span>Read</span></button>
             <button type="button" data-document="manifests/library.sha256" data-title="Integrity manifest">Integrity manifest <span>View</span></button>
             <button type="button" data-document="LIBRARY_RULES.md" data-title="Library rules">Library rules <span>Read</span></button>
           </div>
@@ -95,32 +107,33 @@
               <span class="sync-dot" aria-hidden="true"></span>
               <span id="syncText">Connecting…</span>
             </div>
+            <button class="topbar-add-button" id="addButton" type="button"><span aria-hidden="true">＋</span> Add</button>
             <button class="icon-button" id="themeButton" type="button" aria-label="Switch color theme">◒</button>
-            <button class="avatar" type="button" aria-label="Personal local library">DR</button>
           </div>
         </header>
 
         <div class="page-content">
           <section class="hero" aria-labelledby="pageTitle">
             <div class="hero-copy">
-              <p class="eyebrow"><span></span> Private · local · searchable</p>
-              <h1 id="pageTitle">Your computer science library</h1>
-              <p class="hero-description">A focused workspace for books, papers, specifications, and course notes—with reading progress, EPUB and PDF access, and live updates from this computer.</p>
+              <p class="eyebrow" id="heroEyebrow"><span></span> Private · local · searchable</p>
+              <h1 id="pageTitle">Knowledge, shared simply</h1>
+              <p class="hero-description" id="heroDescription">A private home for books, papers, lecture notes, and references across every subject—with focused reading tools and live updates between your computers.</p>
               <div class="hero-actions">
                 <button class="button button-primary" id="randomButton" type="button">Choose my next read <span aria-hidden="true">↗</span></button>
                 <button class="button button-quiet" id="focusSearchButton" type="button">Search the shelf</button>
+                <button class="button button-quiet" id="heroAddButton" type="button">Add material</button>
               </div>
-              <div class="hero-trust" aria-label="Library qualities">
+              <div class="hero-trust" id="heroTrust" aria-label="Library qualities">
                 <span><i aria-hidden="true"></i> Loopback only</span>
                 <span><i aria-hidden="true"></i> Files stay local</span>
                 <span><i aria-hidden="true"></i> No account required</span>
               </div>
             </div>
             <div class="hero-stats" aria-label="Library statistics">
-              <div class="stat"><span class="stat-label">Collection</span><strong id="workStat">—</strong><span>logical works</span></div>
-              <div class="stat"><span class="stat-label">Materials</span><strong id="artifactStat">—</strong><span>local files</span></div>
-              <div class="stat"><span class="stat-label">Footprint</span><strong id="sizeStat">—</strong><span>local shelf</span></div>
-              <div class="stat integrity-stat"><span class="stat-label">Integrity</span><strong id="integrityStat">—</strong><span>files available</span></div>
+              <div class="stat"><span class="stat-label" id="workStatLabel">Collection</span><strong id="workStat">—</strong><span id="workStatNote">logical works</span></div>
+              <div class="stat"><span class="stat-label" id="artifactStatLabel">Materials</span><strong id="artifactStat">—</strong><span id="artifactStatNote">local files</span></div>
+              <div class="stat"><span class="stat-label" id="sizeStatLabel">Footprint</span><strong id="sizeStat">—</strong><span id="sizeStatNote">local shelf</span></div>
+              <div class="stat integrity-stat"><span class="stat-label" id="integrityStatLabel">Integrity</span><strong id="integrityStat">—</strong><span id="integrityStatNote">files available</span></div>
             </div>
           </section>
 
@@ -132,7 +145,7 @@
             <div class="recent-row" id="recentRow"></div>
           </section>
 
-          <section class="library-section" aria-labelledby="sectionTitle">
+          <section class="library-section" id="librarySection" aria-labelledby="sectionTitle">
             <div class="section-heading">
               <div>
                 <p class="eyebrow" id="sectionEyebrow">The complete collection</p>
@@ -142,13 +155,17 @@
             </div>
 
             <div class="toolbar" aria-label="Catalog controls">
-              <div class="subject-chips" id="subjectChips" aria-label="Subject filters"></div>
+              <div class="catalog-filter-groups">
+                <div class="filter-row"><span>Subject</span><div class="subject-chips" id="subjectChips" aria-label="Subject filters"></div></div>
+                <div class="filter-row"><span>Topic</span><div class="subject-chips" id="topicChips" aria-label="Topic filters"></div></div>
+              </div>
               <div class="toolbar-right">
                 <label class="sort-control"><span>Sort by</span>
                   <select id="sortSelect">
                     <option value="title">Title</option>
                     <option value="author">Author</option>
-                    <option value="subject">Shelf</option>
+                    <option value="subject">Subject</option>
+                    <option value="topic">Topic</option>
                     <option value="recent">Recently opened</option>
                   </select>
                 </label>
@@ -162,24 +179,123 @@
 
             <div class="empty-state" id="emptyState" hidden>
               <div class="empty-mark" aria-hidden="true">⌕</div>
-              <h3>No books found</h3>
-              <p>Try another title, author, file type, or subject.</p>
+              <h3>No materials found</h3>
+              <p>Try another title, creator, file type, subject, or topic.</p>
               <button class="button button-quiet" id="clearFiltersButton" type="button">Clear filters</button>
             </div>
           </section>
 
+          <section class="video-library-section" id="videoSection" hidden aria-labelledby="videoSectionTitle">
+            <div class="section-heading video-section-heading">
+              <div>
+                <p class="eyebrow">Watch without leaving your study desk</p>
+                <h2 id="videoSectionTitle">Free course archive</h2>
+              </div>
+              <p class="result-count" id="videoResultCount">Loading lecture catalog…</p>
+            </div>
+
+            <div class="video-source-note">
+              <span class="video-source-mark" aria-hidden="true">▶</span>
+              <div>
+                <strong>Official streams, one focused player</strong>
+                <p>Videos stay with their publishers. Lattice stores only course metadata and your completion marks on this computer.</p>
+              </div>
+              <button class="text-button" id="videoSourcesButton" type="button">Source notes</button>
+            </div>
+
+            <div class="toolbar video-toolbar" aria-label="Video catalog controls">
+              <div class="subject-chips" id="videoSubjectChips" aria-label="Video subject filters"></div>
+              <div class="toolbar-right">
+                <label class="sort-control"><span>Source</span>
+                  <select id="videoSourceSelect" aria-label="Filter video courses by source">
+                    <option value="all">All sources</option>
+                  </select>
+                </label>
+                <label class="sort-control"><span>Sort by</span>
+                  <select id="videoSortSelect">
+                    <option value="recommended">Recommended</option>
+                    <option value="title">Course title</option>
+                    <option value="most">Most lectures</option>
+                    <option value="progress">In progress</option>
+                  </select>
+                </label>
+              </div>
+            </div>
+
+            <div class="video-course-grid" id="videoCourseGrid" aria-live="polite">
+              <div class="loading-card"><span></span><p>Collecting the lecture halls…</p></div>
+            </div>
+
+            <div class="empty-state" id="videoEmptyState" hidden>
+              <div class="empty-mark" aria-hidden="true">▶</div>
+              <h3>No lectures found</h3>
+              <p>Try another course, instructor, institution, or topic.</p>
+              <button class="button button-quiet" id="clearVideoFiltersButton" type="button">Clear video filters</button>
+            </div>
+          </section>
+
           <footer class="page-footer">
-            <span>CS Library</span>
+            <span>Lattice</span>
             <p>Private by design. The interface runs on this computer and serves only the files already on your shelf.</p>
           </footer>
         </div>
       </main>
     </div>
 
+    <input id="addFilesInput" type="file" accept=".pdf,.epub,.txt,application/pdf,application/epub+zip,text/plain" multiple hidden>
+
+    <div class="drop-overlay" id="dropOverlay" aria-hidden="true">
+      <div class="drop-overlay-card">
+        <span class="drop-overlay-icon" aria-hidden="true">＋</span>
+        <strong>Drop files into Lattice</strong>
+        <p>PDF, EPUB, and TXT files stay on your computers.</p>
+      </div>
+    </div>
+
+    <div class="import-shell" id="importShell" aria-hidden="true">
+      <button class="import-backdrop" id="importBackdrop" type="button" aria-label="Close Add material"></button>
+      <section class="import-panel" role="dialog" aria-modal="true" aria-labelledby="importTitle">
+        <header class="import-header">
+          <div>
+            <p>Add to Lattice</p>
+            <h2 id="importTitle">Bring something to the shelf</h2>
+          </div>
+          <button class="import-close" id="importCloseButton" type="button" aria-label="Close Add material">×</button>
+        </header>
+
+        <div class="import-body">
+          <fieldset class="import-kind-picker" id="importKindPicker">
+            <legend>What are you adding?</legend>
+            <label><input type="radio" name="importKind" value="book" checked><span aria-hidden="true">▥</span><strong>Books</strong><small>Textbooks and ebooks</small></label>
+            <label><input type="radio" name="importKind" value="paper"><span aria-hidden="true">▤</span><strong>Papers</strong><small>Articles and research</small></label>
+            <label><input type="radio" name="importKind" value="lecture"><span aria-hidden="true">▷</span><strong>Lecture notes</strong><small>Course handouts and notes</small></label>
+          </fieldset>
+
+          <button class="import-drop-zone" id="importDropZone" type="button">
+            <span class="import-drop-mark" aria-hidden="true">＋</span>
+            <strong>Choose files or drop them here</strong>
+            <small>PDF, EPUB, or TXT · multiple files welcome</small>
+          </button>
+
+          <div class="ai-readiness" id="aiReadiness" data-status="checking" role="status">
+            <span class="ai-readiness-dot" aria-hidden="true"></span>
+            <div><strong>Checking Luna metadata…</strong><small>Files are added even when AI is unavailable.</small></div>
+          </div>
+
+          <div class="import-queue" id="importQueue" aria-live="polite"></div>
+        </div>
+
+        <footer class="import-footer">
+          <p>Only the filename and embedded ebook details are used for AI metadata. The book contents are not sent.</p>
+          <button class="button button-primary" id="importChooseButton" type="button">Choose files</button>
+        </footer>
+      </section>
+    </div>
+
     <div class="drawer-scrim" id="drawerScrim"></div>
-    <aside class="detail-drawer" id="detailDrawer" aria-label="Book details" aria-hidden="true">
+    <aside class="detail-drawer" id="detailDrawer" aria-label="Material details" aria-hidden="true">
       <div class="drawer-header">
-        <p>Book details</p>
+        <p>Material details</p>
         <button class="icon-button" id="drawerClose" type="button" aria-label="Close details">×</button>
       </div>
       <div class="drawer-body" id="drawerBody"></div>
@@ -194,7 +310,7 @@
             <button class="reader-tool-button" id="readerTocButton" type="button" aria-expanded="false" hidden><span aria-hidden="true">☷</span> Contents</button>
           </div>
           <div class="reader-heading">
-            <p id="readerKicker">Reading in CS Library</p>
+            <p id="readerKicker">Reading in Lattice</p>
             <h2 id="readerTitle">Reader</h2>
           </div>
           <div class="reader-actions">
@@ -284,7 +400,74 @@
       </section>
     </div>
 
+    <div class="video-player-shell" id="videoPlayerShell" aria-hidden="true">
+      <button class="video-player-backdrop" id="videoPlayerBackdrop" type="button" aria-label="Close video player"></button>
+      <section class="video-player-panel" role="dialog" aria-modal="true" aria-labelledby="videoPlayerCourseTitle">
+        <header class="video-player-header">
+          <button class="video-player-back" id="videoPlayerBack" type="button"><span aria-hidden="true">←</span> Courses</button>
+          <div class="video-player-heading">
+            <p id="videoPlayerKicker">Video lecture</p>
+            <h2 id="videoPlayerCourseTitle">Course</h2>
+          </div>
+          <div class="video-player-header-actions">
+            <a class="video-player-source" id="videoPlayerSource" href="#" target="_blank" rel="noreferrer">Course site ↗</a>
+            <button class="video-player-close" id="videoPlayerClose" type="button" aria-label="Close video player">×</button>
+          </div>
+        </header>
+        <div class="video-player-layout">
+          <main class="video-player-main">
+            <div class="video-frame-wrap">
+              <div class="video-frame-placeholder" id="videoFramePlaceholder">
+                <span aria-hidden="true">▶</span>
+                <p>Preparing the lecture…</p>
+              </div>
+              <iframe
+                class="video-frame"
+                id="videoFrame"
+                title="Video lecture player"
+                src="about:blank"
+                referrerpolicy="strict-origin-when-cross-origin"
+                allow="accelerometer; autoplay; encrypted-media; gyroscope; picture-in-picture; web-share"
+                allowfullscreen
+              ></iframe>
+            </div>
+            <div class="video-now-playing">
+              <div class="video-now-copy">
+                <p id="videoNowPosition">Lecture 1</p>
+                <h3 id="videoNowTitle">Choose a lecture</h3>
+              </div>
+              <div class="video-now-actions">
+                <a class="video-lecture-source" id="videoLectureSource" href="#" target="_blank" rel="noreferrer">YouTube ↗</a>
+                <button class="video-complete-button" id="videoCompleteButton" type="button" aria-pressed="false"><span aria-hidden="true">✓</span> Mark complete</button>
+              </div>
+            </div>
+            <div class="video-playback-controls">
+              <button id="videoPreviousButton" type="button"><span aria-hidden="true">←</span><span><small>Previous</small><strong id="videoPreviousLabel">Beginning</strong></span></button>
+              <div class="video-course-progress">
+                <span><strong id="videoWatchedCount">0</strong> completed</span>
+                <div><i id="videoCourseProgressBar"></i></div>
+              </div>
+              <button class="video-next-button" id="videoNextButton" type="button"><span><small>Next</small><strong id="videoNextLabel">Next lecture</strong></span><span aria-hidden="true">→</span></button>
+            </div>
+          </main>
+          <aside class="video-queue" aria-label="Course lectures">
+            <div class="video-queue-summary">
+              <span id="videoQueueCode">Course</span>
+              <strong id="videoQueueMeta">0 lectures</strong>
+              <p id="videoQueueDescription"></p>
+            </div>
+            <label class="video-queue-search" for="videoQueueSearch">
+              <span aria-hidden="true">⌕</span>
+              <input id="videoQueueSearch" type="search" autocomplete="off" placeholder="Find a lecture…">
+            </label>
+            <nav class="video-queue-list" id="videoQueueList" aria-label="Lecture queue"></nav>
+          </aside>
+        </div>
+      </section>
+    </div>
+
     <div class="toast-region" id="toastRegion" aria-live="polite"></div>
-    <script src="/app.js" defer></script>
+    <script src="/videos.js?v=lattice-20260821" defer></script>
+    <script src="/app.js?v=lattice-20260821" defer></script>
   </body>
 </html>

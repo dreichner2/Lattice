@@ -5,6 +5,17 @@
   <Application.Resources>
     <SolidColorBrush x:Key="ChromeBrush" Color="#171A21" />
     <SolidColorBrush x:Key="MutedBrush" Color="#A9AFBD" />
+    <DrawingImage x:Key="LatticeIcon">
+      <DrawingImage.Drawing>
+        <DrawingGroup>
+          <GeometryDrawing Brush="#202430" Geometry="M 2,2 H 30 V 30 H 2 Z" />
+          <GeometryDrawing Brush="#7C87EF" Geometry="M 6,7 H 11 V 25 H 6 Z" />
+          <GeometryDrawing Brush="#D8956B" Geometry="M 13,5 H 19 V 25 H 13 Z" />
+          <GeometryDrawing Brush="#62A18A" Geometry="M 21,9 H 26 V 25 H 21 Z" />
+          <GeometryDrawing Brush="#F5F6F8" Geometry="M 5,25 H 27 V 27 H 5 Z" />
+        </DrawingGroup>
+      </DrawingImage.Drawing>
+    </DrawingImage>
     <Style TargetType="Button">
       <Setter Property="Foreground" Value="#F5F6F8" />
       <Setter Property="Background" Value="#272C38" />
@@ -12,6 +23,13 @@
       <Setter Property="Padding" Value="12,6" />
       <Setter Property="Margin" Value="0,0,7,0" />
       <Setter Property="Cursor" Value="Hand" />
+      <Style.Triggers>
+        <Trigger Property="IsEnabled" Value="False">
+          <Setter Property="Foreground" Value="#737A8A" />
+          <Setter Property="Opacity" Value="0.58" />
+          <Setter Property="Cursor" Value="Arrow" />
+        </Trigger>
+      </Style.Triggers>
     </Style>
   </Application.Resources>
 </Application>

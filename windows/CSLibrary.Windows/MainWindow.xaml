@@ -2,7 +2,8 @@
         xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
         xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
         xmlns:wv2="clr-namespace:Microsoft.Web.WebView2.Wpf;assembly=Microsoft.Web.WebView2.Wpf"
-        Title="CS Library"
+        Title="Lattice"
+        Icon="{StaticResource LatticeIcon}"
         Width="1440"
         Height="920"
         MinWidth="900"
@@ -20,20 +21,23 @@
     <Border Grid.Row="0" Background="{StaticResource ChromeBrush}" BorderBrush="#303643" BorderThickness="0,0,0,1">
       <DockPanel Margin="10,7">
         <StackPanel DockPanel.Dock="Left" Orientation="Horizontal">
-          <Button Content="←" Width="38" Padding="0" ToolTip="Back" Click="Back_Click" />
-          <Button Content="⌂" Width="38" Padding="0" ToolTip="Library home" Click="Home_Click" />
-          <Button Content="↻" Width="38" Padding="0" ToolTip="Reload" Click="Reload_Click" />
+          <Button x:Name="BackButton" Content="←" Width="38" Padding="0" ToolTip="Back" AutomationProperties.Name="Back" IsEnabled="False" Click="Back_Click" />
+          <Button x:Name="HomeButton" Content="⌂" Width="38" Padding="0" ToolTip="Library home" AutomationProperties.Name="Library home" IsEnabled="False" Click="Home_Click" />
+          <Button x:Name="ReloadButton" Content="↻" Width="38" Padding="0" ToolTip="Reload" AutomationProperties.Name="Reload" IsEnabled="False" Click="Reload_Click" />
         </StackPanel>
         <StackPanel DockPanel.Dock="Right" Orientation="Horizontal" HorizontalAlignment="Right">
+          <Button x:Name="AddMaterialsButton" Content="Add materials…" ToolTip="Add PDF, EPUB, or text materials"
+                  AutomationProperties.Name="Add materials" IsEnabled="False" Click="AddMaterials_Click" />
           <Button Content="Open folder" Click="OpenFolder_Click" />
           <Button Content="Change library…" Margin="0" Click="ChangeLibrary_Click" />
         </StackPanel>
-        <TextBlock Text="CS Library" Foreground="#F5F6F8" FontFamily="Georgia" FontSize="17"
+        <TextBlock Text="Lattice" Foreground="#F5F6F8" FontFamily="Georgia" FontSize="17"
                    FontWeight="SemiBold" VerticalAlignment="Center" HorizontalAlignment="Center" />
       </DockPanel>
     </Border>
 
-    <wv2:WebView2 x:Name="Browser" Grid.Row="1" DefaultBackgroundColor="#0D0F14" />
+    <wv2:WebView2 x:Name="Browser" Grid.Row="1" DefaultBackgroundColor="#0D0F14"
+                  AllowExternalDrop="True" />
 
     <Border x:Name="LoadingOverlay" Grid.Row="1" Background="#0D0F14" Panel.ZIndex="5">
       <StackPanel HorizontalAlignment="Center" VerticalAlignment="Center" MaxWidth="620">

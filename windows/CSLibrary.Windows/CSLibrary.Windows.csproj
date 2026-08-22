@@ -5,11 +5,19 @@
     <UseWPF>true</UseWPF>
     <Nullable>enable</Nullable>
     <ImplicitUsings>enable</ImplicitUsings>
-    <AssemblyName>CS Library</AssemblyName>
+    <AssemblyName>Lattice</AssemblyName>
     <RootNamespace>CSLibrary.Windows</RootNamespace>
     <ApplicationManifest>app.manifest</ApplicationManifest>
+    <ApplicationIcon>$(MSBuildProjectDirectory)\..\build\Lattice.ico</ApplicationIcon>
+    <Product>Lattice</Product>
+    <Title>Lattice</Title>
+    <Description>A shared knowledge library</Description>
+    <Company>Lattice</Company>
   </PropertyGroup>
   <ItemGroup>
     <PackageReference Include="Microsoft.Web.WebView2" Version="1.0.4129.50" />
   </ItemGroup>
+  <Target Name="GenerateLatticeApplicationIcon" BeforeTargets="CoreCompile">
+    <Exec Command="python &quot;$(MSBuildProjectDirectory)\..\generate_icon.py&quot; --output &quot;$(ApplicationIcon)&quot;" />
+  </Target>
 </Project>

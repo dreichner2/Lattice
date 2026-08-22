@@ -21,6 +21,7 @@ def minimal_library(root: Path) -> None:
     (root / "metadata").mkdir(parents=True)
     (root / "books").mkdir()
     (root / "CATALOG.md").write_text("# Empty catalog\n", encoding="utf-8")
+    (root / "library-taxonomy.json").write_bytes((ROOT / "library-taxonomy.json").read_bytes())
 
 
 class ServerContractTests(unittest.TestCase):
@@ -67,6 +68,17 @@ class ServerContractTests(unittest.TestCase):
         self.assertEqual(args.root, self.root)
         self.assertEqual(args.ui_root, self.ui)
         self.assertEqual(args.parent_pid, 42)
+
+    def test_server_rejects_a_library_missing_its_required_taxonomy(self) -> None:
+        with tempfile.TemporaryDirectory() as temporary_name:
+            root = Path(temporary_name) / "library"
+            ui = Path(temporary_name) / "ui"
+            minimal_library(root)
+            (root / "library-taxonomy.json").unlink()
+            ui.mkdir()
+            (ui / "index.html").write_text("<!doctype html>", encoding="utf-8")
+            with self.assertRaisesRegex(ValueError, "Not a Lattice library root"):
+                library_ui.create_server(0, root=root, ui_root=ui)
 
 
 class EpubSafetyTests(unittest.TestCase):

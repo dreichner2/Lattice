@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""PyInstaller entry point for the Windows CS Library local server."""
+"""PyInstaller entry point for the Windows Lattice local server."""
 
 from __future__ import annotations
 

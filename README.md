@@ -1,5 +1,5 @@
 <p align="center">
-  <img src="assets/library-banner.svg" alt="CS Library — a source-traceable shelf and native reading system for serious computer science study" width="100%">
+  <img src="assets/library-banner.svg" alt="Lattice — A shared knowledge library" width="100%">
 </p>
 
 <p align="center">
@@ -8,21 +8,25 @@
 </p>
 
 <p align="center">
-  A local-first macOS and Windows library, immersive PDF/EPUB reader, searchable notebook,
-  and structured computer-science study system.
+  <strong>A shared knowledge library.</strong> Local-first on macOS and Windows,
+  with an immersive PDF/EPUB reader and searchable notebook.
 </p>
 
 ---
 
-CS Library keeps the collection on your computers, tracks where every item came from,
-and turns PDFs, EPUBs, papers, specifications, and course notes into one reading
-workspace. The native app is the primary experience; the browser interface is a
-portable fallback built from the same shelf UI.
+Lattice keeps the collection on your computers, tracks where every item
+came from, and turns PDFs, EPUBs, papers, specifications, and course notes into
+one reading workspace. The existing catalog remains a deep computer-science
+collection, while the subject model is intentionally broad enough for electrical
+engineering, computer engineering, mathematics, physics, and future fields. The
+native app is the primary experience; the browser interface is a portable
+fallback built from the same shelf UI.
 
 | | Go here when you want to… |
 |---|---|
 | 📚 **[Browse the catalog](CATALOG.md)** | Inspect every local work, source, edition, access note, and file path. |
 | 🧭 **[Follow the study guide](STUDY_GUIDE.md)** | Work through a staged curriculum with projects and exit criteria. |
+| 🗂️ **[Review the subject taxonomy](library-taxonomy.json)** | See stable subject IDs, current topic defaults, and selected work overrides. |
 | 🧠 **Use the native notebook** | Search notes, highlights, bookmarks, and indexed book content across the library. |
 | 🧾 **[Read the library rules](LIBRARY_RULES.md)** | Understand naming, deduplication, metadata, and remote-storage policy. |
 | 🔎 **[Inspect provenance](notes/provenance/)** | Review import history, source gates, licenses, and conversion boundaries. |
@@ -33,18 +37,18 @@ Build the application once from the repository:
 
 ```bash
 ./scripts/build-macos-app.sh
-open "CS Library.app"
+open "Lattice.app"
 ```
 
 The build is staged, signed, and verified before replacing an existing app. The
 bundle includes its shelf interface, EPUB enhancements, notebook workspace, and
-local Python service. Book payloads remain external in the selected library
+local Python service. Reading payloads remain external in the selected library
 folder.
 
 On first launch, the app finds the repository automatically or asks you to
-choose a folder containing `CATALOG.md` and `metadata/`. That location is saved,
-so the app does not have to remain beside the repository. Python 3 is currently
-required to run the loopback library service.
+choose a folder containing `CATALOG.md` and `library-taxonomy.json`. That
+location is saved, so the app does not have to remain beside the repository.
+Python 3 is currently required to run the loopback library service.
 
 ### Native PDF reading
 
@@ -96,11 +100,15 @@ a versioned SQLite database:
 ~/Library/Application Support/CS Library/Library.sqlite
 ```
 
-The app creates daily local backups and supports complete JSON export/import plus
-human-readable Markdown export. Nothing is uploaded, and no telemetry or cloud
-synchronization is present.
+The legacy `CS Library` directory name above is a compatibility storage ID; it
+does not change when the visible product name changes. The app creates daily
+local backups and supports complete JSON export/import plus human-readable
+Markdown export. Reader state has no telemetry or cloud synchronization.
+Syncthing can separately synchronize reading payloads and their metadata
+sidecars, and optional Codex-assisted import is the only feature that may use an
+external model.
 
-## Shared library with Syncthing
+## Sharing Lattice with Syncthing
 
 The Git checkout is also the Syncthing folder. A fresh clone already contains
 the complete empty payload scaffold, including the known nested collections:
@@ -117,12 +125,17 @@ lectures/
 When accepting the shared folder, choose the repository root—the folder that
 contains `CATALOG.md`—and use **Send & Receive**. Do not create separate
 Syncthing folders for `books/`, `papers/`, or `lectures/`. The checked-in
-`.stignore` shares only those private payload roots. GitHub remains the source
-for the catalog, metadata, and app; Git internals, build output, and private
-reader state stay local to each computer.
+`.stignore` shares only private payloads and sidecars inside those roots. It
+explicitly excludes Git-owned `.gitkeep` placeholders, the curated
+`lectures/catalog.json`, and incomplete upload files. A sidecar such as
+`books/example.pdf.library.json` travels beside its payload. GitHub remains the
+source for the curated catalog, taxonomy, source metadata, and app; Git
+internals, build output, and private reader state stay local to each computer.
 
-The established hub folder is named **CS Library** with folder ID
-`cs-library-3b8290f24f15`. See the
+Use the visible Syncthing label **Lattice** while keeping the established
+folder ID, `cs-library-3b8290f24f15`. The stable ID is the actual Syncthing
+identity, so an existing hub can change only the label without re-pairing or
+moving data. See the
 [clone-and-connect instructions](docs/SYNCTHING_SETUP.md) for the exact Windows,
 macOS, and Syncthing paths.
 
@@ -133,8 +146,8 @@ reader, and PDF access in a native WPF/WebView2 window. It includes its own
 loopback-only server, so the packaged app does not require Python or .NET to be
 installed on your cousin's computer.
 
-Download the `CS-Library-Windows-win-x64` artifact from a successful **Windows
-desktop app** workflow, extract it, and run `CS Library.exe`. On first launch,
+Download the `Lattice-Windows-win-x64` artifact from a successful **Lattice
+Windows desktop app** workflow, extract it, and run `Lattice.exe`. On first launch,
 select the synchronized Git checkout—the same folder Syncthing uses and the one
 containing `CATALOG.md`. The app remembers that selection and can switch folders
 later from its toolbar.
@@ -146,9 +159,10 @@ To build it on Windows:
 ```
 
 Windows web-reader progress and preferences are mirrored to a private SQLite
-database under `%LOCALAPPDATA%\CS Library`. This database is local to that PC;
-Syncthing follows the payload-only scope in `library-layout.json`, not the
-catalog, app source, or a live SQLite database.
+database under `%LOCALAPPDATA%\CS Library`. This compatibility storage path is
+intentionally unchanged and is local to that PC. Syncthing follows the
+payload-only scope in `library-layout.json`, not the catalog, app source, or a
+live SQLite database.
 
 See [Windows build, install, and data boundaries](windows/README.md).
 
@@ -156,10 +170,33 @@ See [Reader data, backup, and recovery](docs/READER_DATA.md).
 
 ## Adding material
 
-Use **File → Add Books…** or open a PDF, EPUB, or TXT file with CS Library. The
-app copies it into `books/` with a collision-safe filename. It immediately
-appears as a **New arrival** without requiring a restart. Add catalog metadata
-later when you want the work fully classified and source-traced.
+Drag supported files onto the library window or use the dedicated **Add** button.
+Choose whether an item belongs under `books/`, `papers/`, or `lectures/`; the
+app validates it, chooses a collision-safe filename, and makes it visible
+without a restart. Each imported payload receives an adjacent private sidecar by
+appending `.library.json` to its full filename:
+
+```text
+books/example.pdf
+books/example.pdf.library.json
+```
+
+The sidecar stores editable title, author, year, subject, and topic fields plus
+server-owned integrity and provenance fields. It is ignored by Git and
+synchronized with the payload by Syncthing, so both readers see the same
+classification without editing the curated catalog.
+
+When the local Codex CLI is installed and signed in, import can ask
+`gpt-5.6-luna` to suggest metadata and a subject. The request contains the
+filename, selected material kind, locally extracted publication metadata, and
+allowed subject list—not the document bytes or full text. PDF enrichment is
+filename-only; EPUB fields come from its package metadata. The Codex run is
+ephemeral, read-only, and launched with local tools disabled. Suggestions
+remain editable. If Codex is missing, signed out,
+unavailable, or returns invalid data, the import still succeeds with local
+fallback metadata under **Other**. Each computer that wants this optional
+enrichment signs in to Codex locally; no credential file or API key is copied
+into Lattice. See [Importing and metadata sidecars](docs/IMPORTING.md).
 
 The repository tracks hidden placeholders for `books/`, `papers/`, `lectures/`,
 and known nested collections, but ignores their payloads. A clone therefore has
@@ -173,18 +210,27 @@ Double-click `open-library.command`, or run:
 ./open-library.command
 ```
 
-The browser version provides the complete shelf, metadata search, live file
-updates, the EPUB reader, PDF/TXT access, favorites, reading status, and study
-documents. Native PDFKit, the durable SQLite notebook, native annotations, and
-global indexed search require the Mac app.
+The browser version provides the complete shelf, subject and metadata search,
+drag-and-drop import, live file updates, the EPUB reader, PDF/TXT access,
+favorites, reading status, and study documents. Native PDFKit, the durable
+SQLite notebook, native annotations, and global indexed search require the Mac
+app.
 
 The service binds only to `127.0.0.1`. It validates the Host header, selected
 library identity, catalog allowlist, paths, origins, EPUB archive limits, and
 token-protected local file actions.
 
-## Start here
+The interface also includes a dedicated **Video lectures** hall with 58 course
+tracks and 1,452 searchable lectures. Video stays with its official publisher;
+the repository stores only source metadata and video IDs. See the
+[video-catalog provenance note](notes/provenance/free-video-lectures-2026-08-21.md)
+for inclusion rules and licensing boundaries.
 
-Choose one lane and begin building things immediately:
+## Start with the current computer-science collection
+
+The first maintained collection is computer science. Choose one lane and begin
+building things immediately; other subjects can use their own guides without
+changing the library model:
 
 - **Java-first:** `books/think-java-2e.pdf` → small console projects →
   `papers/mit-6006/` → `books/jls-26.pdf` and `books/jvms-26.pdf` as references.
@@ -197,7 +243,7 @@ Choose one lane and begin building things immediately:
 The [study guide](STUDY_GUIDE.md) expands those entry points into ten stages with
 projects and exit criteria.
 
-## Shelf at a glance
+## Current computer-science shelves at a glance
 
 | Shelf | Works | Good first pick |
 |---|---:|---|
@@ -248,6 +294,10 @@ Downloads are streamed into a temporary file, validated before installation,
 hashed, and recorded under `metadata/`. ZIP, EPUB, and TGZ archives are
 structurally checked during verification.
 
+These curated fetch commands are separate from normal in-app imports. In-app
+imports use adjacent `.library.json` sidecars so private additions can sync
+without modifying Git-tracked metadata.
+
 ## Development and tests
 
 Portable checks:
@@ -259,7 +309,7 @@ node --check ui/app.js
 node --check native/ImmersiveEPUB.js
 node --check native/LibraryWorkspace.js
 node --check native/SharedReaderState.js
-node --test tests/test_immersive_epub.mjs tests/test_library_workspace.mjs tests/test_reader_state.mjs
+node --test tests/*.mjs
 bash -n scripts/build-macos-app.sh
 ```
 
@@ -280,6 +330,7 @@ See [Architecture](ARCHITECTURE.md), [Security](SECURITY.md), and
 cs-library/
 ├── .stignore                  # data-only Syncthing allowlist
 ├── library-layout.json        # required folders and shared-data contract
+├── library-taxonomy.json      # stable cross-subject classification authority
 ├── README.md
 ├── CATALOG.md
 ├── STUDY_GUIDE.md
@@ -290,6 +341,7 @@ cs-library/
 ├── CHANGELOG.md
 ├── docs/
 │   ├── READER_DATA.md
+│   ├── IMPORTING.md
 │   └── SYNCTHING_SETUP.md
 ├── assets/
 ├── metadata/
@@ -322,7 +374,7 @@ cs-library/
 
 ## Why the remote is metadata-first
 
-This shelf mixes open works, publisher-authorized personal copies, and legacy
+This library mixes open works, publisher-authorized personal copies, and legacy
 imports whose redistribution history was not preserved. GitHub stores the
 catalog, metadata, checksums, provenance, and tooling, while reading payloads
 remain local. This keeps the remote lawful, fast to clone, and useful for
@@ -339,8 +391,10 @@ answering:
 “Free to read” does not automatically mean “free to redistribute, transform, or
 process with generative AI.” Each work retains its own terms. In particular,
 the current OpenStax terms permit human reading but restrict generative-AI
-training or ingestion without permission. Local intelligence features must
-honor the access metadata and exclude restricted works unless permission exists.
+training or ingestion without permission. The import assistant therefore uses
+only filenames and embedded publication metadata; it does not send payload bytes
+or full text. Any future content-processing feature must honor recorded access
+terms and remain separately reviewable.
 
 ## Current integrity state
 
