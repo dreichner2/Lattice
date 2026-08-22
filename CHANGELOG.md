@@ -1,17 +1,19 @@
 # Changelog
 
-## 2.1.0 — 2026-08-21
+## 2.1.0 — 2026-08-22
 
 ### Added
 
-- A bundled Lattice PDF reader for Windows and the browser fallback, built on
-  PDF.js 6.2.108 with fast range loading instead of waiting for an entire large
-  document before showing the first page.
+- A bundled shared Lattice PDF reader for macOS, Windows, and the browser,
+  built on PDF.js 6.2.108 with fast range loading instead of waiting for an
+  entire large document before showing the first page.
 - Continuous, single-page, and two-page spread layouts; search, thumbnails,
   outlines, fit and zoom controls, rotation, keyboard navigation, and true
   fullscreen integration with the Windows-native frame.
 - Per-document page, layout, zoom, and rotation restoration, plus a Shelf
   control that returns to the existing collection without losing shelf state.
+- macOS now opens PDFs in that same shared Lattice reader instead of silently
+  routing them into the separate PDFKit workspace.
 
 ### Fixed
 

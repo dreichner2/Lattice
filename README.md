@@ -50,20 +50,18 @@ choose a folder containing `CATALOG.md` and `library-taxonomy.json`. That
 location is saved, so the app does not have to remain beside the repository.
 Python 3 is currently required to run the loopback library service.
 
-### Native PDF reading
+### PDF reading
 
-PDFs open in a PDFKit workspace with:
+PDFs open in the same Lattice-owned reader on macOS and Windows, with:
 
+- range-loaded first pages instead of waiting for the complete file;
 - continuous, single-page, and two-page spread modes;
-- page labels, direct page entry, and thumbnails;
-- fit-page, zoom, and focus mode;
+- direct page entry, lazy thumbnails, and document outlines;
+- fit-page, fit-width, zoom, and rotation controls;
 - whole-document search with result navigation;
-- page bookmarks and page notes;
-- persistent yellow text highlights;
-- selected-text quotation capture;
-- background text indexing for full-library search;
-- exact resume position; and
-- active-time reading sessions.
+- true fullscreen;
+- restored page, layout, zoom, and rotation; and
+- an in-reader Shelf control that returns to the existing collection state.
 
 ### EPUB reading
 
