@@ -16,6 +16,8 @@ var tests = new (string Name, Action Body)[]
     ("rejects duplicate case-folded ZIP paths", RejectsDuplicateZipPaths),
     ("rejects ZIP symlinks", RejectsZipSymlink),
     ("rejects Windows device-name ZIP entries", RejectsWindowsDevicePath),
+    ("accepts the pre-storage-helper rollback package", AcceptsLegacyPackageWithoutStorageHelper),
+    ("requires the storage helper in new packages", RejectsNewPackageWithoutStorageHelper),
     ("removes a complete stale candidate before redownload", RemovesStaleCandidateForRedownload),
     ("removes only recognized expired activation records", RemovesExpiredActivation),
     ("keeps active authority monotonic when an older candidate finishes last", RejectsLateOlderPromotion),
@@ -184,6 +186,29 @@ static void RejectsWindowsDevicePath()
         Throws<InvalidDataException>(() => UpdateSecurity.ExtractArchiveSafely(
             archivePath,
             Path.Combine(root, "out")));
+    });
+}
+
+static void AcceptsLegacyPackageWithoutStorageHelper()
+{
+    WithTemporaryRoot(root =>
+    {
+        BuildPackageDirectory(root, "2.1.1", includeStorageHelper: false);
+        var metadata = UpdateSecurity.ValidatePackageDirectory(
+            root,
+            StableSemanticVersion.Parse("2.1.1"));
+        Equal("2.1.1", metadata.Version);
+    });
+}
+
+static void RejectsNewPackageWithoutStorageHelper()
+{
+    WithTemporaryRoot(root =>
+    {
+        BuildPackageDirectory(root, "2.1.2", includeStorageHelper: false);
+        Throws<InvalidDataException>(() => UpdateSecurity.ValidatePackageDirectory(
+            root,
+            StableSemanticVersion.Parse("2.1.2")));
     });
 }
 
@@ -410,16 +435,18 @@ static void AddEntry(ZipArchive archive, string path, string value)
     writer.Write(value);
 }
 
-static void BuildPackageDirectory(string root, string version)
+static void BuildPackageDirectory(string root, string version, bool includeStorageHelper = true)
 {
-    foreach (var relative in new[]
+    var packageFiles = new List<string>
     {
         "Lattice.exe",
         "Lattice.ico",
         "Server/LatticeServer.exe",
         "ui/index.html",
         "ui/app.js",
-    })
+    };
+    if (includeStorageHelper) packageFiles.Add("Tools/LatticeStorage.exe");
+    foreach (var relative in packageFiles)
     {
         var path = Path.Combine(root, relative.Replace('/', Path.DirectorySeparatorChar));
         Directory.CreateDirectory(Path.GetDirectoryName(path)!);

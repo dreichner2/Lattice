@@ -4,6 +4,7 @@ import * as pdfjsLib from "/vendor/pdfjs/build/pdf.min.mjs";
 import {
   leaveFullscreenBeforeClose,
   pageDirectionForKey,
+  readerEscapeAction,
 } from "/pdf-reader-lifecycle.mjs";
 
 globalThis.pdfjsLib = pdfjsLib;
@@ -44,6 +45,8 @@ const elements = {
   findNext: $("#findNextButton"),
   findPrevious: $("#findPreviousButton"),
   fit: $("#fitSelect"),
+  focus: $("#focusButton"),
+  focusExit: $("#focusExitButton"),
   fullscreen: $("#fullscreenButton"),
   layoutSwitcher: $("#layoutSwitcher"),
   loading: $("#loadingState"),
@@ -100,6 +103,7 @@ let thumbnailsCreated = false;
 let thumbnailObserver = null;
 let lastFindQuery = "";
 let closePending = false;
+let focusMode = false;
 
 document.documentElement.dataset.theme = requestedTheme;
 document.title = `${requestedTitle} — Lattice`;
@@ -478,6 +482,35 @@ async function toggleFullscreen() {
   }
 }
 
+function setFocusMode(focused, { notify = true } = {}) {
+  const next = Boolean(focused);
+  if (focusMode === next) return;
+  const pageNumber = pdfViewer.currentPageNumber;
+  const scaleValue = pdfViewer.currentScaleValue;
+  focusMode = next;
+  if (next) setSidebar(false);
+  elements.app.classList.toggle("is-focused", next);
+  elements.focus.setAttribute("aria-pressed", String(next));
+  elements.focus.setAttribute("aria-label", next ? "Show PDF controls" : "Focus on the PDF");
+  elements.focus.title = next ? "Show PDF controls (F)" : "Focus mode (F)";
+  elements.focusExit.hidden = !next;
+  document.documentElement.dataset.focused = String(next);
+  if (notify) postToShelf("focus-mode", { path: documentPath, active: next });
+
+  window.requestAnimationFrame(() => window.requestAnimationFrame(() => {
+    if (ready) {
+      pdfViewer.update();
+      if (scaleValue) pdfViewer.currentScaleValue = scaleValue;
+      pdfViewer.currentPageNumber = pageNumber;
+    }
+    (next ? elements.viewerContainer : elements.focus).focus({ preventScroll: true });
+  }));
+}
+
+function toggleFocusMode() {
+  setFocusMode(!focusMode);
+}
+
 async function requestShelfAction(type) {
   if (type !== "close") {
     postToShelf(type, { path: documentPath });
@@ -546,7 +579,7 @@ eventBus.on("pagesinit", () => {
   postToShelf("ready", {
     path: documentPath,
     pageCount: pdfDocument.numPages,
-    capabilities: ["range-loading", "search", "single-page", "two-page", "fullscreen", "rotation"],
+    capabilities: ["range-loading", "search", "single-page", "two-page", "focus-mode", "fullscreen", "rotation"],
   });
 });
 
@@ -584,6 +617,8 @@ elements.open.addEventListener("click", () => void requestShelfAction("open"));
 elements.errorOpen.addEventListener("click", () => void requestShelfAction("open"));
 elements.reveal.addEventListener("click", () => void requestShelfAction("reveal"));
 elements.retry.addEventListener("click", () => window.location.reload());
+elements.focus.addEventListener("click", toggleFocusMode);
+elements.focusExit.addEventListener("click", () => setFocusMode(false));
 elements.fullscreen.addEventListener("click", toggleFullscreen);
 elements.sidebarButton.addEventListener("click", () => setSidebar(!elements.app.classList.contains("sidebar-open")));
 elements.sidebarClose.addEventListener("click", () => setSidebar(false));
@@ -663,13 +698,22 @@ document.addEventListener("keydown", (event) => {
   }
   if (event.key === "Escape") {
     if (elements.passwordDialog.open) return;
-    if (document.fullscreenElement) document.exitFullscreen();
-    else if (elements.app.classList.contains("sidebar-open")) setSidebar(false);
+    const action = readerEscapeAction({
+      fullscreen: Boolean(document.fullscreenElement),
+      focused: focusMode,
+      sidebarOpen: elements.app.classList.contains("sidebar-open"),
+    });
+    if (action === "fullscreen") document.exitFullscreen();
+    else if (action === "focus") setFocusMode(false);
+    else if (action === "sidebar") setSidebar(false);
     else void requestShelfAction("close");
     return;
   }
   if (editing || event.ctrlKey || event.metaKey || event.altKey) return;
-  if (handlePageNavigationKey(event.key)) {
+  if (event.key.toLowerCase() === "f" && !event.repeat) {
+    event.preventDefault();
+    toggleFocusMode();
+  } else if (handlePageNavigationKey(event.key)) {
     event.preventDefault();
   } else if (event.key === "+" || event.key === "=") {
     event.preventDefault();
@@ -693,6 +737,8 @@ window.addEventListener("message", (event) => {
     applyIncomingState(message.state);
   } else if (message.type === "focus") {
     elements.viewerContainer.focus({ preventScroll: true });
+  } else if (message.type === "toggle-focus") {
+    toggleFocusMode();
   } else if (message.type === "shortcut") {
     handlePageNavigationKey(message.key);
   } else if (message.type === "prepare-close") {

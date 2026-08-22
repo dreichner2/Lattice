@@ -6,7 +6,12 @@ const HTML = fs.readFileSync(new URL("../ui/index.html", import.meta.url), "utf8
 const APP = fs.readFileSync(new URL("../ui/app.js", import.meta.url), "utf8");
 const STYLES = fs.readFileSync(new URL("../ui/styles.css", import.meta.url), "utf8");
 const MAC_APP = fs.readFileSync(new URL("../native/CSLibraryApp.swift", import.meta.url), "utf8");
+const MAC_BRIDGE = fs.readFileSync(new URL("../native/ReaderBridge.swift", import.meta.url), "utf8");
+const MAC_BUILD = fs.readFileSync(new URL("../scripts/build-macos-app.sh", import.meta.url), "utf8");
+const MAC_UPDATE = fs.readFileSync(new URL("../native/MacUpdateChecker.swift", import.meta.url), "utf8");
+const PDF_HTML = fs.readFileSync(new URL("../ui/pdf-reader.html", import.meta.url), "utf8");
 const PDF_READER = fs.readFileSync(new URL("../ui/pdf-reader.js", import.meta.url), "utf8");
+const PDF_STYLES = fs.readFileSync(new URL("../ui/pdf-reader.css", import.meta.url), "utf8");
 
 test("every UI element binding resolves to one unique markup id", () => {
   const markupIds = [...HTML.matchAll(/\sid="([^"]+)"/g)].map((match) => match[1]);
@@ -64,6 +69,44 @@ test("macOS queues file-open imports until the local service is ready", () => {
   assert.match(MAC_APP, /let duplicate = payload\?\["duplicate"\] as\? Bool == true/);
 });
 
+test("macOS Move Library delegates to the verified shared storage helper", () => {
+  assert.match(MAC_APP, /Move Library to External Storage…/);
+  assert.match(MAC_APP, /#selector\(moveLibrary\(_:\)\)/);
+  assert.match(MAC_APP, /--folder-id", "cs-library-3b8290f24f15"/);
+  assert.match(MAC_APP, /--protected-path", Bundle\.main\.bundleURL\.path/);
+  assert.match(MAC_APP, /copy and verify every file/);
+  assert.match(MAC_APP, /libraryMoveInProgress/);
+  assert.match(MAC_BUILD, /server\/move_library\.py/);
+});
+
+test("desktop apps expose native actions in the inline header menu", () => {
+  assert.match(HTML, /id="nativeAppMenu"[^>]*hidden/);
+  assert.match(HTML, /id="appMoreButton"[^>]*aria-label="Lattice options"/);
+  assert.match(HTML, /id="appCheckUpdatesButton"/);
+  assert.match(HTML, /id="appMoveLibraryButton"/);
+  assert.match(HTML, /id="appOpenLibraryButton"[^>]*hidden/);
+  assert.match(HTML, /id="appChooseLibraryButton"[^>]*hidden/);
+  assert.match(HTML, /id="appReloadButton"[^>]*hidden/);
+  assert.match(STYLES, /\.native-app-menu\s*\{[\s\S]*?position:\s*relative/);
+  assert.match(STYLES, /\.app-more-button\s*\{/);
+  assert.match(APP, /csLibraryNativeCall\("app\.info"\)/);
+  assert.match(APP, /invokeNativeAppAction\("app\.checkForUpdates"\)/);
+  assert.match(APP, /invokeNativeAppAction\("app\.moveLibrary"\)/);
+  assert.match(APP, /invokeNativeAppAction\("app\.openLibraryFolder"\)/);
+  assert.match(APP, /invokeNativeAppAction\("app\.chooseLibrary"\)/);
+  assert.match(APP, /invokeNativeAppAction\("app\.reload"\)/);
+  assert.match(APP, /\["macOS", "windows"\]\.includes\(info\.platform\)/);
+  assert.match(APP, /info\.platform === "macOS"[\s\S]*?"app\.checkForUpdates", "app\.moveLibrary"/);
+  assert.match(MAC_BRIDGE, /case "app\.info":/);
+  assert.match(MAC_BRIDGE, /case "app\.checkForUpdates", "app\.moveLibrary":/);
+  assert.match(MAC_APP, /"version": self\?\.installedAppVersion\(\)/);
+  assert.doesNotMatch(MAC_APP, /NSTitlebarAccessoryViewController/);
+  assert.match(MAC_UPDATE, /releases\/latest/);
+  assert.match(MAC_UPDATE, /Lattice-macOS\.zip/);
+  assert.match(MAC_UPDATE, /github\.com/);
+  assert.match(MAC_BUILD, /MacUpdateChecker\.swift/);
+});
+
 test("metadata editing sends the supported fields", () => {
   for (const field of ["path", "title", "authors", "year", "edition", "subjectIds", "topics"]) {
     assert.match(APP, new RegExp(`\\b${field}:`));
@@ -119,6 +162,19 @@ test("PDFs use the same embedded reader in native and web app modes", () => {
     APP,
     /state\.readerMode === "pdf"[\s\S]*?sendPdfReaderMessage\("shortcut", \{ key: Number\(direction\) < 0 \? "ArrowLeft" : "ArrowRight" \}\)/,
   );
+});
+
+test("PDFs expose the same distraction-free focus mode as EPUBs", () => {
+  assert.match(PDF_HTML, /id="focusButton"[^>]*aria-pressed="false"[^>]*aria-keyshortcuts="F"/);
+  assert.match(PDF_HTML, /id="focusExitButton"[^>]*Show PDF controls[^>]*hidden/);
+  assert.match(PDF_STYLES, /\.pdf-app\.is-focused\s*\{[\s\S]*?grid-template-rows:\s*0 minmax\(0, 1fr\)/);
+  assert.match(PDF_STYLES, /\.pdf-app\.is-focused \.reader-main\s*\{[\s\S]*?grid-template-rows:\s*0 minmax\(0, 1fr\) 0/);
+  assert.match(PDF_READER, /function setFocusMode\(focused/);
+  assert.match(PDF_READER, /postToShelf\("focus-mode", \{ path: documentPath, active: next \}\)/);
+  assert.match(PDF_READER, /message\.type === "toggle-focus"/);
+  assert.match(PDF_READER, /event\.key\.toLowerCase\(\) === "f"/);
+  assert.match(APP, /window\.csLibraryToggleReaderFocus = toggleActiveReaderFocus/);
+  assert.match(MAC_APP, /window\.csLibraryToggleReaderFocus\?\.\(\)/);
 });
 
 test("existing CS Library state keys remain stable for upgrades", () => {

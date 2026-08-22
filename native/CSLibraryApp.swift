@@ -24,6 +24,9 @@ final class AppDelegate: NSObject, NSApplicationDelegate, WKNavigationDelegate, 
     private var pendingOpenURLs: [URL] = []
     private var webInterfaceReady = false
     private var pendingAddMaterials = false
+    private var libraryMoveInProgress = false
+    private var updateCheckInProgress = false
+    private var updateCheckTask: Task<Void, Never>?
 
     func applicationDidFinishLaunching(_ notification: Notification) {
         NSApp.setActivationPolicy(.regular)
@@ -56,7 +59,17 @@ final class AppDelegate: NSObject, NSApplicationDelegate, WKNavigationDelegate, 
 
     func applicationShouldTerminateAfterLastWindowClosed(_ sender: NSApplication) -> Bool { true }
 
+    func applicationShouldTerminate(_ sender: NSApplication) -> NSApplication.TerminateReply {
+        guard libraryMoveInProgress else { return .terminateNow }
+        showNonfatalError(
+            title: "Library move in progress",
+            message: "Keep Lattice and the destination drive open until copying and verification finish."
+        )
+        return .terminateCancel
+    }
+
     func applicationWillTerminate(_ notification: Notification) {
+        updateCheckTask?.cancel()
         readerBridge?.finishWebSession()
         immersiveReader?.closePDF(notifyWeb: false)
         if let readerKeyMonitor { NSEvent.removeMonitor(readerKeyMonitor) }
@@ -134,6 +147,26 @@ final class AppDelegate: NSObject, NSApplicationDelegate, WKNavigationDelegate, 
         }
 
         let bridge = ReaderBridge(store: readerStore)
+        bridge.appInfoProvider = { [weak self] in
+            [
+                "platform": "macOS",
+                "version": self?.installedAppVersion() ?? "Unknown",
+                "capabilities": [
+                    "app.checkForUpdates",
+                    "app.moveLibrary"
+                ]
+            ]
+        }
+        bridge.appActionHandler = { [weak self] action in
+            DispatchQueue.main.async {
+                guard let self else { return }
+                switch action {
+                case "app.checkForUpdates": self.checkForUpdates(nil)
+                case "app.moveLibrary": self.moveLibrary(nil)
+                default: break
+                }
+            }
+        }
         readerBridge = bridge
         configuration.userContentController.addScriptMessageHandler(bridge, contentWorld: .page, name: ReaderBridge.handlerName)
 
@@ -244,13 +277,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, WKNavigationDelegate, 
 
     private func startLibraryServer() {
         let manager = FileManager.default
-        let pythonCandidates = [
-            "/opt/homebrew/bin/python3",
-            "/opt/homebrew/opt/python@3.13/bin/python3",
-            "/usr/local/bin/python3",
-            "/usr/bin/python3"
-        ]
-        guard let python = pythonCandidates.first(where: manager.isExecutableFile(atPath:)) else {
+        guard let python = pythonExecutable() else {
             showFatalError(
                 title: "Python 3 is required",
                 message: "Install Python 3 from python.org or Homebrew, then reopen Lattice. The library and reading database remain untouched."
@@ -307,6 +334,16 @@ final class AppDelegate: NSObject, NSApplicationDelegate, WKNavigationDelegate, 
     private func bundledServerScript() -> URL? {
         Bundle.main.url(forResource: "library_ui", withExtension: "py", subdirectory: "server")
             ?? (isLibraryRoot(libraryRoot) ? libraryRoot.appendingPathComponent("scripts/library_ui.py") : nil)
+    }
+
+    private func pythonExecutable() -> String? {
+        [
+            "/opt/homebrew/bin/python3",
+            "/opt/homebrew/opt/python@3.14/bin/python3",
+            "/opt/homebrew/opt/python@3.13/bin/python3",
+            "/usr/local/bin/python3",
+            "/usr/bin/python3"
+        ].first(where: FileManager.default.isExecutableFile(atPath:))
     }
 
     private func bundledUIRoot() -> URL? {
@@ -407,6 +444,248 @@ final class AppDelegate: NSObject, NSApplicationDelegate, WKNavigationDelegate, 
         alert.addButton(withTitle: "Quit and Reopen Later")
         alert.runModal()
         NSApp.terminate(nil)
+    }
+
+    private struct LibraryMoveCompletion {
+        let destination: URL
+        let sourceRemoved: Bool
+        let syncthingManaged: Bool
+        let warning: String?
+    }
+
+    @objc private func moveLibrary(_ sender: Any?) {
+        guard !libraryMoveInProgress else { return }
+        guard !updateCheckInProgress else {
+            showNonfatalError(
+                title: "Update check in progress",
+                message: "Wait for the update check to finish before moving the library."
+            )
+            return
+        }
+        guard let ownedServer = serverProcess, ownedServer.isRunning else {
+            showNonfatalError(
+                title: "Close the other Lattice window first",
+                message: "This window is using a library service started elsewhere. Reopen one Lattice window, then try Move Library again."
+            )
+            return
+        }
+        guard let python = pythonExecutable(), let helper = bundledLibraryMoveScript() else {
+            showNonfatalError(
+                title: "Move Library is unavailable",
+                message: "The Python runtime or bundled storage helper is missing. Rebuild or reinstall Lattice."
+            )
+            return
+        }
+
+        let panel = NSOpenPanel()
+        panel.title = "Choose the external drive or folder"
+        panel.message = "Lattice will create a new folder named Lattice here."
+        panel.prompt = "Choose Destination"
+        panel.canChooseDirectories = true
+        panel.canChooseFiles = false
+        panel.canCreateDirectories = true
+        panel.allowsMultipleSelection = false
+        let volumes = URL(fileURLWithPath: "/Volumes", isDirectory: true)
+        panel.directoryURL = FileManager.default.fileExists(atPath: volumes.path)
+            ? volumes
+            : FileManager.default.homeDirectoryForCurrentUser
+        guard panel.runModal() == .OK, let container = panel.url else { return }
+        let destination = container.appendingPathComponent("Lattice", isDirectory: true)
+        guard !FileManager.default.fileExists(atPath: destination.path) else {
+            showNonfatalError(
+                title: "That destination already contains Lattice",
+                message: "Choose another folder or rename the existing \(destination.path) folder."
+            )
+            return
+        }
+
+        let confirmation = NSAlert()
+        confirmation.alertStyle = .informational
+        confirmation.messageText = "Move the complete Lattice library?"
+        confirmation.informativeText = """
+        Destination: \(destination.path)
+
+        Lattice will require Syncthing to be Up to Date, pause it, copy and verify every file, redirect the same folder ID, and only then remove the old copy. Keep the drive connected until Lattice reopens.
+        """
+        confirmation.addButton(withTitle: "Move Library")
+        confirmation.addButton(withTitle: "Cancel")
+        guard confirmation.runModal() == .alertFirstButtonReturn else { return }
+
+        libraryMoveInProgress = true
+        readerBridge?.finishWebSession()
+        immersiveReader?.closePDF(notifyWeb: false)
+        serverProcess = nil
+        ownedServer.terminationHandler = nil
+        if ownedServer.isRunning {
+            ownedServer.terminate()
+            ownedServer.waitUntilExit()
+        }
+        try? serverLog?.close()
+        serverLog = nil
+        currentServerURL = nil
+        webInterfaceReady = false
+
+        let progress = NSAlert()
+        progress.alertStyle = .informational
+        progress.messageText = "Moving your library…"
+        progress.informativeText = "Pausing Syncthing and preparing a verified copy"
+        let indicator = NSProgressIndicator(frame: NSRect(x: 0, y: 0, width: 340, height: 18))
+        indicator.style = .bar
+        indicator.isIndeterminate = true
+        indicator.startAnimation(nil)
+        progress.accessoryView = indicator
+        let disabledButton = progress.addButton(withTitle: "Moving…")
+        disabledButton.isEnabled = false
+        progress.beginSheetModal(for: window)
+
+        runLibraryMove(
+            python: python,
+            helper: helper,
+            source: libraryRoot,
+            destination: destination,
+            progress: { message in
+                progress.informativeText = message
+            }
+        ) { [weak self] result in
+            guard let self else { return }
+            self.window.endSheet(progress.window)
+            progress.window.orderOut(nil)
+            self.libraryMoveInProgress = false
+            switch result {
+            case .failure(let error):
+                self.showNonfatalError(
+                    title: "Library move stopped",
+                    message: "The original library was preserved. \(error.localizedDescription)"
+                )
+                self.connectToLibrary()
+            case .success(let completion):
+                UserDefaults.standard.set(completion.destination.path, forKey: self.savedRootKey)
+                let completed = NSAlert()
+                completed.alertStyle = completion.warning == nil ? .informational : .warning
+                completed.messageText = "Library moved"
+                var message = completion.syncthingManaged
+                    ? "Lattice and Syncthing now use \(completion.destination.path)."
+                    : "Lattice now uses \(completion.destination.path). This library was not managed by Syncthing."
+                if let warning = completion.warning { message += "\n\n\(warning)" }
+                completed.informativeText = message
+                completed.addButton(withTitle: "Reopen Lattice")
+                completed.runModal()
+                self.reopenAfterLibraryMove()
+            }
+        }
+    }
+
+    private func bundledLibraryMoveScript() -> URL? {
+        Bundle.main.url(forResource: "move_library", withExtension: "py", subdirectory: "server")
+            ?? libraryRoot.appendingPathComponent("scripts/move_library.py")
+    }
+
+    private func runLibraryMove(
+        python: String,
+        helper: URL,
+        source: URL,
+        destination: URL,
+        progress: @escaping (String) -> Void,
+        completion: @escaping (Result<LibraryMoveCompletion, Error>) -> Void
+    ) {
+        DispatchQueue.global(qos: .userInitiated).async {
+            let process = Process()
+            let output = Pipe()
+            let errors = Pipe()
+            process.executableURL = URL(fileURLWithPath: python)
+            process.arguments = [
+                helper.path,
+                "--source", source.path,
+                "--destination", destination.path,
+                "--folder-id", "cs-library-3b8290f24f15",
+                "--protected-path", Bundle.main.bundleURL.path
+            ]
+            process.currentDirectoryURL = destination.deletingLastPathComponent()
+            process.standardOutput = output
+            process.standardError = errors
+
+            var buffered = Data()
+            var reportedError: String?
+            var finalDestination: URL?
+            var sourceRemoved = false
+            var syncthingManaged = false
+            var warning: String?
+
+            func consume(_ line: Data) {
+                guard line.count <= 65_536,
+                      let value = try? JSONSerialization.jsonObject(with: line) as? [String: Any],
+                      let event = value["event"] as? String else { return }
+                let message = value["message"] as? String
+                if let message {
+                    DispatchQueue.main.async { progress(message) }
+                }
+                if event == "error" {
+                    reportedError = message
+                } else if event == "complete", let path = value["destination"] as? String {
+                    finalDestination = URL(fileURLWithPath: path, isDirectory: true)
+                    sourceRemoved = value["sourceRemoved"] as? Bool ?? false
+                    syncthingManaged = value["syncthingManaged"] as? Bool ?? false
+                    warning = value["warning"] as? String
+                }
+            }
+
+            do {
+                try process.run()
+                while true {
+                    let data = output.fileHandleForReading.availableData
+                    if data.isEmpty { break }
+                    buffered.append(data)
+                    while let newline = buffered.firstIndex(of: 0x0A) {
+                        consume(buffered[..<newline])
+                        buffered.removeSubrange(...newline)
+                    }
+                }
+                if !buffered.isEmpty { consume(buffered) }
+                process.waitUntilExit()
+                let errorData = errors.fileHandleForReading.readDataToEndOfFile()
+                let errorText = String(data: errorData.prefix(65_536), encoding: .utf8)?
+                    .trimmingCharacters(in: .whitespacesAndNewlines)
+                guard process.terminationStatus == 0,
+                      let moved = finalDestination,
+                      LibraryIdentity.canonicalRoot(moved) == LibraryIdentity.canonicalRoot(destination) else {
+                    let detail = reportedError ?? errorText ?? "The storage helper did not complete."
+                    throw NSError(
+                        domain: "Lattice.LibraryMove",
+                        code: Int(process.terminationStatus),
+                        userInfo: [NSLocalizedDescriptionKey: detail]
+                    )
+                }
+                let result = LibraryMoveCompletion(
+                    destination: moved,
+                    sourceRemoved: sourceRemoved,
+                    syncthingManaged: syncthingManaged,
+                    warning: warning
+                )
+                DispatchQueue.main.async { completion(.success(result)) }
+            } catch {
+                DispatchQueue.main.async { completion(.failure(error)) }
+            }
+        }
+    }
+
+    private func reopenAfterLibraryMove() {
+        let configuration = NSWorkspace.OpenConfiguration()
+        configuration.createsNewApplicationInstance = true
+        NSWorkspace.shared.openApplication(
+            at: Bundle.main.bundleURL,
+            configuration: configuration
+        ) { [weak self] _, error in
+            DispatchQueue.main.async {
+                if let error {
+                    self?.showNonfatalError(
+                        title: "Reopen Lattice",
+                        message: "The library moved successfully, but Lattice could not reopen automatically. \(error.localizedDescription)"
+                    )
+                } else {
+                    NSApp.terminate(nil)
+                }
+            }
+        }
     }
 
     @objc private func addBooks(_ sender: Any?) {
@@ -662,7 +941,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, WKNavigationDelegate, 
         if immersiveReader?.nextPage() != true { webView.evaluateJavaScript("window.csLibraryHandleNativeArrow?.(1)") }
     }
     @objc private func readerFocus(_ sender: Any?) {
-        if immersiveReader?.toggleFocus() != true { webView.evaluateJavaScript("document.querySelector('#readerFocusButton:not([hidden])')?.click()") }
+        if immersiveReader?.toggleFocus() != true { webView.evaluateJavaScript("window.csLibraryToggleReaderFocus?.()") }
     }
     @objc private func readerSidebar(_ sender: Any?) {
         if immersiveReader?.toggleSidebar() != true { webView.evaluateJavaScript("document.querySelector('#readerTocButton:not([hidden])')?.click()") }
@@ -679,11 +958,76 @@ final class AppDelegate: NSObject, NSApplicationDelegate, WKNavigationDelegate, 
 
     // MARK: Menus and alerts
 
+    @objc private func checkForUpdates(_ sender: Any?) {
+        guard !updateCheckInProgress, !libraryMoveInProgress else { return }
+        let installedVersion = installedAppVersion()
+        updateCheckInProgress = true
+
+        updateCheckTask = Task { @MainActor [weak self] in
+            guard let self else { return }
+            defer {
+                self.updateCheckInProgress = false
+                self.updateCheckTask = nil
+            }
+            do {
+                let result = try await MacUpdateChecker.check(installedVersion: installedVersion)
+                try Task.checkCancellation()
+                self.presentUpdateCheckResult(result, installedVersion: installedVersion)
+            } catch is CancellationError {
+                // The app is closing.
+            } catch {
+                self.showNonfatalError(
+                    title: "Lattice could not check for updates",
+                    message: error.localizedDescription
+                )
+            }
+        }
+    }
+
+    private func presentUpdateCheckResult(
+        _ result: MacUpdateCheckResult,
+        installedVersion: String
+    ) {
+        let alert = NSAlert()
+        switch result {
+        case .current(let release):
+            alert.messageText = "Lattice is up to date"
+            alert.informativeText = "Version \(release.version) is the latest published macOS release."
+            alert.addButton(withTitle: "OK")
+        case .available(let release):
+            alert.messageText = "Lattice \(release.version) is available"
+            alert.informativeText = """
+            Installed: \(installedVersion)
+            Latest: \(release.version)
+
+            The verified Lattice repository release includes Lattice-macOS.zip. Open the release page to download it.
+            """
+            alert.addButton(withTitle: "View Release")
+            alert.addButton(withTitle: "Later")
+            if alert.runModal() == .alertFirstButtonReturn {
+                NSWorkspace.shared.open(release.releaseURL)
+            }
+            return
+        case .developmentBuild(let installed, let latest):
+            alert.messageText = "This Lattice build is newer"
+            alert.informativeText = "Installed version \(installed) is newer than the latest published release, \(latest.version)."
+            alert.addButton(withTitle: "OK")
+        }
+        alert.runModal()
+    }
+
+    private func installedAppVersion() -> String {
+        (Bundle.main.object(forInfoDictionaryKey: "CFBundleShortVersionString") as? String)
+            ?? "Unknown"
+    }
+
     private func configureMenu() {
         let mainMenu = NSMenu()
         let appItem = NSMenuItem()
         let appMenu = NSMenu()
         appMenu.addItem(withTitle: "About Lattice", action: #selector(NSApplication.orderFrontStandardAboutPanel(_:)), keyEquivalent: "")
+        appMenu.addItem(.separator())
+        addMenuItem(appMenu, "Check for Updates…", #selector(checkForUpdates(_:)))
         appMenu.addItem(.separator())
         appMenu.addItem(withTitle: "Hide Lattice", action: #selector(NSApplication.hide(_:)), keyEquivalent: "h")
         appMenu.addItem(.separator())
@@ -695,6 +1039,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, WKNavigationDelegate, 
         let fileMenu = NSMenu(title: "File")
         addMenuItem(fileMenu, "Add Materials…", #selector(addBooks(_:)), "o", [.command, .shift])
         addMenuItem(fileMenu, "Choose Library Folder…", #selector(chooseLibraryFolder(_:)))
+        addMenuItem(fileMenu, "Move Library to External Storage…", #selector(moveLibrary(_:)))
         fileMenu.addItem(.separator())
         addMenuItem(fileMenu, "Open Library Folder", #selector(openLibraryFolder(_:)), "o")
         addMenuItem(fileMenu, "Open Reader Data Folder", #selector(openReaderDataFolder(_:)))

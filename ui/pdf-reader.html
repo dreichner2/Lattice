@@ -31,6 +31,14 @@
         <div class="header-actions">
           <button class="tool-button text-action" id="openButton" type="button" title="Open in the system PDF app">Open</button>
           <button class="tool-button text-action" id="revealButton" type="button" title="Show the PDF file">Show file</button>
+          <button class="tool-button icon-action focus-action" id="focusButton" type="button"
+                  aria-label="Focus on the PDF" aria-pressed="false" aria-keyshortcuts="F"
+                  title="Focus mode (F)">
+            <svg viewBox="0 0 24 24" aria-hidden="true" focusable="false">
+              <path d="M9 4H4v5M15 4h5v5M9 20H4v-5M15 20h5v-5"></path>
+              <rect x="8" y="6.5" width="8" height="11" rx="1.5"></rect>
+            </svg>
+          </button>
           <button class="tool-button icon-action" id="fullscreenButton" type="button" aria-label="Enter fullscreen" title="Fullscreen (F11)">⛶</button>
         </div>
       </header>
@@ -132,6 +140,13 @@
       </div>
 
       <button class="sidebar-scrim" id="sidebarScrim" type="button" aria-label="Close document navigation"></button>
+      <button class="focus-exit-button" id="focusExitButton" type="button"
+              aria-label="Show PDF controls" title="Show PDF controls (Escape)" hidden>
+        <svg viewBox="0 0 24 24" aria-hidden="true" focusable="false">
+          <path d="M4 9h5V4M20 9h-5V4M4 15h5v5M20 15h-5v5"></path>
+          <rect x="8" y="6.5" width="8" height="11" rx="1.5"></rect>
+        </svg>
+      </button>
     </div>
 
     <dialog class="password-dialog" id="passwordDialog">

@@ -38,7 +38,7 @@ malicious document is required.
 
 ### Windows installer and updater
 
-- The one-click bootstrap downloads the pinned `v2.1.1` Windows release and
+- The one-click bootstrap downloads the pinned `v2.2.0` Windows release and
   compares it with its published SHA-256 companion before installation. It does
   not use a mutable GitHub Actions artifact or require a GitHub token.
 - Automatic updates are supported only from the per-user versioned installation
@@ -79,6 +79,31 @@ current Windows executable is not Authenticode-signed, so Microsoft Defender
 SmartScreen or Smart App Control may warn or block it based on local policy and
 reputation. Users must not be told to disable or bypass Windows protections to
 install Lattice.
+
+### Storage relocation
+
+- Move Library requires the current Syncthing folder to match the exact stable
+  Lattice folder ID and source path and to be up to date before it pauses or
+  copies anything.
+- Syncthing discovery reads the current user's configuration only to obtain its
+  GUI address and API key. The key remains in memory, is never logged, passed on
+  a command line, stored in the library, or sent anywhere except an explicitly
+  validated loopback HTTP endpoint. TLS and non-loopback GUI endpoints are
+  refused instead of bypassing certificate or network trust; proxy use and HTTP
+  redirects are disabled for these authenticated API calls.
+- Source roots, destination ancestry, free capacity, file types, and reparse or
+  symbolic links are validated before copying. Every regular file is written to
+  an operation-owned staging directory, flushed, and compared to its destination
+  using SHA-256 before the destination becomes active.
+- The same Syncthing folder record is paused and repointed; no replacement
+  folder ID is created. The original directory is deleted only after the new
+  path is retained, Syncthing needs no restart, and its resumed scan is healthy.
+  Failures attempt to restore the original path and pause state and never
+  authorize deletion of the original library. If the API is unavailable during
+  rollback, both copies are retained and the unconfirmed state is reported.
+- macOS refuses relocation while `Lattice.app` is inside the selected library;
+  Windows passes its installed application directory as an equivalent protected
+  path. This prevents the helper from deleting its own running application.
 
 ### Release signing key custody and rotation
 

@@ -418,6 +418,197 @@ html.cs-native-reader .reader-shell.is-focused #nativeReaderNotesButton {
   line-height: 1;
 }
 
+.native-app-menu {
+  position: relative;
+  flex: 0 0 auto;
+}
+
+.app-more-button {
+  position: relative;
+  overflow: hidden;
+  border-color: color-mix(in srgb, var(--line-strong) 78%, transparent);
+  background:
+    linear-gradient(180deg, color-mix(in srgb, var(--panel-solid) 68%, transparent), var(--panel));
+  box-shadow: inset 0 1px rgba(255, 255, 255, 0.05), 0 5px 14px rgba(8, 11, 19, 0.08);
+}
+
+.app-more-button::after {
+  content: '';
+  position: absolute;
+  inset: 4px;
+  border-radius: 8px;
+  background: color-mix(in srgb, var(--accent) 0%, transparent);
+  transition: background 150ms ease;
+}
+
+.app-more-button svg {
+  position: relative;
+  z-index: 1;
+  width: 18px;
+  height: 18px;
+  fill: currentColor;
+}
+
+.native-app-menu.is-open .app-more-button {
+  border-color: color-mix(in srgb, var(--accent) 42%, var(--line));
+  background: color-mix(in srgb, var(--accent-soft) 70%, var(--panel-solid));
+  color: var(--accent-ink);
+  transform: translateY(-1px);
+}
+
+.native-app-menu.is-open .app-more-button::after {
+  background: color-mix(in srgb, var(--accent) 7%, transparent);
+}
+
+.native-app-popover {
+  position: absolute;
+  z-index: 90;
+  top: calc(100% + 11px);
+  right: 0;
+  width: min(286px, calc(100vw - 28px));
+  padding: 8px;
+  border: 1px solid var(--line-strong);
+  border-radius: 16px;
+  background: color-mix(in srgb, var(--panel-solid) 94%, transparent);
+  box-shadow: 0 22px 60px rgba(7, 10, 18, 0.22), inset 0 1px rgba(255, 255, 255, 0.06);
+  backdrop-filter: blur(24px) saturate(1.18);
+  transform-origin: top right;
+  animation: native-app-menu-in 140ms cubic-bezier(0.2, 0.78, 0.25, 1);
+}
+
+.native-app-popover::before {
+  content: '';
+  position: absolute;
+  top: -5px;
+  right: 14px;
+  width: 9px;
+  height: 9px;
+  border-top: 1px solid var(--line-strong);
+  border-left: 1px solid var(--line-strong);
+  background: var(--panel-solid);
+  transform: rotate(45deg);
+}
+
+@keyframes native-app-menu-in {
+  from { opacity: 0; transform: translateY(-5px) scale(0.98); }
+  to { opacity: 1; transform: translateY(0) scale(1); }
+}
+
+.native-app-menu-heading {
+  display: flex;
+  min-height: 37px;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  padding: 2px 9px 8px;
+  color: var(--faint);
+  font-size: 8px;
+  font-weight: 800;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+}
+
+.native-app-menu-heading strong {
+  padding: 5px 7px;
+  border: 1px solid var(--line);
+  border-radius: 999px;
+  background: var(--panel-muted);
+  color: var(--muted);
+  font-size: 8px;
+  font-weight: 760;
+  letter-spacing: 0;
+  text-transform: none;
+  white-space: nowrap;
+}
+
+.native-app-menu-divider {
+  height: 1px;
+  margin: 5px 8px;
+  background: var(--line);
+}
+
+.native-app-menu-action {
+  display: grid;
+  width: 100%;
+  min-height: 58px;
+  grid-template-columns: 34px minmax(0, 1fr) auto;
+  align-items: center;
+  gap: 10px;
+  padding: 8px;
+  border: 0;
+  border-radius: 11px;
+  background: transparent;
+  color: var(--ink);
+  cursor: pointer;
+  text-align: left;
+  transition: background 140ms ease, transform 140ms ease;
+}
+
+.native-app-menu-action:hover,
+.native-app-menu-action:focus-visible {
+  background: color-mix(in srgb, var(--accent-soft) 58%, var(--panel-muted));
+}
+
+.native-app-menu-action:active {
+  transform: scale(0.985);
+}
+
+.native-app-menu-action:disabled {
+  cursor: wait;
+  opacity: 0.58;
+  transform: none;
+}
+
+.native-app-menu-action > span:nth-child(2) {
+  min-width: 0;
+}
+
+.native-app-menu-action strong,
+.native-app-menu-action small {
+  display: block;
+}
+
+.native-app-menu-action strong {
+  font-size: 10.5px;
+  font-weight: 750;
+}
+
+.native-app-menu-action small {
+  overflow: hidden;
+  margin-top: 3px;
+  color: var(--muted);
+  font-size: 8.5px;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.native-app-menu-icon {
+  display: grid;
+  width: 34px;
+  height: 34px;
+  place-items: center;
+  border: 1px solid color-mix(in srgb, var(--accent) 18%, var(--line));
+  border-radius: 9px;
+  background: color-mix(in srgb, var(--accent-soft) 58%, var(--panel));
+  color: var(--accent-ink);
+}
+
+.native-app-menu-icon svg {
+  width: 17px;
+  height: 17px;
+  fill: none;
+  stroke: currentColor;
+  stroke-width: 1.7;
+  stroke-linecap: round;
+  stroke-linejoin: round;
+}
+
+.native-app-menu-chevron {
+  color: var(--faint);
+  font-size: 18px;
+  line-height: 1;
+}
+
 .catalog-filter-groups {
   display: grid;
   min-width: 0;

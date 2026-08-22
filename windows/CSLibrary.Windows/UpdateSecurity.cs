@@ -13,6 +13,9 @@ internal static class UpdateSecurity
     internal const long MaximumArchiveSize = 1_073_741_824;
     internal const long MaximumExtractedSize = 2_147_483_648;
     internal const int MaximumArchiveEntries = 20_000;
+    // 2.1.1 is the last published package without Move Library. Keep it valid
+    // as a rollback target while requiring the helper from the next release on.
+    private static readonly StableSemanticVersion StorageHelperIntroducedVersion = new(2, 1, 2);
 
     // The corresponding private key is kept locally outside the repository and
     // release workflow. Only manifests signed by that off-repository key can
@@ -183,11 +186,14 @@ internal static class UpdateSecurity
             if (!File.Exists(path))
                 throw new InvalidDataException($"The extracted update is missing {relative}.");
         }
-        ValidatePackageFiles(root);
+        if (RequiresStorageHelper(expectedVersion)
+            && !File.Exists(ResolveContainedPath(root, "Tools/LatticeStorage.exe")))
+            throw new InvalidDataException("The extracted update is missing Tools/LatticeStorage.exe.");
+        ValidatePackageFiles(root, expectedVersion);
         return metadata;
     }
 
-    private static void ValidatePackageFiles(string root)
+    private static void ValidatePackageFiles(string root, StableSemanticVersion packageVersion)
     {
         var manifestPath = Path.Combine(root, "update-files.json");
         UpdatePackageFileManifest manifest;
@@ -252,12 +258,17 @@ internal static class UpdateSecurity
             if (!expected.Contains(required))
                 throw new InvalidDataException($"The package file manifest omits {required}.");
         }
+        if (RequiresStorageHelper(packageVersion) && !expected.Contains("Tools/LatticeStorage.exe"))
+            throw new InvalidDataException("The package file manifest omits Tools/LatticeStorage.exe.");
 
         var actual = EnumerateRegularPackageFiles(root);
         actual.Remove("update-files.json");
         if (!actual.SetEquals(expected))
             throw new InvalidDataException("The package contains unverified or missing files.");
     }
+
+    private static bool RequiresStorageHelper(StableSemanticVersion version) =>
+        version.CompareTo(StorageHelperIntroducedVersion) >= 0;
 
     private static HashSet<string> EnumerateRegularPackageFiles(string root)
     {

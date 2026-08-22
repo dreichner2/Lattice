@@ -50,6 +50,12 @@ choose a folder containing `CATALOG.md` and `library-taxonomy.json`. That
 location is saved, so the app does not have to remain beside the repository.
 Python 3 is currently required to run the loopback library service.
 
+The three-dot button sits inline with the library header controls, shows the installed version, and
+provides **Check for Updates…** and **Move Library to External Storage…**. The
+update check accepts only a stable release from the canonical Lattice GitHub
+repository that includes the expected `Lattice-macOS.zip`; available updates
+open their exact release page for download.
+
 ### PDF reading
 
 PDFs open in the same Lattice-owned reader on macOS and Windows, with:
@@ -59,7 +65,7 @@ PDFs open in the same Lattice-owned reader on macOS and Windows, with:
 - direct page entry, lazy thumbnails, and document outlines;
 - fit-page, fit-width, zoom, and rotation controls;
 - whole-document search with result navigation;
-- true fullscreen;
+- distraction-free focus mode and true fullscreen;
 - restored page, layout, zoom, and rotation; and
 - an in-reader Shelf control that returns to the existing collection state.
 
@@ -137,6 +143,28 @@ moving data. See the
 [clone-and-connect instructions](docs/SYNCTHING_SETUP.md) for the exact Windows,
 macOS, and Syncthing paths.
 
+### Move the library to an external drive
+
+Use **Move library to another drive…** from the Windows library menu or
+**File → Move Library to External Storage…** on macOS. Select the external
+drive or a folder on it; Lattice creates a `Lattice` folder there.
+
+Move Library requires the synchronized folder to be **Up to Date**. It pauses
+the established Syncthing folder, copies the complete checkout (including the
+hidden `.stfolder` marker), verifies every file with SHA-256, changes both
+Lattice and the same `cs-library-3b8290f24f15` Syncthing folder to the new path,
+resumes and scans it, and deletes the original only after the relocated folder
+is healthy. A failed copy or Syncthing redirect leaves the original in place.
+Lattice restores Syncthing's previous path and pause state when the API remains
+reachable; if that cannot be confirmed, it keeps both copies and reports the
+recovery steps instead of deleting either one.
+
+Keep the external drive connected while Lattice is open. If it is disconnected,
+Syncthing's missing-folder marker protection stops that folder instead of
+announcing every book as deleted. Reconnect the drive before opening books or
+resuming synchronization. On macOS, install `Lattice.app` outside the library
+(normally in `/Applications`) before moving the library itself.
+
 ## Windows app
 
 The Windows package provides the same shelf, search, study documents, EPUB
@@ -146,6 +174,11 @@ continuous, single-page, and two-page layouts, fit/zoom, rotation, restored
 position, true fullscreen, and a reliable return to the existing shelf. The
 package includes its own loopback-only server, so it does not require Python or
 .NET to be installed on your cousin's computer.
+
+Windows uses only its compact system title bar above the shared interface. The
+duplicate native Back, Home, Reload, Add, and More strip is removed; Add remains
+in the Lattice header, while update, storage, folder, library-switching, and
+reload actions are available from the same inline three-dot menu as macOS.
 
 For the fast path, install Git for Windows first, then run these commands in
 PowerShell:
@@ -162,7 +195,7 @@ cd "$HOME\Lattice"
 & ".\windows\setup\Install Lattice and Connect.cmd"
 ```
 
-The setup downloads and installs the pinned Lattice `v2.1.1` release for the
+The setup downloads and installs the pinned Lattice `v2.2.0` release for the
 current user, installs official Syncthing `2.1.3` through WinGet when needed,
 selects this clone as the library, configures the Mac mini hub and shared folder
 on the Windows side, starts both apps, and copies the Windows Syncthing Device ID.

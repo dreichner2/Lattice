@@ -48,6 +48,32 @@ and can be synchronized through Syncthing.
 └───────────────────────────────────────────────────────────────────────────┘
 ```
 
+## Storage relocation
+
+The native Windows and macOS shells expose Move Library, backed by the bundled
+`scripts/move_library.py` helper (a standalone `LatticeStorage.exe` in the
+Windows package). The helper treats relocation as a gated transaction:
+
+1. validate the complete library and reject linked or special filesystem
+   entries, nested destinations, insufficient capacity, and an app running from
+   inside the library;
+2. discover Syncthing's local configuration without exposing its API key,
+   authenticate only to a loopback HTTP API, verify the stable folder ID/path,
+   and require an up-to-date Send & Receive folder;
+3. pause that folder, copy to a unique destination-side staging directory,
+   flush writes, and compare SHA-256 for every source/destination file;
+4. atomically publish the destination directory, patch the existing Syncthing
+   folder path, restore its pause state, rescan, and require a healthy status;
+   and
+5. remove the source only after those gates pass. Before path activation,
+   failures remove only operation-owned staging data. After activation, failures
+   attempt to restore Syncthing's original path and preserve both verified
+   copies if that rollback cannot be confirmed.
+
+Reader databases remain in their existing per-user application-support paths;
+they are not moved or synchronized. The helper never edits `config.xml`, stores
+the Syncthing API key, or sends it beyond the configured loopback endpoint.
+
 ## Product identity and compatibility IDs
 
 **Lattice** is the visible product and Syncthing label. Existing internal
@@ -175,6 +201,12 @@ library folder. Python 3 is still a runtime dependency for the local service.
 app starts a PyInstaller-built `LatticeServer.exe`, verifies readiness through
 the same protocol/library identity contract, and navigates only to the loopback
 service. External HTTP links open in the system browser.
+
+The host keeps the standard compact Windows caption and does not render a
+second native command bar. A document-start WebView2 message bridge exposes a
+small allowlist of desktop actions to the shared inline header menu: update,
+Move Library, open/switch library, and reload. Messages are accepted only while
+the WebView is on the owned loopback origin.
 
 The Windows service subclasses the shared Python server to add Windows-safe
 open/reveal actions and a WAL-backed mirror of `cs-library:*` web-reader state.

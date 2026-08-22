@@ -88,7 +88,19 @@ const state = {
 };
 
 const elements = {
+  appActionsMenu: $("#appActionsMenu"),
+  appCheckUpdatesButton: $("#appCheckUpdatesButton"),
+  appCheckUpdatesDetail: $("#appCheckUpdatesDetail"),
+  appCheckUpdatesTitle: $("#appCheckUpdatesTitle"),
+  appChooseLibraryButton: $("#appChooseLibraryButton"),
+  appLibraryActionsDivider: $("#appLibraryActionsDivider"),
+  appMoreButton: $("#appMoreButton"),
+  appMoveLibraryButton: $("#appMoveLibraryButton"),
+  appOpenLibraryButton: $("#appOpenLibraryButton"),
+  appPlatformLabel: $("#appPlatformLabel"),
+  appReloadButton: $("#appReloadButton"),
   appShell: $(".app-shell"),
+  appVersionLabel: $("#appVersionLabel"),
   addButton: $("#addButton"),
   addFilesInput: $("#addFilesInput"),
   aiReadiness: $("#aiReadiness"),
@@ -117,6 +129,7 @@ const elements = {
   menuButton: $("#menuButton"),
   materialNav: $("#materialNav"),
   mobileScrim: $("#mobileScrim"),
+  nativeAppMenu: $("#nativeAppMenu"),
   pageTitle: $("#pageTitle"),
   random: $("#randomButton"),
   readerBack: $("#readerBackButton"),
@@ -1119,7 +1132,10 @@ function showReaderShell(title, kicker, mode) {
   elements.readerToc.hidden = true;
   elements.readerSettings.hidden = true;
   elements.readerBookmark.hidden = true;
-  elements.readerFocus.hidden = mode !== "epub";
+  // The PDF reader supplies its own visible focus control. Keep this bridge
+  // button available in the hidden host toolbar so older native app menus can
+  // still invoke the same shared focus action.
+  elements.readerFocus.hidden = mode !== "epub" && mode !== "pdf";
   elements.readerFocus.setAttribute("aria-pressed", "false");
   elements.readerFocus.setAttribute("aria-label", "Focus on the page");
   elements.readerFocus.title = "Focus on the page";
@@ -1318,6 +1334,12 @@ function handlePdfReaderMessage(event) {
     sendPdfReaderMessage("focus");
   } else if (message.type === "state") {
     persistPdfReaderState(message.path, message.state);
+  } else if (message.type === "focus-mode") {
+    const focused = message.active === true;
+    elements.readerFocus.setAttribute("aria-pressed", String(focused));
+    elements.readerFocus.setAttribute("aria-label", focused ? "Show PDF controls" : "Focus on the PDF");
+    elements.readerFocus.title = focused ? "Show PDF controls" : "Focus on the PDF";
+    announce(focused ? "Focus mode on — press Escape to show controls" : "Reader controls shown");
   } else if (message.type === "close") {
     if (message.fullscreen === false) finishReaderClose();
     else sendPdfReaderMessage("prepare-close");
@@ -1665,6 +1687,21 @@ function setEpubFocus(focused, { announceChange = true } = {}) {
   }));
   if (announceChange) announce(next ? "Focus mode on — press Escape to show controls" : "Reader controls shown");
 }
+
+function toggleActiveReaderFocus() {
+  if (!document.body.classList.contains("reader-open")) return false;
+  if (state.readerMode === "pdf") {
+    sendPdfReaderMessage("toggle-focus");
+    return true;
+  }
+  if (state.readerMode === "epub") {
+    setEpubFocus(!state.epubFocused);
+    return true;
+  }
+  return false;
+}
+
+window.csLibraryToggleReaderFocus = toggleActiveReaderFocus;
 
 function updateEpubLocation() {
   const chapter = currentEpubChapter();
@@ -2695,6 +2732,122 @@ function clearFilters() {
   renderCards();
 }
 
+function setNativeAppMenuOpen(open) {
+  if (elements.nativeAppMenu.hidden) return;
+  elements.appActionsMenu.hidden = !open;
+  elements.appMoreButton.setAttribute("aria-expanded", String(open));
+  elements.nativeAppMenu.classList.toggle("is-open", open);
+  if (open) requestAnimationFrame(() => elements.appCheckUpdatesButton.focus());
+}
+
+async function initializeNativeAppMenu() {
+  if (typeof window.csLibraryNativeCall !== "function") return;
+  try {
+    const info = await window.csLibraryNativeCall("app.info");
+    if (!info || !["macOS", "windows"].includes(info.platform) || typeof info.version !== "string") return;
+    // Builds from before the shared Windows menu shipped did not include a
+    // capability list. Preserve their existing macOS Update and Move Library
+    // actions while keeping every additional desktop action opt-in.
+    const legacyCapabilities = info.platform === "macOS"
+      ? ["app.checkForUpdates", "app.moveLibrary"]
+      : [];
+    const capabilities = new Set(
+      Array.isArray(info.capabilities) ? info.capabilities : legacyCapabilities,
+    );
+    const actionButtons = new Map([
+      ["app.checkForUpdates", elements.appCheckUpdatesButton],
+      ["app.moveLibrary", elements.appMoveLibraryButton],
+      ["app.openLibraryFolder", elements.appOpenLibraryButton],
+      ["app.chooseLibrary", elements.appChooseLibraryButton],
+      ["app.reload", elements.appReloadButton],
+    ]);
+    actionButtons.forEach((button, action) => { button.hidden = !capabilities.has(action); });
+    const hasLibraryActions = [
+      elements.appOpenLibraryButton,
+      elements.appChooseLibraryButton,
+      elements.appReloadButton,
+    ].some(button => !button.hidden);
+    elements.appLibraryActionsDivider.hidden = !hasLibraryActions;
+    elements.appPlatformLabel.textContent = info.platform === "windows"
+      ? "Lattice for Windows"
+      : "Lattice for macOS";
+    elements.appVersionLabel.textContent = `Version ${info.version}`;
+    elements.nativeAppMenu.hidden = ![...actionButtons.values()].some(button => !button.hidden);
+    applyNativeAppStatus(info.status);
+  } catch {
+    // A regular browser has no native desktop actions to expose.
+  }
+}
+
+function applyNativeAppStatus(status) {
+  if (!status || typeof status !== "object") return;
+  if (typeof status.version === "string") {
+    elements.appVersionLabel.textContent = `Version ${status.version}`;
+  }
+  const busy = status.busy === true;
+  elements.appCheckUpdatesButton.disabled = busy;
+  if (typeof status.libraryActionsEnabled === "boolean") {
+    elements.appMoveLibraryButton.disabled = !status.libraryActionsEnabled || busy;
+    elements.appOpenLibraryButton.disabled = !status.libraryActionsEnabled;
+    elements.appChooseLibraryButton.disabled = !status.libraryActionsEnabled;
+  }
+  if (typeof status.browserControlsEnabled === "boolean") {
+    elements.appReloadButton.disabled = !status.browserControlsEnabled;
+  }
+  if (busy && typeof status.text === "string" && status.text) {
+    elements.appCheckUpdatesTitle.textContent = status.text;
+    elements.appCheckUpdatesDetail.textContent = status.progressVisible
+      ? (status.progressIndeterminate ? "Working securely…" : `${Math.round(Number(status.progress) || 0)}% complete`)
+      : "Working securely…";
+    return;
+  }
+  elements.appCheckUpdatesTitle.textContent = "Check for updates";
+  elements.appCheckUpdatesDetail.textContent = status.tone === "updateAvailable" && status.text
+    ? status.text
+    : "Look for a newer release";
+}
+
+async function invokeNativeAppAction(action) {
+  setNativeAppMenuOpen(false);
+  try {
+    await window.csLibraryNativeCall(action);
+  } catch (error) {
+    announce(error?.message || "That Lattice action is unavailable.", true);
+  }
+}
+
+function bindNativeAppMenuEvents() {
+  elements.appMoreButton.addEventListener("click", (event) => {
+    event.stopPropagation();
+    setNativeAppMenuOpen(elements.appActionsMenu.hidden);
+  });
+  elements.appActionsMenu.addEventListener("click", event => event.stopPropagation());
+  elements.appCheckUpdatesButton.addEventListener("click", () => {
+    void invokeNativeAppAction("app.checkForUpdates");
+  });
+  elements.appMoveLibraryButton.addEventListener("click", () => {
+    void invokeNativeAppAction("app.moveLibrary");
+  });
+  elements.appOpenLibraryButton.addEventListener("click", () => {
+    void invokeNativeAppAction("app.openLibraryFolder");
+  });
+  elements.appChooseLibraryButton.addEventListener("click", () => {
+    void invokeNativeAppAction("app.chooseLibrary");
+  });
+  elements.appReloadButton.addEventListener("click", () => {
+    void invokeNativeAppAction("app.reload");
+  });
+  window.addEventListener("lattice-native-status", event => applyNativeAppStatus(event.detail));
+  document.addEventListener("click", (event) => {
+    if (!elements.nativeAppMenu.contains(event.target)) setNativeAppMenuOpen(false);
+  });
+  document.addEventListener("keydown", (event) => {
+    if (event.key !== "Escape" || elements.appActionsMenu.hidden) return;
+    setNativeAppMenuOpen(false);
+    elements.appMoreButton.focus();
+  });
+}
+
 function applyTheme(theme) {
   document.documentElement.dataset.theme = theme;
   elements.theme.textContent = theme === "dark" ? "☼" : "◒";
@@ -2712,6 +2865,7 @@ function initializeTheme() {
 
 function bindEvents() {
   bindImportEvents();
+  bindNativeAppMenuEvents();
   window.addEventListener("message", handlePdfReaderMessage);
   window.addEventListener("cs-library-reader-restore", event => {
     const saved = event.detail;
@@ -2773,7 +2927,7 @@ function bindEvents() {
   elements.readerToc.addEventListener("click", () => toggleEpubPanel("toc"));
   elements.readerSettings.addEventListener("click", () => toggleEpubPanel("settings"));
   elements.readerBookmark.addEventListener("click", toggleEpubBookmark);
-  elements.readerFocus.addEventListener("click", () => setEpubFocus(!state.epubFocused));
+  elements.readerFocus.addEventListener("click", toggleActiveReaderFocus);
   elements.epubFocusExit.addEventListener("click", () => setEpubFocus(false));
   elements.readerPdf.addEventListener("load", () => {
     if (state.readerMode === "pdf" && document.body.classList.contains("reader-open")) {
@@ -2991,6 +3145,7 @@ async function start() {
     ),
   }) || null;
   bindEvents();
+  await initializeNativeAppMenu();
   setLiveStatus("waiting", "Connecting…");
   try {
     const response = await fetch("/api/library", { cache: "no-store" });

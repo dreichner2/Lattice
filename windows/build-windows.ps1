@@ -77,7 +77,7 @@ try {
 
   if (-not $SkipTests) {
     Write-Host "Running portable checks..."
-    python -m py_compile scripts/library_ui.py scripts/cross_platform_server.py windows/server_bootstrap.py windows/generate_icon.py
+    python -m py_compile scripts/library_ui.py scripts/cross_platform_server.py scripts/move_library.py windows/server_bootstrap.py windows/generate_icon.py
     Assert-NativeSuccess "Python compilation"
     python -m unittest discover -s tests -p "test_*.py" -v
     Assert-NativeSuccess "Python tests"
@@ -123,6 +123,18 @@ try {
     (Join-Path $ScriptRoot "server_bootstrap.py")
   Assert-NativeSuccess "Standalone service build"
 
+  Write-Host "Building the standalone storage relocation helper..."
+  python -m PyInstaller `
+    --noconfirm `
+    --clean `
+    --onefile `
+    --name LatticeStorage `
+    --distpath $ServerRoot `
+    --workpath (Join-Path $BuildRoot "pyinstaller-storage-work") `
+    --specpath (Join-Path $BuildRoot "pyinstaller-spec") `
+    (Join-Path $RepoRoot "scripts\move_library.py")
+  Assert-NativeSuccess "Standalone storage helper build"
+
   Write-Host "Publishing the Windows desktop application..."
   Remove-Item $PublishRoot -Recurse -Force -ErrorAction SilentlyContinue
   dotnet publish $Project `
@@ -138,6 +150,8 @@ try {
 
   New-Item (Join-Path $PublishRoot "Server") -ItemType Directory -Force | Out-Null
   Copy-Item (Join-Path $ServerRoot "LatticeServer.exe") (Join-Path $PublishRoot "Server\LatticeServer.exe") -Force
+  New-Item (Join-Path $PublishRoot "Tools") -ItemType Directory -Force | Out-Null
+  Copy-Item (Join-Path $ServerRoot "LatticeStorage.exe") (Join-Path $PublishRoot "Tools\LatticeStorage.exe") -Force
 
   Write-Host "Assembling the portable library..."
   Remove-Item $PackageRoot -Recurse -Force -ErrorAction SilentlyContinue
@@ -213,6 +227,7 @@ try {
 
   if (-not (Test-Path (Join-Path $PackageRoot "Lattice.exe"))) { throw "Windows app was not published" }
   if (-not (Test-Path (Join-Path $PackageRoot "Server\LatticeServer.exe"))) { throw "Local service was not bundled" }
+  if (-not (Test-Path (Join-Path $PackageRoot "Tools\LatticeStorage.exe"))) { throw "Storage helper was not bundled" }
   if (-not (Test-Path (Join-Path $PackageRoot "Lattice.ico"))) { throw "Windows icon was not bundled" }
   if (-not (Test-Path (Join-Path $PackageRoot ".stignore"))) { throw "Syncthing rules were not bundled" }
   foreach ($file in $RequiredRootFiles) {
@@ -248,7 +263,7 @@ try {
       $entry = "native/$file"
       if ($EntryNames -notcontains $entry) { throw "Native file is missing from the archive: $entry" }
     }
-    foreach ($entry in @("Lattice.exe", "Lattice.ico", "Server/LatticeServer.exe", "Install Lattice.ps1", "update-package.json", "update-files.json")) {
+    foreach ($entry in @("Lattice.exe", "Lattice.ico", "Server/LatticeServer.exe", "Tools/LatticeStorage.exe", "Install Lattice.ps1", "update-package.json", "update-files.json")) {
       if ($EntryNames -notcontains $entry) { throw "Runtime file is missing from the archive: $entry" }
     }
     foreach ($directory in @($Layout.content_directories)) {

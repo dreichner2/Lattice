@@ -30,6 +30,8 @@ final class ReaderBridge: NSObject, WKScriptMessageHandlerWithReply {
     private let store: ReaderStore
     private var activeSessionID: String?
     private var activeDocumentID: String?
+    var appInfoProvider: (() -> [String: Any])?
+    var appActionHandler: ((String) -> Void)?
     weak var coordinator: ImmersiveReaderCoordinator?
     weak var webView: WKWebView?
 
@@ -74,6 +76,15 @@ final class ReaderBridge: NSObject, WKScriptMessageHandlerWithReply {
         switch action {
         case "ping":
             return ["ok": true, "protocolVersion": LibraryIdentity.protocolVersion]
+
+        case "app.info":
+            guard let appInfoProvider else { throw BridgeError.unavailable("app.info") }
+            return appInfoProvider()
+
+        case "app.checkForUpdates", "app.moveLibrary":
+            guard let appActionHandler else { throw BridgeError.unavailable(action) }
+            appActionHandler(action)
+            return ["started": true]
 
         case "document.upsert":
             let document = try document(from: payload)
@@ -261,12 +272,14 @@ final class ReaderBridge: NSObject, WKScriptMessageHandlerWithReply {
 private enum BridgeError: LocalizedError {
     case missing(String)
     case invalid(String)
+    case unavailable(String)
     case unknown(String)
 
     var errorDescription: String? {
         switch self {
         case .missing(let key): return "Missing bridge value: \(key)"
         case .invalid(let key): return "Invalid bridge value: \(key)"
+        case .unavailable(let action): return "Native app action is unavailable: \(action)"
         case .unknown(let action): return "Unknown reader bridge action: \(action)"
         }
     }

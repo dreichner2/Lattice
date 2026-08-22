@@ -22,7 +22,7 @@ cd "$HOME\Lattice"
 & ".\windows\setup\Install Lattice and Connect.cmd"
 ```
 
-The script validates the existing scaffold, installs the pinned Lattice `v2.1.1`
+The script validates the existing scaffold, installs the pinned Lattice `v2.2.0`
 package for the current user, installs official Syncthing `2.1.3` through
 WinGet when needed, saves the clone as Lattice's library, and configures this
 exact Syncthing folder on the Windows side:
@@ -79,6 +79,36 @@ protected `/Library/Application Support/CSLibraryHub/Library` path rather than
 the Git checkout; do not move that service or replace its folder ID. Existing
 devices that still display the earlier **CS Library** label can safely rename
 only the label to **Lattice**.
+
+## Move a client library to external storage
+
+Do not drag individual books out of the synchronized folder. Syncthing can
+interpret that as deletion. On a Windows or macOS client, use Lattice's native
+**Move Library** command instead:
+
+1. connect the destination drive and wait for Syncthing to show **Up to Date**;
+2. in Windows, open the library-options menu and choose **Move library to
+   another drive…**; on macOS choose **File → Move Library to External
+   Storage…**;
+3. select the drive or a destination folder and keep it connected until Lattice
+   reports success; and
+4. let Lattice reopen the relocated library before removing the drive.
+
+The command pauses folder `cs-library-3b8290f24f15`, copies the complete
+library and `.stfolder` through a temporary directory on the destination,
+verifies every destination file against its source SHA-256, changes the path on
+that same Syncthing folder record, resumes and rescans it, and then removes the
+old directory. It never copies the Syncthing API key or configuration into the
+library. If any preflight, copy, verification, configuration, or post-scan gate
+fails, the original remains intact. Lattice restores Syncthing's old path and
+pause state when its API remains reachable. If restoration cannot be confirmed,
+both copies are retained and the error identifies the path that needs checking.
+
+An unplugged drive makes `.stfolder` unavailable, so Syncthing stops the folder
+instead of treating the whole library as deleted. Reconnect it at the same path;
+if Windows assigned a different drive letter, use **Choose another library…**
+to select its `Lattice` folder, then update the Syncthing path before resuming.
+The Mac mini hub is deliberately excluded from this client workflow.
 
 ## What a clean clone already contains
 

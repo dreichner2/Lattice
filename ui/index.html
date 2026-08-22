@@ -109,6 +109,74 @@
             </div>
             <button class="topbar-add-button" id="addButton" type="button"><span aria-hidden="true">＋</span> Add</button>
             <button class="icon-button" id="themeButton" type="button" aria-label="Switch color theme">◒</button>
+            <div class="native-app-menu" id="nativeAppMenu" hidden>
+              <button class="icon-button app-more-button" id="appMoreButton" type="button"
+                      aria-label="Lattice options" aria-haspopup="menu" aria-expanded="false">
+                <svg viewBox="0 0 24 24" aria-hidden="true" focusable="false">
+                  <circle cx="5" cy="12" r="1.7"></circle>
+                  <circle cx="12" cy="12" r="1.7"></circle>
+                  <circle cx="19" cy="12" r="1.7"></circle>
+                </svg>
+              </button>
+              <div class="native-app-popover" id="appActionsMenu" role="menu"
+                   aria-label="Lattice options" hidden>
+                <div class="native-app-menu-heading">
+                  <span id="appPlatformLabel">Lattice desktop</span>
+                  <strong id="appVersionLabel">Version —</strong>
+                </div>
+                <button class="native-app-menu-action" id="appCheckUpdatesButton" type="button" role="menuitem">
+                  <span class="native-app-menu-icon" aria-hidden="true">
+                    <svg viewBox="0 0 24 24" focusable="false">
+                      <path d="M20 7v5h-5"></path>
+                      <path d="M19 12a7 7 0 1 1-2-5"></path>
+                    </svg>
+                  </span>
+                  <span><strong id="appCheckUpdatesTitle">Check for updates</strong><small id="appCheckUpdatesDetail">Look for a newer release</small></span>
+                  <span class="native-app-menu-chevron" aria-hidden="true">›</span>
+                </button>
+                <button class="native-app-menu-action" id="appMoveLibraryButton" type="button" role="menuitem">
+                  <span class="native-app-menu-icon" aria-hidden="true">
+                    <svg viewBox="0 0 24 24" focusable="false">
+                      <path d="M4 7.5h16v10H4z"></path>
+                      <path d="M8 12h8"></path>
+                      <path d="m13 9 3 3-3 3"></path>
+                    </svg>
+                  </span>
+                  <span><strong>Move library</strong><small>Relocate safely to external storage</small></span>
+                  <span class="native-app-menu-chevron" aria-hidden="true">›</span>
+                </button>
+                <div class="native-app-menu-divider" id="appLibraryActionsDivider" role="separator" hidden></div>
+                <button class="native-app-menu-action" id="appOpenLibraryButton" type="button" role="menuitem" hidden>
+                  <span class="native-app-menu-icon" aria-hidden="true">
+                    <svg viewBox="0 0 24 24" focusable="false">
+                      <path d="M3.5 7.5h6l2-2h9v13h-17z"></path>
+                    </svg>
+                  </span>
+                  <span><strong>Open library folder</strong><small>Show the synchronized files</small></span>
+                  <span class="native-app-menu-chevron" aria-hidden="true">›</span>
+                </button>
+                <button class="native-app-menu-action" id="appChooseLibraryButton" type="button" role="menuitem" hidden>
+                  <span class="native-app-menu-icon" aria-hidden="true">
+                    <svg viewBox="0 0 24 24" focusable="false">
+                      <path d="M4 6.5h6l2 2h8v10H4z"></path>
+                      <path d="m9 14 2 2 4-4"></path>
+                    </svg>
+                  </span>
+                  <span><strong>Choose another library</strong><small>Switch to a different Lattice folder</small></span>
+                  <span class="native-app-menu-chevron" aria-hidden="true">›</span>
+                </button>
+                <button class="native-app-menu-action" id="appReloadButton" type="button" role="menuitem" hidden>
+                  <span class="native-app-menu-icon" aria-hidden="true">
+                    <svg viewBox="0 0 24 24" focusable="false">
+                      <path d="M20 7v5h-5"></path>
+                      <path d="M19 12a7 7 0 1 1-2-5"></path>
+                    </svg>
+                  </span>
+                  <span><strong>Reload Lattice</strong><small>Refresh the local interface</small></span>
+                  <span class="native-app-menu-chevron" aria-hidden="true">›</span>
+                </button>
+              </div>
+            </div>
           </div>
         </header>
 

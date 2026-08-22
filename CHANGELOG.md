@@ -1,5 +1,29 @@
 # Changelog
 
+## 2.2.0 — 2026-08-22
+
+### Added
+
+- EPUB-style focus mode in the shared PDF reader on macOS, Windows, and the
+  browser. The PDF page keeps its reading position while the header, controls,
+  status bar, and navigation drawer recede; press `F` to toggle or `Escape` to
+  restore the controls.
+- Native **Move Library** commands on Windows and macOS relocate the complete
+  library to external storage, preserve the `.stfolder` marker and stable
+  Syncthing folder ID, verify every copied file, roll back failed redirects, and
+  remove the original only after a healthy post-move scan.
+- An inline three-dot menu beside the macOS library header controls shows the
+  installed version and provides both update checking and external-storage relocation.
+- The Windows app removes its duplicate 58-pixel navigation/command strip and
+  uses the compact system caption plus the shared in-app Add and three-dot controls.
+
+### Fixed
+
+- A newly activated Windows version can check for another update immediately;
+  reopening the window is no longer required.
+- The activated Windows update label now reads `Version <ID>` and remains an
+  enabled update-check command.
+
 ## 2.1.1 — 2026-08-22
 
 ### Fixed

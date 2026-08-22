@@ -108,7 +108,7 @@ function Assert-PackageFileManifest([string]$Root) {
     ) { throw "Package file failed verification: $relative" }
     $expected[$relative] = $true
   }
-  foreach ($required in @("Lattice.exe", "Lattice.ico", "Server/LatticeServer.exe", "ui/index.html", "ui/app.js", "update-package.json")) {
+  foreach ($required in @("Lattice.exe", "Lattice.ico", "Server/LatticeServer.exe", "Tools/LatticeStorage.exe", "ui/index.html", "ui/app.js", "update-package.json")) {
     if (-not $expected.ContainsKey($required)) { throw "The package file manifest omits $required" }
   }
   $actual = @{}
@@ -278,6 +278,7 @@ if (-not (Test-Path -LiteralPath $VersionDestination -PathType Container)) {
     $StagedMetadata = Join-Path $Staging "update-package.json"
     if (-not (Test-Path -LiteralPath $StagedExecutable -PathType Leaf)) { throw "Lattice.exe was not staged" }
     if (-not (Test-Path -LiteralPath (Join-Path $Staging "Server\LatticeServer.exe") -PathType Leaf)) { throw "LatticeServer.exe was not staged" }
+    if (-not (Test-Path -LiteralPath (Join-Path $Staging "Tools\LatticeStorage.exe") -PathType Leaf)) { throw "LatticeStorage.exe was not staged" }
     if (-not (Test-Path -LiteralPath (Join-Path $Staging "ui\index.html") -PathType Leaf)) { throw "The Lattice interface was not staged" }
     if ((Get-Content -LiteralPath $StagedMetadata -Raw | ConvertFrom-Json).version -cne $Version) { throw "The staged package version changed" }
     Assert-LatticeIcon $StagedIcon
@@ -293,6 +294,7 @@ $Executable = Join-Path $VersionDestination "Lattice.exe"
 $Icon = Join-Path $VersionDestination "Lattice.ico"
 if (-not (Test-Path -LiteralPath $Executable -PathType Leaf)) { throw "The versioned Lattice executable is missing" }
 if (-not (Test-Path -LiteralPath (Join-Path $VersionDestination "Server\LatticeServer.exe") -PathType Leaf)) { throw "The versioned Lattice server is missing" }
+if (-not (Test-Path -LiteralPath (Join-Path $VersionDestination "Tools\LatticeStorage.exe") -PathType Leaf)) { throw "The versioned Lattice storage helper is missing" }
 if ((Get-Content -LiteralPath (Join-Path $VersionDestination "update-package.json") -Raw | ConvertFrom-Json).version -cne $Version) {
   throw "An existing version directory has inconsistent metadata; refusing to overwrite it."
 }

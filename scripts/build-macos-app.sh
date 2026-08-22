@@ -8,6 +8,7 @@ app_path="$library_root/Lattice.app"
 native_root="$library_root/native"
 ui_root="$library_root/ui"
 server_source="$library_root/scripts/library_ui.py"
+storage_source="$library_root/scripts/move_library.py"
 build_root=$(/usr/bin/mktemp -d "${TMPDIR:-/tmp}/cs-library-app.XXXXXX")
 staged_app="$build_root/Lattice.app"
 previous_app="$build_root/Previous Lattice.app"
@@ -27,6 +28,7 @@ required_sources=(
   LibraryIdentity.swift
   ReaderStore.swift
   ReaderBridge.swift
+  MacUpdateChecker.swift
   CSLibraryApp.swift
   ImmersiveReaderCoordinator.swift
   NativePDFReaderController.swift
@@ -44,6 +46,7 @@ for resource in \
   "$native_root/LibraryWorkspace.js" \
   "$native_root/Info.plist" \
   "$server_source" \
+  "$storage_source" \
   "$ui_root/index.html" \
   "$ui_root/app.js" \
   "$ui_root/styles.css" \
@@ -66,6 +69,7 @@ done
 /bin/cp "$native_root/Info.plist" "$staged_app/Contents/Info.plist"
 /bin/cp -R "$ui_root" "$staged_app/Contents/Resources/ui"
 /bin/cp "$server_source" "$staged_app/Contents/Resources/server/library_ui.py"
+/bin/cp "$storage_source" "$staged_app/Contents/Resources/server/move_library.py"
 /bin/cp "$native_root/ImmersiveEPUB.js" "$staged_app/Contents/Resources/ImmersiveEPUB.js"
 /bin/cp "$native_root/LibraryWorkspace.js" "$staged_app/Contents/Resources/LibraryWorkspace.js"
 
@@ -82,6 +86,7 @@ target_arch=$(/usr/bin/uname -m)
   "$native_root/LibraryIdentity.swift" \
   "$native_root/ReaderStore.swift" \
   "$native_root/ReaderBridge.swift" \
+  "$native_root/MacUpdateChecker.swift" \
   "$native_root/CSLibraryApp.swift" \
   "$native_root/ImmersiveReaderCoordinator.swift" \
   "$native_root/NativePDFReaderController.swift" \
@@ -123,6 +128,7 @@ for bundled in \
   "$staged_app/Contents/Resources/ui/pdf-reader-lifecycle.mjs" \
   "$staged_app/Contents/Resources/ui/vendor/pdfjs/build/pdf.min.mjs" \
   "$staged_app/Contents/Resources/server/library_ui.py" \
+  "$staged_app/Contents/Resources/server/move_library.py" \
   "$staged_app/Contents/Resources/ImmersiveEPUB.js" \
   "$staged_app/Contents/Resources/LibraryWorkspace.js"; do
   [[ -f "$bundled" ]] || { print -u2 "Staged app is incomplete: $bundled"; exit 1; }

@@ -32,7 +32,7 @@ You can also double-click `windows\setup\Install Lattice and Connect.cmd` after
 cloning. The script:
 
 1. validates the clone and its complete empty library scaffold;
-2. downloads the pinned public `v2.1.1` release and verifies its SHA-256;
+2. downloads the pinned public `v2.2.0` release and verifies its SHA-256;
 3. installs Lattice for the current user under
    `%LOCALAPPDATA%\Programs\Lattice`;
 4. installs official Syncthing `2.1.3` with WinGet when needed;
@@ -56,7 +56,7 @@ powershell.exe -NoProfile -ExecutionPolicy Bypass -File .\windows\setup\Setup-La
 ```
 
 The pinned release can also be downloaded directly from
-[`v2.1.1/Lattice-Windows-win-x64.zip`](https://github.com/dreichner2/Lattice/releases/download/v2.1.1/Lattice-Windows-win-x64.zip).
+[`v2.2.0/Lattice-Windows-win-x64.zip`](https://github.com/dreichner2/Lattice/releases/download/v2.2.0/Lattice-Windows-win-x64.zip).
 See [`windows/setup/README.md`](setup/README.md) for offline/test inputs and the
 full switch list.
 
@@ -79,12 +79,32 @@ Do not add `books/`, `papers/`, or `lectures/` as separate Syncthing folders.
 The repository root is the one shared folder, and the checked-in `.stignore`
 keeps the public Git source separate from private payloads and sidecars.
 
+## Move the library to another drive
+
+Wait until Syncthing reports **Up to Date**, open Lattice's library-options
+menu, and choose **Move library to another drive…**. Select the external drive
+or a folder on it. Lattice pauses the current folder, copies the whole library
+to a new `Lattice` directory, verifies each file, redirects both Lattice and the
+same Syncthing folder ID, resumes and scans it, then removes the original copy.
+
+Keep the drive connected until the library reopens. If any copy, hash, API, or
+post-scan check fails, Lattice preserves the original and restores Syncthing's
+old path when its API remains reachable. If restoration cannot be confirmed, it
+keeps both copies and reports the failure. Do not manually move individual
+books: their disappearance can be synchronized as deletion.
+
 ## Add material and optional Codex details
 
-Use **Add materials…** in the native toolbar or the Add control in the library,
-or drag a PDF, EPUB, or TXT file from Explorer. The shared import flow validates
+Use the **Add** control in the Lattice header, or drag a PDF, EPUB, or TXT file
+from Explorer. The shared import flow validates
 the file, creates a collision-safe name and adjacent `.library.json` sidecar,
 and synchronizes both through Syncthing.
+
+The Windows host uses the standard compact system title bar; it does not add a
+second navigation toolbar above Lattice. Update, Move Library, folder, library
+switching, and reload actions live in the header's three-dot menu. Back/home
+navigation stays inside the shelf and reader, and the live shelf refreshes
+automatically.
 
 The shelf, reader, search, import, subject chooser, and manual metadata editor
 all work without Codex. Codex enrichment is optional. If the current Windows
@@ -133,6 +153,10 @@ or old executable redirects to the healthy candidate. Once promotion is
 durable, the candidate closes the exact superseded Lattice window; a failed
 candidate leaves the current version open. One previous healthy version is
 retained.
+
+After an update activates, the menu shows **Version &lt;ID&gt;**. That item remains
+enabled: selecting it performs another signed update check without requiring
+the newly updated window to be closed and reopened.
 
 This release-manifest signature is an application update control, not a Windows
 Authenticode signature. The current executable is not Authenticode-signed, so

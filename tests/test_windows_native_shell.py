@@ -22,7 +22,9 @@ WINDOW_CODE = WINDOWS / "MainWindow.xaml.cs"
 UPDATE_CANDIDATE_CODE = WINDOWS / "UpdateCandidateSession.cs"
 UPDATE_MODELS_CODE = WINDOWS / "UpdateModels.cs"
 UPDATE_SERVICE_CODE = WINDOWS / "UpdateService.cs"
+LIBRARY_MOVE_CODE = WINDOWS / "LibraryMoveClient.cs"
 WINDOWS_BUILD = ROOT / "windows" / "build-windows.ps1"
+WINDOWS_INSTALLER = ROOT / "windows" / "install.ps1"
 XAML_NAME = "{http://schemas.microsoft.com/winfx/2006/xaml}Name"
 XAML_KEY = "{http://schemas.microsoft.com/winfx/2006/xaml}Key"
 
@@ -46,7 +48,9 @@ class WindowsNativeShellTests(unittest.TestCase):
         cls.update_candidate_code = UPDATE_CANDIDATE_CODE.read_text(encoding="utf-8")
         cls.update_models_code = UPDATE_MODELS_CODE.read_text(encoding="utf-8")
         cls.update_service_code = UPDATE_SERVICE_CODE.read_text(encoding="utf-8")
+        cls.library_move_code = LIBRARY_MOVE_CODE.read_text(encoding="utf-8")
         cls.windows_build = WINDOWS_BUILD.read_text(encoding="utf-8")
+        cls.windows_installer = WINDOWS_INSTALLER.read_text(encoding="utf-8")
 
     def test_native_palette_matches_shared_lattice_surface(self) -> None:
         keyed_values = {
@@ -63,7 +67,7 @@ class WindowsNativeShellTests(unittest.TestCase):
         self.assertIn("Georgia", self.app_xaml)
         self.assertNotIn("#0D0F14", self.window_xaml)
 
-    def test_command_bar_and_accessible_loading_state_are_native(self) -> None:
+    def test_duplicate_command_bar_is_removed_and_loading_state_stays_native(self) -> None:
         for name in (
             "BackButton",
             "HomeButton",
@@ -72,7 +76,14 @@ class WindowsNativeShellTests(unittest.TestCase):
             "LibraryPathButton",
             "AddMaterialsButton",
             "MoreButton",
+            "MoveLibraryMenuItem",
             "UpdateMenuItem",
+            "TopChrome",
+            "TopChromeRow",
+        ):
+            self.assertNotIn(f'x:Name="{name}"', self.window_xaml)
+
+        for name in (
             "UpdateProgress",
             "LoadingOverlay",
             "LoadingCard",
@@ -89,6 +100,8 @@ class WindowsNativeShellTests(unittest.TestCase):
         )
         self.assertIn('AutomationProperties.LiveSetting="Polite"', self.window_xaml)
         self.assertIn('KeyboardNavigation.TabNavigation="Cycle"', self.window_xaml)
+        self.assertNotIn('Height="58"', self.window_xaml)
+        self.assertIn('Height="2"', self.window_xaml)
 
     def test_webview_and_native_add_contract_remain_compatible(self) -> None:
         browser = named_element(self.window_tree, "Browser")
@@ -97,6 +110,13 @@ class WindowsNativeShellTests(unittest.TestCase):
         for contract in (
             '"CS Library"',
             '"SharedReaderState.js"',
+            "NativeBridgeBootstrapScript",
+            "WebMessageReceived",
+            '"app.checkForUpdates"',
+            '"app.moveLibrary"',
+            '"app.openLibraryFolder"',
+            '"app.chooseLibrary"',
+            '"app.reload"',
             "sharedLibraryChooseFiles",
             '"addFilesInput"',
             "?app=windows",
@@ -137,6 +157,25 @@ class WindowsNativeShellTests(unittest.TestCase):
         self.assertIn("IsOwnedServerUri", self.window_code)
         self.assertIn("!uri.IsLoopback", self.window_code)
 
+    def test_move_library_is_native_verified_and_syncthing_aware(self) -> None:
+        self.assertIn("MoveLibrary_Click", self.window_code)
+        self.assertIn("LibraryMoveClient.MoveAsync", self.window_code)
+        self.assertIn("copy and verify every file", self.window_code)
+        self.assertIn("redirect the same Syncthing folder ID", self.window_code)
+        self.assertIn("_libraryMoveInProgress", self.window_code)
+        self.assertIn("_serverProcess is null || _serverProcess.HasExited", self.window_code)
+        self.assertIn("LatticeStorage.exe", self.library_move_code)
+        self.assertIn("cs-library-3b8290f24f15", self.library_move_code)
+        self.assertIn('start.ArgumentList.Add("--protected-path")', self.library_move_code)
+        self.assertIn("scripts\\move_library.py", self.windows_build)
+        self.assertIn("--name LatticeStorage", self.windows_build)
+        self.assertIn("Tools\\LatticeStorage.exe", self.windows_build)
+        self.assertIn("Tools/LatticeStorage.exe", self.windows_installer)
+        self.assertGreaterEqual(
+            self.windows_installer.count("Tools\\LatticeStorage.exe"),
+            2,
+        )
+
     def test_bounded_packaged_smoke_mode_emits_proof_contract(self) -> None:
         for option in ("--smoke-test", "--library-root", "--smoke-output", "--smoke-pdf"):
             self.assertIn(option, self.app_code)
@@ -150,6 +189,8 @@ class WindowsNativeShellTests(unittest.TestCase):
         self.assertIn('document.getElementById("libraryGrid")', self.window_code)
         self.assertIn('brand === "Lattice"', self.window_code)
         self.assertIn("hasNativeAddBridge", self.window_code)
+        self.assertIn("hasNativeDesktopBridge", self.window_code)
+        self.assertIn("hasInlineDesktopMenu", self.window_code)
         self.assertIn("WaitForPdfReaderAsync", self.window_code)
         self.assertIn("WaitForPdfShelfReturnAsync", self.window_code)
         self.assertIn(
@@ -163,12 +204,10 @@ class WindowsNativeShellTests(unittest.TestCase):
         self.assertIn("Application.Current.Shutdown(exitCode);", self.window_code)
 
     def test_pdf_reader_can_request_true_native_fullscreen(self) -> None:
-        named_element(self.window_tree, "TopChromeRow")
         self.assertIn("ContainsFullScreenElementChanged", self.window_code)
         self.assertIn("ContainsFullScreenElement", self.window_code)
         self.assertIn("SetWebContentFullscreen", self.window_code)
-        self.assertIn("TopChrome.Visibility = Visibility.Collapsed", self.window_code)
-        self.assertIn("TopChromeRow.Height = new GridLength(0)", self.window_code)
+        self.assertNotIn("TopChrome", self.window_code)
         self.assertIn("WindowStyle = WindowStyle.None", self.window_code)
         self.assertIn("ResizeMode = ResizeMode.NoResize", self.window_code)
         self.assertIn("|| _webContentFullscreen", self.window_code)
@@ -202,7 +241,11 @@ class WindowsNativeShellTests(unittest.TestCase):
         self.assertIn("or System.Security.Cryptography.CryptographicException", self.app_code)
         self.assertIn("_candidatePromotionError", self.window_code)
         self.assertIn("StartBackgroundUpdateCheckOnce", self.window_code)
-        self.assertIn("|| _candidateLaunchRequested", self.window_code)
+        self.assertIn("(_candidateLaunchRequested && !_candidatePromoted)", self.window_code)
+        self.assertIn("private string DisplayVersion", self.window_code)
+        self.assertIn("version = DisplayVersion", self.window_code)
+        self.assertIn('$"Version {_updateCandidate.CandidateVersion}"', self.window_code)
+        self.assertIn("_updateCheckTask ??=", self.window_code)
 
         consent = self.window_code.index("MessageBoxButton.YesNo")
         download = self.window_code.index("DownloadAndStageAsync(")
@@ -210,7 +253,10 @@ class WindowsNativeShellTests(unittest.TestCase):
         self.assertLess(consent, download)
         self.assertLess(download, launch)
         self.assertIn("closes automatically only after", self.window_code)
-        self.assertIn("UpdateProgress.Value = percent", self.window_code)
+        self.assertIn("private void ShowUpdateProgress", self.window_code)
+        self.assertIn("_updateProgressValue = Math.Clamp(value, 0, 100)", self.window_code)
+        self.assertIn("UpdateProgress.Value = _updateProgressValue", self.window_code)
+        self.assertIn("PostNativeStatus();", self.window_code)
 
         # The promoted candidate dismisses only the exact superseded Lattice
         # executable. A launcher PID protects current handoffs, while the

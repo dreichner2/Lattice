@@ -8,9 +8,7 @@ using System.Text;
 using System.Text.Json;
 using System.Windows;
 using System.Windows.Automation;
-using System.Windows.Controls.Primitives;
 using System.Windows.Input;
-using System.Windows.Media;
 using System.Windows.Threading;
 
 namespace CSLibrary.Windows;
@@ -24,6 +22,38 @@ public partial class MainWindow : Window
         "CS Library");
     private static readonly string SavedLibraryPath = Path.Combine(SettingsRoot, "library-root.txt");
     private static readonly string SavedWindowBoundsPath = Path.Combine(SettingsRoot, "window-bounds.json");
+    private const string NativeBridgeBootstrapScript = """
+        (() => {
+          if (window.top !== window || window.csLibraryNativeCall || !window.chrome?.webview) return;
+          const pending = new Map();
+          let sequence = 0;
+          window.chrome.webview.addEventListener('message', event => {
+            const message = event.data;
+            if (!message || typeof message !== 'object') return;
+            if (message.channel === 'lattice-native-status') {
+              window.dispatchEvent(new CustomEvent('lattice-native-status', { detail: message }));
+              return;
+            }
+            if (message.channel !== 'lattice-native-response' || typeof message.id !== 'string') return;
+            const request = pending.get(message.id);
+            if (!request) return;
+            pending.delete(message.id);
+            clearTimeout(request.timer);
+            if (typeof message.error === 'string' && message.error) request.reject(new Error(message.error));
+            else request.resolve(message.result);
+          });
+          window.csLibraryNativeCall = (action, payload = {}) => new Promise((resolve, reject) => {
+            const id = `windows-${Date.now().toString(36)}-${(++sequence).toString(36)}`;
+            const timer = setTimeout(() => {
+              pending.delete(id);
+              reject(new Error('Lattice did not answer the desktop request.'));
+            }, 30000);
+            pending.set(id, { resolve, reject, timer });
+            window.chrome.webview.postMessage({ channel: 'lattice-native', id, action, payload });
+          });
+          window.dispatchEvent(new CustomEvent('cs-library-native-ready'));
+        })();
+        """;
 
     private readonly LaunchOptions _launchOptions;
     private readonly CancellationTokenSource _lifetime = new();
@@ -40,20 +70,31 @@ public partial class MainWindow : Window
     private bool _smokeCompleted;
     private bool _backgroundUpdateCheckStarted;
     private bool _updateOperationInProgress;
+    private bool _libraryMoveInProgress;
     private bool _candidateLaunched;
     private bool _candidatePromoted;
     private bool _candidateErrorNotified;
     private bool _webContentFullscreen;
+    private bool _browserControlsEnabled;
+    private bool _librarySwitchingEnabled = true;
+    private bool _updateProgressVisible;
+    private bool _updateProgressIndeterminate;
+    private int _updateProgressValue;
+    private string _shellStatusText = "Starting";
+    private ShellStatus _shellStatus = ShellStatus.Loading;
     private string? _candidatePromotionError;
     private WindowStyle _windowStyleBeforeFullscreen;
     private ResizeMode _resizeModeBeforeFullscreen;
     private WindowState _windowStateBeforeFullscreen;
     private Rect _windowBoundsBeforeFullscreen;
-    private GridLength _topChromeHeightBeforeFullscreen = new(58);
-    private Visibility _topChromeVisibilityBeforeFullscreen = Visibility.Visible;
     private DesktopUpdateCheck? _availableUpdate;
     private StagedDesktopUpdate? _stagedUpdate;
     private Task<DesktopUpdateCheck>? _updateCheckTask;
+
+    private string DisplayVersion => _updateCandidate?.CandidateVersion
+        ?? _updateService.InstalledVersion
+        ?? typeof(MainWindow).Assembly.GetName().Version?.ToString(3)
+        ?? "Unknown";
 
     public MainWindow() : this(LaunchOptions.Empty)
     {
@@ -103,7 +144,6 @@ public partial class MainWindow : Window
 
     private async void Window_Loaded(object sender, RoutedEventArgs e)
     {
-        UpdateResponsiveChrome();
         _smokeTimer?.Start();
 
         var root = FindInitialLibrary();
@@ -208,10 +248,6 @@ public partial class MainWindow : Window
         StopOwnedServer();
         _serverUrl = null;
         _libraryRoot = Path.GetFullPath(root);
-        LibraryPathText.Text = _libraryRoot;
-        LibraryPathButton.ToolTip = _libraryRoot;
-        UpdateResponsiveChrome();
-        OpenFolderMenuItem.IsEnabled = true;
 
         try
         {
@@ -476,12 +512,14 @@ public partial class MainWindow : Window
             var userData = Path.Combine(SettingsRoot, "WebView2");
             var environment = await CoreWebView2Environment.CreateAsync(userDataFolder: userData);
             await Browser.EnsureCoreWebView2Async(environment);
+            await Browser.CoreWebView2.AddScriptToExecuteOnDocumentCreatedAsync(
+                NativeBridgeBootstrapScript);
             Browser.CoreWebView2.Settings.AreDevToolsEnabled = false;
             Browser.CoreWebView2.Settings.AreDefaultContextMenusEnabled = true;
             Browser.CoreWebView2.Settings.IsStatusBarEnabled = false;
             Browser.CoreWebView2.NavigationStarting += NavigationStarting;
             Browser.CoreWebView2.NavigationCompleted += NavigationCompleted;
-            Browser.CoreWebView2.HistoryChanged += (_, _) => UpdateNavigationControls();
+            Browser.CoreWebView2.WebMessageReceived += WebMessageReceived;
             Browser.CoreWebView2.NewWindowRequested += NewWindowRequested;
             Browser.CoreWebView2.ContainsFullScreenElementChanged += (_, _) =>
             {
@@ -551,6 +589,145 @@ public partial class MainWindow : Window
         }
     }
 
+    private void WebMessageReceived(object? sender, CoreWebView2WebMessageReceivedEventArgs e)
+    {
+        if (Browser.CoreWebView2 is null
+            || !IsOwnedServerUri(Browser.CoreWebView2.Source)) return;
+
+        string? requestId = null;
+        try
+        {
+            using var document = JsonDocument.Parse(e.WebMessageAsJson);
+            var request = document.RootElement;
+            if (request.ValueKind != JsonValueKind.Object
+                || !request.TryGetProperty("channel", out var channel)
+                || channel.ValueKind != JsonValueKind.String
+                || channel.GetString() != "lattice-native"
+                || !request.TryGetProperty("id", out var idElement)
+                || idElement.ValueKind != JsonValueKind.String
+                || !request.TryGetProperty("action", out var actionElement)
+                || actionElement.ValueKind != JsonValueKind.String) return;
+
+            requestId = idElement.GetString();
+            var action = actionElement.GetString();
+            if (string.IsNullOrWhiteSpace(requestId)
+                || requestId.Length > 128
+                || string.IsNullOrWhiteSpace(action)
+                || action.Length > 128) return;
+
+            if (action == "app.info")
+            {
+                ReplyToNativeBridge(requestId, new
+                {
+                    platform = "windows",
+                    version = DisplayVersion,
+                    capabilities = new[]
+                    {
+                        "app.checkForUpdates",
+                        "app.moveLibrary",
+                        "app.openLibraryFolder",
+                        "app.chooseLibrary",
+                        "app.reload",
+                    },
+                    status = NativeStatusPayload(),
+                });
+                return;
+            }
+
+            if (action is not ("app.checkForUpdates"
+                or "app.moveLibrary"
+                or "app.openLibraryFolder"
+                or "app.chooseLibrary"
+                or "app.reload"))
+            {
+                ReplyToNativeBridge(requestId, error: "That Lattice desktop action is unavailable.");
+                return;
+            }
+
+            ReplyToNativeBridge(requestId, new { started = true });
+            Dispatcher.BeginInvoke(
+                DispatcherPriority.Input,
+                new Action(() => DispatchNativeAppAction(action)));
+        }
+        catch (JsonException)
+        {
+            if (!string.IsNullOrWhiteSpace(requestId))
+                ReplyToNativeBridge(requestId, error: "The Lattice desktop request was malformed.");
+        }
+    }
+
+    private void DispatchNativeAppAction(string action)
+    {
+        switch (action)
+        {
+            case "app.checkForUpdates":
+                CheckForUpdates_Click(this, new RoutedEventArgs());
+                break;
+            case "app.moveLibrary":
+                MoveLibrary_Click(this, new RoutedEventArgs());
+                break;
+            case "app.openLibraryFolder":
+                OpenFolder_Click(this, new RoutedEventArgs());
+                break;
+            case "app.chooseLibrary":
+                ChangeLibrary_Click(this, new RoutedEventArgs());
+                break;
+            case "app.reload":
+                Reload_Click(this, new RoutedEventArgs());
+                break;
+        }
+    }
+
+    private void ReplyToNativeBridge(string id, object? result = null, string? error = null)
+    {
+        if (Browser.CoreWebView2 is null) return;
+        var message = JsonSerializer.Serialize(new
+        {
+            channel = "lattice-native-response",
+            id,
+            result,
+            error,
+        });
+        Browser.CoreWebView2.PostWebMessageAsJson(message);
+    }
+
+    private object NativeStatusPayload() => new
+    {
+        channel = "lattice-native-status",
+        text = _shellStatusText,
+        tone = _shellStatus switch
+        {
+            ShellStatus.Ready => "ready",
+            ShellStatus.UpdateAvailable => "updateAvailable",
+            ShellStatus.Attention => "attention",
+            _ => "loading",
+        },
+        version = DisplayVersion,
+        busy = _updateOperationInProgress,
+        libraryActionsEnabled = _librarySwitchingEnabled
+            && !_openingLibrary
+            && !_libraryMoveInProgress,
+        browserControlsEnabled = _browserControlsEnabled,
+        progressVisible = _updateProgressVisible,
+        progressIndeterminate = _updateProgressIndeterminate,
+        progress = _updateProgressValue,
+    };
+
+    private void PostNativeStatus()
+    {
+        if (Browser.CoreWebView2 is null
+            || !IsOwnedServerUri(Browser.CoreWebView2.Source)) return;
+        try
+        {
+            Browser.CoreWebView2.PostWebMessageAsJson(
+                JsonSerializer.Serialize(NativeStatusPayload()));
+        }
+        catch (InvalidOperationException)
+        {
+            // Navigation can replace the page between the origin check and send.
+        }
+    }
+
     private void NavigationStarting(object? sender, CoreWebView2NavigationStartingEventArgs e)
     {
         if (IsOwnedServerUri(e.Uri))
@@ -574,8 +751,6 @@ public partial class MainWindow : Window
         {
             _openingLibrary = false;
             SetBrowserControlsEnabled(false);
-            HomeButton.IsEnabled = _serverUrl is not null;
-            ReloadButton.IsEnabled = Browser.CoreWebView2 is not null;
             SetLibrarySwitchingEnabled(true);
             SetLoading(
                 "Lattice could not load",
@@ -625,8 +800,6 @@ public partial class MainWindow : Window
                     ?? throw new InvalidOperationException("The candidate WebView did not report its URI.");
                 _updateCandidate.ReportWebViewNavigationHealthy(navigatedUri, e.IsSuccess);
                 _candidatePromoted = true;
-                UpdateMenuItem.Header = $"_Lattice {_updateCandidate.CandidateVersion} is active";
-                UpdateMenuItem.IsEnabled = false;
             }
             catch (Exception updateError)
             {
@@ -634,7 +807,6 @@ public partial class MainWindow : Window
             }
         }
         ApplyReadyShellStatus();
-        UpdateResponsiveChrome();
         Browser.Focus();
         NotifyCandidatePromotionFailure();
         if (_launchOptions.SmokeTest is not null)
@@ -671,11 +843,6 @@ public partial class MainWindow : Window
             _windowBoundsBeforeFullscreen = WindowState == WindowState.Normal
                 ? new Rect(Left, Top, ActualWidth, ActualHeight)
                 : RestoreBounds;
-            _topChromeHeightBeforeFullscreen = TopChromeRow.Height;
-            _topChromeVisibilityBeforeFullscreen = TopChrome.Visibility;
-
-            TopChrome.Visibility = Visibility.Collapsed;
-            TopChromeRow.Height = new GridLength(0);
             WindowState = WindowState.Normal;
             WindowStyle = WindowStyle.None;
             ResizeMode = ResizeMode.NoResize;
@@ -686,8 +853,6 @@ public partial class MainWindow : Window
         WindowState = WindowState.Normal;
         WindowStyle = _windowStyleBeforeFullscreen;
         ResizeMode = _resizeModeBeforeFullscreen;
-        TopChromeRow.Height = _topChromeHeightBeforeFullscreen;
-        TopChrome.Visibility = _topChromeVisibilityBeforeFullscreen;
         if (_windowBoundsBeforeFullscreen.Width >= MinWidth
             && _windowBoundsBeforeFullscreen.Height >= MinHeight)
         {
@@ -698,7 +863,6 @@ public partial class MainWindow : Window
         }
         WindowState = _windowStateBeforeFullscreen;
         _webContentFullscreen = false;
-        UpdateResponsiveChrome();
     }
 
     private bool IsOwnedServerUri(string value)
@@ -745,40 +909,23 @@ public partial class MainWindow : Window
 
     private void SetBrowserControlsEnabled(bool enabled)
     {
-        HomeButton.IsEnabled = enabled;
-        ReloadButton.IsEnabled = enabled;
-        AddMaterialsButton.IsEnabled = enabled;
-        BackButton.IsEnabled = enabled && Browser.CanGoBack;
-    }
-
-    private void UpdateNavigationControls()
-    {
-        BackButton.IsEnabled = Browser.CoreWebView2 is not null && Browser.CanGoBack;
+        _browserControlsEnabled = enabled;
+        PostNativeStatus();
     }
 
     private void SetLibrarySwitchingEnabled(bool enabled)
     {
-        MoreButton.IsEnabled = enabled;
-        ChooseLibraryMenuItem.IsEnabled = enabled;
+        _librarySwitchingEnabled = enabled;
         ChooseFolderButton.IsEnabled = enabled;
         RetryButton.IsEnabled = enabled;
-        OpenFolderMenuItem.IsEnabled = enabled && _libraryRoot is not null;
+        PostNativeStatus();
     }
 
     private void SetShellStatus(string text, ShellStatus status)
     {
-        StatusText.Text = text;
-        StatusDot.Fill = status switch
-        {
-            ShellStatus.Ready => (Brush)FindResource("LatticeSuccessBrush"),
-            ShellStatus.UpdateAvailable => (Brush)FindResource("LatticeAccentBrush"),
-            ShellStatus.Attention => (Brush)FindResource("LatticeDangerBrush"),
-            _ => (Brush)FindResource("LatticeWarningBrush"),
-        };
-        StatusText.Foreground = status == ShellStatus.Attention
-            ? (Brush)FindResource("LatticeDangerBrush")
-            : (Brush)FindResource("LatticeMutedBrush");
-        AutomationProperties.SetName(StatusPill, $"Status: {text}");
+        _shellStatusText = text;
+        _shellStatus = status;
+        PostNativeStatus();
     }
 
     private void RecordCandidatePromotionFailure(string stage, Exception error)
@@ -786,9 +933,6 @@ public partial class MainWindow : Window
         if (_candidatePromoted) return;
         _candidatePromotionError = $"{stage}. {error.Message}";
         _candidatePromoted = false;
-        UpdateMenuItem.Header = "_Update not activated";
-        UpdateMenuItem.ToolTip = _candidatePromotionError;
-        UpdateMenuItem.IsEnabled = false;
         HideUpdateProgress();
         SetShellStatus("Update not activated", ShellStatus.Attention);
     }
@@ -816,33 +960,22 @@ public partial class MainWindow : Window
     {
         if (!string.IsNullOrWhiteSpace(_candidatePromotionError))
         {
-            UpdateMenuItem.Header = "_Update not activated";
-            UpdateMenuItem.ToolTip = _candidatePromotionError;
-            UpdateMenuItem.IsEnabled = false;
             SetShellStatus("Update not activated", ShellStatus.Attention);
-        }
-        else if (_candidatePromoted)
-        {
-            UpdateMenuItem.IsEnabled = false;
-            SetShellStatus("Update activated", ShellStatus.Ready);
         }
         else if (_candidateLaunched)
         {
-            UpdateMenuItem.IsEnabled = false;
             SetShellStatus("Verifying update", ShellStatus.Loading);
         }
         else if (_availableUpdate is { State: DesktopUpdateState.Available, LatestVersion: not null } update)
         {
-            UpdateMenuItem.Header = $"_Update to Lattice {update.LatestVersion}…";
-            UpdateMenuItem.ToolTip = $"A signed Lattice {update.LatestVersion} update is available.";
-            UpdateMenuItem.IsEnabled = !_updateOperationInProgress;
             SetShellStatus($"Update {update.LatestVersion} available", ShellStatus.UpdateAvailable);
+        }
+        else if (_candidatePromoted && _updateCandidate is not null)
+        {
+            SetShellStatus($"Version {_updateCandidate.CandidateVersion}", ShellStatus.Ready);
         }
         else
         {
-            UpdateMenuItem.Header = "_Check for updates…";
-            UpdateMenuItem.ToolTip = null;
-            UpdateMenuItem.IsEnabled = !_updateOperationInProgress;
             SetShellStatus("Private local library", ShellStatus.Ready);
         }
     }
@@ -851,7 +984,7 @@ public partial class MainWindow : Window
     {
         if (_backgroundUpdateCheckStarted
             || _launchOptions.SmokeTest is not null
-            || _candidateLaunchRequested
+            || (_candidateLaunchRequested && !_candidatePromoted)
             || !_updateService.IsAutomaticUpdateSupported) return;
         _backgroundUpdateCheckStarted = true;
         _ = CheckForUpdatesInBackgroundAsync();
@@ -892,29 +1025,22 @@ public partial class MainWindow : Window
 
     private void ShowUpdateProgress(bool indeterminate, int value = 0)
     {
+        _updateProgressVisible = true;
+        _updateProgressIndeterminate = indeterminate;
+        _updateProgressValue = Math.Clamp(value, 0, 100);
         UpdateProgress.IsIndeterminate = indeterminate;
-        UpdateProgress.Value = Math.Clamp(value, 0, 100);
+        UpdateProgress.Value = _updateProgressValue;
         UpdateProgress.Visibility = Visibility.Visible;
+        PostNativeStatus();
     }
 
     private void HideUpdateProgress()
     {
+        _updateProgressVisible = false;
+        _updateProgressIndeterminate = false;
         UpdateProgress.IsIndeterminate = false;
         UpdateProgress.Visibility = Visibility.Collapsed;
-    }
-
-    private void Window_SizeChanged(object sender, SizeChangedEventArgs e) => UpdateResponsiveChrome();
-
-    private void UpdateResponsiveChrome()
-    {
-        if (!IsInitialized) return;
-        var width = ActualWidth > 0 ? ActualWidth : Width;
-        LibraryPathButton.Visibility = _libraryRoot is not null && width >= 1180
-            ? Visibility.Visible
-            : Visibility.Collapsed;
-        BrandSubtitle.Visibility = width >= 1210 ? Visibility.Visible : Visibility.Collapsed;
-        BrandCopy.Visibility = width >= 940 ? Visibility.Visible : Visibility.Collapsed;
-        AddButtonLabel.Text = width >= 1030 ? "Add materials" : "Add";
+        PostNativeStatus();
     }
 
     private void Window_PreviewKeyDown(object sender, KeyEventArgs e)
@@ -922,32 +1048,34 @@ public partial class MainWindow : Window
         var key = e.Key == Key.System ? e.SystemKey : e.Key;
         var modifiers = Keyboard.Modifiers;
 
-        if (key == Key.Left && modifiers == ModifierKeys.Alt && BackButton.IsEnabled)
+        if (key == Key.Left && modifiers == ModifierKeys.Alt
+            && _browserControlsEnabled && Browser.CanGoBack)
         {
-            Back_Click(BackButton, new RoutedEventArgs());
+            Back_Click(this, new RoutedEventArgs());
             e.Handled = true;
         }
-        else if (key == Key.Home && modifiers == ModifierKeys.Alt && HomeButton.IsEnabled)
+        else if (key == Key.Home && modifiers == ModifierKeys.Alt
+                 && _browserControlsEnabled && _serverUrl is not null)
         {
-            Home_Click(HomeButton, new RoutedEventArgs());
+            Home_Click(this, new RoutedEventArgs());
             e.Handled = true;
         }
         else if ((key == Key.F5 || (key == Key.R && modifiers == ModifierKeys.Control))
-                 && ReloadButton.IsEnabled)
+                 && _browserControlsEnabled && Browser.CoreWebView2 is not null)
         {
-            Reload_Click(ReloadButton, new RoutedEventArgs());
+            Reload_Click(this, new RoutedEventArgs());
             e.Handled = true;
         }
         else if (key == Key.O
                  && modifiers == (ModifierKeys.Control | ModifierKeys.Shift)
-                 && AddMaterialsButton.IsEnabled)
+                 && _browserControlsEnabled)
         {
-            AddMaterials_Click(AddMaterialsButton, new RoutedEventArgs());
+            AddMaterials_Click(this, new RoutedEventArgs());
             e.Handled = true;
         }
         else if (key == Key.O && modifiers == ModifierKeys.Control && _libraryRoot is not null)
         {
-            OpenFolder_Click(LibraryPathButton, new RoutedEventArgs());
+            OpenFolder_Click(this, new RoutedEventArgs());
             e.Handled = true;
         }
     }
@@ -1111,7 +1239,7 @@ public partial class MainWindow : Window
                     title = Title,
                     width = Math.Round(ActualWidth),
                     height = Math.Round(ActualHeight),
-                    status = StatusText.Text,
+                    status = _shellStatusText,
                 },
                 web = probe,
                 pdf = pdfProbe,
@@ -1181,6 +1309,9 @@ public partial class MainWindow : Window
               const hasAddButton = Boolean(document.getElementById("addButton"));
               const hasLibraryGrid = Boolean(document.getElementById("libraryGrid"));
               const hasNativeAddBridge = typeof window.sharedLibraryChooseFiles === "function";
+              const hasNativeDesktopBridge = typeof window.csLibraryNativeCall === "function";
+              const inlineDesktopMenu = document.getElementById("nativeAppMenu");
+              const hasInlineDesktopMenu = Boolean(inlineDesktopMenu && !inlineDesktopMenu.hidden);
               const connected = syncText === "Live sync" || syncText === "Auto refresh";
               return {
                 ready: document.readyState === "complete"
@@ -1188,6 +1319,8 @@ public partial class MainWindow : Window
                   && hasAddButton
                   && hasLibraryGrid
                   && hasNativeAddBridge
+                  && hasNativeDesktopBridge
+                  && hasInlineDesktopMenu
                   && connected,
                 readyState: document.readyState,
                 title: document.title,
@@ -1195,7 +1328,9 @@ public partial class MainWindow : Window
                 syncText,
                 hasAddButton,
                 hasLibraryGrid,
-                hasNativeAddBridge
+                hasNativeAddBridge,
+                hasNativeDesktopBridge,
+                hasInlineDesktopMenu
               };
             })()
             """;
@@ -1444,19 +1579,12 @@ public partial class MainWindow : Window
         if (Browser.CoreWebView2 is not null) Browser.Reload();
     }
 
-    private void More_Click(object sender, RoutedEventArgs e)
-    {
-        LibraryMenu.PlacementTarget = MoreButton;
-        LibraryMenu.Placement = PlacementMode.Bottom;
-        LibraryMenu.IsOpen = true;
-    }
-
     private async void CheckForUpdates_Click(object sender, RoutedEventArgs e)
     {
-        if (_updateOperationInProgress || _candidateLaunchRequested || _candidateLaunched) return;
+        if (_updateOperationInProgress
+            || (_candidateLaunchRequested && !_candidatePromoted)
+            || _candidateLaunched) return;
         _updateOperationInProgress = true;
-        UpdateMenuItem.IsEnabled = false;
-        UpdateMenuItem.Header = "_Checking for updates…";
         ShowUpdateProgress(indeterminate: true);
         SetShellStatus("Checking for updates", ShellStatus.Loading);
 
@@ -1513,14 +1641,12 @@ public partial class MainWindow : Window
             }
 
             ShowUpdateProgress(indeterminate: false);
-            UpdateMenuItem.Header = $"_Downloading Lattice {latestVersion}… 0%";
             SetShellStatus($"Downloading update 0%", ShellStatus.Loading);
             var progress = new Progress<int>(value =>
             {
                 if (!_updateOperationInProgress) return;
                 var percent = Math.Clamp(value, 0, 100);
-                UpdateProgress.Value = percent;
-                UpdateMenuItem.Header = $"_Downloading Lattice {latestVersion}… {percent}%";
+                ShowUpdateProgress(indeterminate: false, value: percent);
                 SetShellStatus($"Downloading update {percent}%", ShellStatus.Loading);
             });
             var staged = _stagedUpdate;
@@ -1534,17 +1660,13 @@ public partial class MainWindow : Window
                 _stagedUpdate = staged;
             }
 
-            UpdateProgress.Value = 100;
+            ShowUpdateProgress(indeterminate: false, value: 100);
             SetShellStatus($"Opening Lattice {latestVersion}", ShellStatus.Loading);
-            UpdateMenuItem.Header = $"_Opening Lattice {latestVersion}…";
             using (_updateService.LaunchCandidate(staged, _libraryRoot))
             {
                 // Disposing the Process handle does not close the candidate.
             }
             _candidateLaunched = true;
-            UpdateMenuItem.Header = $"_Verifying Lattice {latestVersion}…";
-            UpdateMenuItem.ToolTip =
-                "This version will close automatically after the update candidate proves its health.";
             SetShellStatus($"Verifying Lattice {latestVersion}", ShellStatus.Loading);
         }
         catch (OperationCanceledException) when (_lifetime.IsCancellationRequested)
@@ -1565,18 +1687,7 @@ public partial class MainWindow : Window
         {
             _updateOperationInProgress = false;
             HideUpdateProgress();
-            if (_candidateLaunched)
-            {
-                UpdateMenuItem.IsEnabled = false;
-            }
-            else
-            {
-                UpdateMenuItem.IsEnabled = true;
-                if (_availableUpdate is not null)
-                    UpdateMenuItem.Header = $"_Update to Lattice {_availableUpdate.LatestVersion}…";
-                else
-                    UpdateMenuItem.Header = "_Check for updates…";
-            }
+            ApplyReadyShellStatus();
         }
     }
 
@@ -1637,6 +1748,133 @@ public partial class MainWindow : Window
         }
     }
 
+    private async void MoveLibrary_Click(object sender, RoutedEventArgs e)
+    {
+        if (_openingLibrary || _libraryMoveInProgress || _libraryRoot is null) return;
+        if (_serverProcess is null || _serverProcess.HasExited)
+        {
+            MessageBox.Show(
+                this,
+                "Move Library requires the private local service owned by this window. Reopen Lattice, then try again.",
+                "Move Library",
+                MessageBoxButton.OK,
+                MessageBoxImage.Information);
+            return;
+        }
+        if (_updateOperationInProgress || _candidateLaunched)
+        {
+            MessageBox.Show(
+                this,
+                "Wait for the current update operation to finish before moving the library.",
+                "Move Library",
+                MessageBoxButton.OK,
+                MessageBoxImage.Information);
+            return;
+        }
+        var source = Path.GetFullPath(_libraryRoot);
+        var picker = new OpenFolderDialog
+        {
+            Title = "Choose the external drive or folder for your Lattice library",
+            Multiselect = false,
+        };
+        if (picker.ShowDialog(this) != true) return;
+        var destination = LibraryMoveClient.DestinationForContainer(picker.FolderName);
+        if (Directory.Exists(destination) || File.Exists(destination))
+        {
+            MessageBox.Show(
+                this,
+                $"The destination already contains '{destination}'. Choose another folder or rename the existing one.",
+                "Move Library",
+                MessageBoxButton.OK,
+                MessageBoxImage.Warning);
+            return;
+        }
+
+        var consent = MessageBox.Show(
+            this,
+            $"Move the complete Lattice library to:\n\n{destination}\n\n"
+            + "Lattice will require Syncthing to be Up to Date, pause it, copy and verify every file, "
+            + "redirect the same Syncthing folder ID, and only then remove the old copy. Keep the drive "
+            + "connected until Lattice reopens.\n\nContinue?",
+            "Move Library",
+            MessageBoxButton.YesNo,
+            MessageBoxImage.Information,
+            MessageBoxResult.No);
+        if (consent != MessageBoxResult.Yes) return;
+
+        _libraryMoveInProgress = true;
+        _openingLibrary = true;
+        SetBrowserControlsEnabled(false);
+        SetLibrarySwitchingEnabled(false);
+        SetLoading(
+            "Moving your library…",
+            "Pausing Syncthing and preparing a verified copy",
+            chooseFolder: false,
+            busy: true);
+        SetShellStatus("Moving library", ShellStatus.Loading);
+        StopOwnedServer();
+        _serverUrl = null;
+
+        LibraryMoveOutcome? outcome = null;
+        Exception? failure = null;
+        try
+        {
+            var progress = new Progress<LibraryMoveProgress>(update =>
+            {
+                LoadingDetail.Text = update.Message;
+                SetShellStatus(
+                    update.Percent is int percent ? $"Moving library {percent}%" : "Moving library",
+                    ShellStatus.Loading);
+            });
+            outcome = await LibraryMoveClient.MoveAsync(source, destination, progress);
+        }
+        catch (Exception error)
+        {
+            failure = error;
+        }
+        finally
+        {
+            _libraryMoveInProgress = false;
+            _openingLibrary = false;
+        }
+
+        if (outcome is null)
+        {
+            MessageBox.Show(
+                this,
+                "The original library was preserved. "
+                + (failure?.Message ?? "The storage helper did not complete."),
+                "Library move stopped",
+                MessageBoxButton.OK,
+                MessageBoxImage.Warning);
+            if (IsLibrary(source))
+            {
+                await OpenLibraryAsync(source);
+            }
+            else
+            {
+                SetLoading(
+                    "Choose your library folder",
+                    "The original location is unavailable. Select the verified library copy to continue.",
+                    chooseFolder: true);
+                SetLibrarySwitchingEnabled(true);
+            }
+            return;
+        }
+
+        await OpenLibraryAsync(outcome.Destination);
+        var detail = outcome.SyncthingManaged
+            ? "Lattice and Syncthing now use the library on the selected drive."
+            : "Lattice now uses the library on the selected drive. This library was not managed by Syncthing.";
+        if (!string.IsNullOrWhiteSpace(outcome.Warning)) detail += "\n\n" + outcome.Warning;
+        MessageBox.Show(
+            this,
+            detail,
+            "Library moved",
+            MessageBoxButton.OK,
+            outcome.Warning is null ? MessageBoxImage.Information : MessageBoxImage.Warning);
+    }
+
     private async void ChangeLibrary_Click(object sender, RoutedEventArgs e)
     {
         if (_openingLibrary) return;
@@ -1646,6 +1884,17 @@ public partial class MainWindow : Window
 
     private void Window_Closing(object? sender, CancelEventArgs e)
     {
+        if (_libraryMoveInProgress)
+        {
+            e.Cancel = true;
+            MessageBox.Show(
+                this,
+                "Lattice is still copying and verifying the library. Keep this window and the destination drive open until it finishes.",
+                "Library move in progress",
+                MessageBoxButton.OK,
+                MessageBoxImage.Information);
+            return;
+        }
         _smokeTimer?.Stop();
         SaveWindowBounds();
         _lifetime.Cancel();
@@ -1698,6 +1947,8 @@ public partial class MainWindow : Window
         public bool HasAddButton { get; init; }
         public bool HasLibraryGrid { get; init; }
         public bool HasNativeAddBridge { get; init; }
+        public bool HasNativeDesktopBridge { get; init; }
+        public bool HasInlineDesktopMenu { get; init; }
     }
 
     private sealed class SmokePdfProbe

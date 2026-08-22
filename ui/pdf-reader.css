@@ -102,6 +102,7 @@ select:focus-visible,
   display: grid;
   grid-template-rows: 58px minmax(0, 1fr);
   background: var(--canvas);
+  transition: grid-template-rows 180ms ease;
 }
 
 .reader-header {
@@ -117,6 +118,7 @@ select:focus-visible,
   background: color-mix(in srgb, var(--panel) 94%, transparent);
   box-shadow: 0 7px 24px rgba(19, 22, 31, 0.08);
   backdrop-filter: blur(22px) saturate(1.12);
+  transition: opacity 160ms ease, transform 180ms ease;
 }
 
 .reader-brand,
@@ -299,6 +301,23 @@ select:focus-visible,
   font-size: 15px;
 }
 
+.icon-action svg,
+.focus-exit-button svg {
+  width: 17px;
+  height: 17px;
+  fill: none;
+  stroke: currentColor;
+  stroke-linecap: round;
+  stroke-linejoin: round;
+  stroke-width: 1.65;
+}
+
+.focus-action[aria-pressed="true"] {
+  border-color: color-mix(in srgb, var(--accent) 45%, var(--line));
+  background: var(--accent-soft);
+  color: var(--accent-deep);
+}
+
 .reader-workspace,
 .reader-main,
 .viewer-host {
@@ -316,6 +335,7 @@ select:focus-visible,
   width: 100%;
   height: 100%;
   grid-template-rows: 52px minmax(0, 1fr) 27px;
+  transition: grid-template-rows 180ms ease;
 }
 
 .reader-controls {
@@ -331,6 +351,7 @@ select:focus-visible,
   background: color-mix(in srgb, var(--panel) 96%, transparent);
   box-shadow: 0 5px 18px rgba(19, 22, 31, 0.06);
   backdrop-filter: blur(19px);
+  transition: opacity 160ms ease, transform 180ms ease;
 }
 
 .control-group {
@@ -590,6 +611,67 @@ html[data-theme="dark"] #viewerContainer .pdfViewer .page {
   color: var(--faint);
   font-size: 7px;
   font-weight: 660;
+  transition: opacity 160ms ease, transform 180ms ease;
+}
+
+.focus-exit-button {
+  position: absolute;
+  z-index: 60;
+  top: 15px;
+  right: 15px;
+  display: grid;
+  width: 38px;
+  height: 38px;
+  padding: 0;
+  place-items: center;
+  border: 1px solid rgba(255, 255, 255, 0.12);
+  border-radius: 11px;
+  background: rgba(18, 20, 27, 0.68);
+  color: #fff;
+  cursor: pointer;
+  box-shadow: 0 10px 30px rgba(0, 0, 0, 0.22);
+  backdrop-filter: blur(14px);
+  transition: background 140ms ease, transform 140ms ease;
+}
+
+.focus-exit-button:hover {
+  background: rgba(18, 20, 27, 0.84);
+  transform: translateY(-1px);
+}
+
+.pdf-app.is-focused {
+  grid-template-rows: 0 minmax(0, 1fr);
+}
+
+.pdf-app.is-focused .reader-header,
+.pdf-app.is-focused .reader-controls,
+.pdf-app.is-focused .reader-statusbar {
+  overflow: hidden;
+  opacity: 0;
+  pointer-events: none;
+}
+
+.pdf-app.is-focused .reader-header,
+.pdf-app.is-focused .reader-controls {
+  transform: translateY(-100%);
+}
+
+.pdf-app.is-focused .reader-statusbar {
+  transform: translateY(100%);
+}
+
+.pdf-app.is-focused .reader-main {
+  grid-template-rows: 0 minmax(0, 1fr) 0;
+}
+
+.pdf-app.is-focused .reader-sidebar {
+  transform: translateX(-104%);
+}
+
+.pdf-app.is-focused .sidebar-scrim {
+  visibility: hidden;
+  opacity: 0;
+  pointer-events: none;
 }
 
 .reader-statusbar > span {

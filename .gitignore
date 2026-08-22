@@ -32,6 +32,8 @@ __pycache__/
 /windows/build/
 /windows/CSLibrary.Windows/bin/
 /windows/CSLibrary.Windows/obj/
+/windows/UpdateSecurityHarness/bin/
+/windows/UpdateSecurityHarness/obj/
 
 # Syncthing owns these machine-local markers, history, and temporary files.
 .stfolder/

@@ -4,6 +4,13 @@ export function pageDirectionForKey(key) {
   return 0;
 }
 
+export function readerEscapeAction({ fullscreen = false, focused = false, sidebarOpen = false } = {}) {
+  if (fullscreen) return "fullscreen";
+  if (focused) return "focus";
+  if (sidebarOpen) return "sidebar";
+  return "close";
+}
+
 function waitForAnimationFrame() {
   return new Promise((resolve) => requestAnimationFrame(resolve));
 }
