@@ -1,5 +1,22 @@
 # Changelog
 
+## 2.2.4 — 2026-08-22
+
+### Added
+
+- **Disconnect library drive** pauses only the stable Lattice Syncthing folder,
+  waits for the paused state, stops Lattice's drive-backed local service, and
+  closes the app so an external SSD can be ejected safely.
+- **Reconnect library sync** restores only a pause created by Lattice. On
+  Windows it can also restart the dedicated per-user Syncthing instance when
+  that process was stopped.
+
+### Fixed
+
+- Moving a library to external storage no longer leaves users without an
+  in-app path to release Syncthing's filesystem watcher before ejecting the
+  drive.
+
 ## 2.2.3 — 2026-08-22
 
 ### Changed

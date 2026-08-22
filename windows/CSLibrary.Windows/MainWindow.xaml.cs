@@ -22,6 +22,9 @@ public partial class MainWindow : Window
         "CS Library");
     private static readonly string SavedLibraryPath = Path.Combine(SettingsRoot, "library-root.txt");
     private static readonly string SavedWindowBoundsPath = Path.Combine(SettingsRoot, "window-bounds.json");
+    private static readonly string LibraryDisconnectStatePath = Path.Combine(
+        SettingsRoot,
+        "external-library-reconnect.json");
     private const string NativeBridgeBootstrapScript = """
         (() => {
           if (window.top !== window || window.csLibraryNativeCall || !window.chrome?.webview) return;
@@ -71,6 +74,7 @@ public partial class MainWindow : Window
     private bool _backgroundUpdateCheckStarted;
     private bool _updateOperationInProgress;
     private bool _libraryMoveInProgress;
+    private bool _libraryDriveOperationInProgress;
     private bool _candidateLaunched;
     private bool _candidatePromoted;
     private bool _candidateErrorNotified;
@@ -625,6 +629,8 @@ public partial class MainWindow : Window
                     {
                         "app.checkForUpdates",
                         "app.moveLibrary",
+                        "app.disconnectLibrary",
+                        "app.reconnectLibrary",
                         "app.openLibraryFolder",
                         "app.chooseLibrary",
                         "app.reload",
@@ -636,6 +642,8 @@ public partial class MainWindow : Window
 
             if (action is not ("app.checkForUpdates"
                 or "app.moveLibrary"
+                or "app.disconnectLibrary"
+                or "app.reconnectLibrary"
                 or "app.openLibraryFolder"
                 or "app.chooseLibrary"
                 or "app.reload"))
@@ -665,6 +673,12 @@ public partial class MainWindow : Window
                 break;
             case "app.moveLibrary":
                 MoveLibrary_Click(this, new RoutedEventArgs());
+                break;
+            case "app.disconnectLibrary":
+                DisconnectLibrary_Click(this, new RoutedEventArgs());
+                break;
+            case "app.reconnectLibrary":
+                ReconnectLibrary_Click(this, new RoutedEventArgs());
                 break;
             case "app.openLibraryFolder":
                 OpenFolder_Click(this, new RoutedEventArgs());
@@ -703,10 +717,11 @@ public partial class MainWindow : Window
             _ => "loading",
         },
         version = DisplayVersion,
-        busy = _updateOperationInProgress,
+        busy = _updateOperationInProgress || _libraryDriveOperationInProgress,
         libraryActionsEnabled = _librarySwitchingEnabled
             && !_openingLibrary
-            && !_libraryMoveInProgress,
+            && !_libraryMoveInProgress
+            && !_libraryDriveOperationInProgress,
         browserControlsEnabled = _browserControlsEnabled,
         progressVisible = _updateProgressVisible,
         progressIndeterminate = _updateProgressIndeterminate,
@@ -1875,6 +1890,178 @@ public partial class MainWindow : Window
             outcome.Warning is null ? MessageBoxImage.Information : MessageBoxImage.Warning);
     }
 
+    private async void DisconnectLibrary_Click(object sender, RoutedEventArgs e)
+    {
+        if (_openingLibrary
+            || _libraryMoveInProgress
+            || _libraryDriveOperationInProgress
+            || _libraryRoot is null) return;
+        if (_updateOperationInProgress || _candidateLaunched)
+        {
+            MessageBox.Show(
+                this,
+                "Wait for the current update operation to finish before disconnecting the library drive.",
+                "Disconnect library drive",
+                MessageBoxButton.OK,
+                MessageBoxImage.Information);
+            return;
+        }
+        if (_serverProcess is null || _serverProcess.HasExited)
+        {
+            MessageBox.Show(
+                this,
+                "Reopen Lattice before disconnecting the library drive so it can release its own local service safely.",
+                "Disconnect library drive",
+                MessageBoxButton.OK,
+                MessageBoxImage.Information);
+            return;
+        }
+
+        var source = Path.GetFullPath(_libraryRoot);
+        var consent = MessageBox.Show(
+            this,
+            "Prepare this library drive for safe eject?\n\n"
+            + "Lattice will stop its private local service, require Syncthing to be Up to Date, and pause only "
+            + "the Lattice folder. This window will close when both programs have released the drive. "
+            + "Then use Eject in Windows.\n\n"
+            + "When the drive is connected again, open Lattice and choose Reconnect library sync.",
+            "Disconnect library drive",
+            MessageBoxButton.YesNo,
+            MessageBoxImage.Information,
+            MessageBoxResult.No);
+        if (consent != MessageBoxResult.Yes) return;
+
+        _libraryDriveOperationInProgress = true;
+        _openingLibrary = true;
+        SetBrowserControlsEnabled(false);
+        SetLibrarySwitchingEnabled(false);
+        SetLoading(
+            "Releasing the library drive…",
+            "Stopping Lattice's local service and pausing its Syncthing folder",
+            chooseFolder: false,
+            busy: true);
+        SetShellStatus("Releasing library drive", ShellStatus.Loading);
+        StopOwnedServer();
+        _serverUrl = null;
+
+        LibraryDisconnectOutcome? outcome = null;
+        Exception? failure = null;
+        try
+        {
+            var progress = new Progress<LibraryMoveProgress>(update =>
+            {
+                LoadingDetail.Text = update.Message;
+            });
+            outcome = await LibraryMoveClient.DisconnectAsync(
+                source,
+                LibraryDisconnectStatePath,
+                progress);
+        }
+        catch (Exception error)
+        {
+            failure = error;
+        }
+
+        if (outcome is null)
+        {
+            _libraryDriveOperationInProgress = false;
+            _openingLibrary = false;
+            MessageBox.Show(
+                this,
+                "The drive was not marked ready to eject. "
+                + (failure?.Message ?? "The storage helper did not complete."),
+                "Drive still connected",
+                MessageBoxButton.OK,
+                MessageBoxImage.Warning);
+            if (IsLibrary(source))
+            {
+                await OpenLibraryAsync(source);
+            }
+            else
+            {
+                SetLoading(
+                    "Choose your library folder",
+                    "The external drive is unavailable. Reconnect it or choose another library to continue.",
+                    chooseFolder: true);
+                SetLibrarySwitchingEnabled(true);
+            }
+            return;
+        }
+
+        var detail = outcome.SyncthingManaged
+            ? (outcome.SyncthingRunning
+                ? "Syncthing has released the Lattice folder and Lattice's local service is stopped."
+                : "Syncthing was already stopped, and Lattice's local service is now stopped.")
+            : "Lattice's local service is stopped. This library is not managed by Syncthing.";
+        detail += "\n\nAfter this window closes, eject the drive from Windows before unplugging it.";
+        MessageBox.Show(
+            this,
+            detail,
+            "Library drive is ready",
+            MessageBoxButton.OK,
+            MessageBoxImage.Information);
+        _libraryDriveOperationInProgress = false;
+        _openingLibrary = false;
+        Application.Current.Shutdown();
+    }
+
+    private async void ReconnectLibrary_Click(object sender, RoutedEventArgs e)
+    {
+        if (_openingLibrary
+            || _libraryMoveInProgress
+            || _libraryDriveOperationInProgress
+            || _libraryRoot is null) return;
+        if (_updateOperationInProgress || _candidateLaunched)
+        {
+            MessageBox.Show(
+                this,
+                "Wait for the current update operation to finish before reconnecting library sync.",
+                "Reconnect library sync",
+                MessageBoxButton.OK,
+                MessageBoxImage.Information);
+            return;
+        }
+
+        _libraryDriveOperationInProgress = true;
+        SetLibrarySwitchingEnabled(false);
+        SetShellStatus("Reconnecting library sync", ShellStatus.Loading);
+        try
+        {
+            var outcome = await LibraryMoveClient.ReconnectAsync(
+                _libraryRoot,
+                LibraryDisconnectStatePath,
+                startIfNeeded: true);
+            var detail = !outcome.SyncthingManaged
+                ? "This library is not managed by Syncthing. No sync setting was changed."
+                : outcome.ResumedByLattice
+                    ? "Lattice resumed the folder pause it created. The library is synchronized again."
+                    : outcome.SyncthingStarted
+                        ? "The dedicated Lattice Syncthing instance is back online. Its existing folder pause setting was preserved."
+                        : "Syncthing is online. Its existing folder pause setting was preserved.";
+            MessageBox.Show(
+                this,
+                detail,
+                "Library sync connected",
+                MessageBoxButton.OK,
+                MessageBoxImage.Information);
+        }
+        catch (Exception error)
+        {
+            MessageBox.Show(
+                this,
+                "Lattice could not reconnect Syncthing. " + error.Message,
+                "Reconnect library sync",
+                MessageBoxButton.OK,
+                MessageBoxImage.Warning);
+        }
+        finally
+        {
+            _libraryDriveOperationInProgress = false;
+            SetLibrarySwitchingEnabled(true);
+            ApplyReadyShellStatus();
+        }
+    }
+
     private async void ChangeLibrary_Click(object sender, RoutedEventArgs e)
     {
         if (_openingLibrary) return;
@@ -1884,13 +2071,15 @@ public partial class MainWindow : Window
 
     private void Window_Closing(object? sender, CancelEventArgs e)
     {
-        if (_libraryMoveInProgress)
+        if (_libraryMoveInProgress || _libraryDriveOperationInProgress)
         {
             e.Cancel = true;
             MessageBox.Show(
                 this,
-                "Lattice is still copying and verifying the library. Keep this window and the destination drive open until it finishes.",
-                "Library move in progress",
+                _libraryMoveInProgress
+                    ? "Lattice is still copying and verifying the library. Keep this window and the destination drive open until it finishes."
+                    : "Lattice is still changing the Syncthing state for this drive. Keep this window open until it finishes.",
+                _libraryMoveInProgress ? "Library move in progress" : "Library drive operation in progress",
                 MessageBoxButton.OK,
                 MessageBoxImage.Information);
             return;

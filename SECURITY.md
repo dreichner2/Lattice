@@ -38,7 +38,7 @@ malicious document is required.
 
 ### Windows installer and updater
 
-- The one-click bootstrap downloads the pinned `v2.2.3` Windows release and
+- The one-click bootstrap downloads the pinned `v2.2.4` Windows release and
   compares it with its published SHA-256 companion before installation. It does
   not use a mutable GitHub Actions artifact or require a GitHub token.
 - Automatic updates are supported only from the per-user versioned installation

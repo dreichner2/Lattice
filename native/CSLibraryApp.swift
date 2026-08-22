@@ -26,6 +26,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, WKNavigationDelegate, 
     private var webInterfaceReady = false
     private var pendingAddMaterials = false
     private var libraryMoveInProgress = false
+    private var libraryDriveOperationInProgress = false
     private var updateCheckInProgress = false
     private var updateCheckTask: Task<Void, Never>?
     private var updateActivation = MacUpdateInstaller.activation()
@@ -62,10 +63,12 @@ final class AppDelegate: NSObject, NSApplicationDelegate, WKNavigationDelegate, 
     func applicationShouldTerminateAfterLastWindowClosed(_ sender: NSApplication) -> Bool { true }
 
     func applicationShouldTerminate(_ sender: NSApplication) -> NSApplication.TerminateReply {
-        guard libraryMoveInProgress else { return .terminateNow }
+        guard libraryMoveInProgress || libraryDriveOperationInProgress else { return .terminateNow }
         showNonfatalError(
-            title: "Library move in progress",
-            message: "Keep Lattice and the destination drive open until copying and verification finish."
+            title: libraryMoveInProgress ? "Library move in progress" : "Library drive operation in progress",
+            message: libraryMoveInProgress
+                ? "Keep Lattice and the destination drive open until copying and verification finish."
+                : "Keep Lattice open until it finishes changing this drive's Syncthing state."
         )
         return .terminateCancel
     }
@@ -155,7 +158,9 @@ final class AppDelegate: NSObject, NSApplicationDelegate, WKNavigationDelegate, 
                 "version": self?.installedAppVersion() ?? "Unknown",
                 "capabilities": [
                     "app.checkForUpdates",
-                    "app.moveLibrary"
+                    "app.moveLibrary",
+                    "app.disconnectLibrary",
+                    "app.reconnectLibrary"
                 ]
             ]
         }
@@ -165,6 +170,8 @@ final class AppDelegate: NSObject, NSApplicationDelegate, WKNavigationDelegate, 
                 switch action {
                 case "app.checkForUpdates": self.checkForUpdates(nil)
                 case "app.moveLibrary": self.moveLibrary(nil)
+                case "app.disconnectLibrary": self.disconnectLibraryDrive(nil)
+                case "app.reconnectLibrary": self.reconnectLibrarySync(nil)
                 default: break
                 }
             }
@@ -474,7 +481,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, WKNavigationDelegate, 
     }
 
     @objc private func moveLibrary(_ sender: Any?) {
-        guard !libraryMoveInProgress else { return }
+        guard !libraryMoveInProgress, !libraryDriveOperationInProgress else { return }
         guard !updateCheckInProgress else {
             showNonfatalError(
                 title: "Update check in progress",
@@ -704,6 +711,269 @@ final class AppDelegate: NSObject, NSApplicationDelegate, WKNavigationDelegate, 
                 } else {
                     NSApp.terminate(nil)
                 }
+            }
+        }
+    }
+
+    private func externalLibraryReconnectState() throws -> URL {
+        let support = FileManager.default.urls(for: .applicationSupportDirectory, in: .userDomainMask)[0]
+            .appendingPathComponent("Lattice", isDirectory: true)
+        try FileManager.default.createDirectory(at: support, withIntermediateDirectories: true)
+        return support.appendingPathComponent("external-library-reconnect.json")
+    }
+
+    private func runLibraryStorageOperation(
+        operation: String,
+        python: String,
+        helper: URL,
+        source: URL,
+        stateFile: URL,
+        completion: @escaping (Result<[String: Any], Error>) -> Void
+    ) {
+        DispatchQueue.global(qos: .userInitiated).async {
+            let process = Process()
+            let output = Pipe()
+            let errors = Pipe()
+            process.executableURL = URL(fileURLWithPath: python)
+            process.arguments = [
+                helper.path,
+                "--operation", operation,
+                "--source", source.path,
+                "--state-file", stateFile.path,
+                "--folder-id", "cs-library-3b8290f24f15",
+                "--protected-path", Bundle.main.bundleURL.path
+            ]
+            process.currentDirectoryURL = stateFile.deletingLastPathComponent()
+            process.standardOutput = output
+            process.standardError = errors
+
+            var buffered = Data()
+            var reportedError: String?
+            var finalPayload: [String: Any]?
+
+            func consume(_ line: Data) {
+                guard line.count <= 65_536,
+                      let value = try? JSONSerialization.jsonObject(with: line) as? [String: Any],
+                      let event = value["event"] as? String else { return }
+                if event == "error" {
+                    reportedError = value["message"] as? String
+                } else if event == "complete",
+                          value["operation"] as? String == operation {
+                    finalPayload = value
+                }
+            }
+
+            do {
+                try process.run()
+                while true {
+                    let data = output.fileHandleForReading.availableData
+                    if data.isEmpty { break }
+                    buffered.append(data)
+                    while let newline = buffered.firstIndex(of: 0x0A) {
+                        consume(buffered[..<newline])
+                        buffered.removeSubrange(...newline)
+                    }
+                }
+                if !buffered.isEmpty { consume(buffered) }
+                process.waitUntilExit()
+                let errorData = errors.fileHandleForReading.readDataToEndOfFile()
+                let errorText = String(data: errorData.prefix(65_536), encoding: .utf8)?
+                    .trimmingCharacters(in: .whitespacesAndNewlines)
+                guard process.terminationStatus == 0, let payload = finalPayload else {
+                    throw NSError(
+                        domain: "Lattice.LibraryStorage",
+                        code: Int(process.terminationStatus),
+                        userInfo: [
+                            NSLocalizedDescriptionKey: reportedError
+                                ?? errorText
+                                ?? "The storage helper did not complete."
+                        ]
+                    )
+                }
+                DispatchQueue.main.async { completion(.success(payload)) }
+            } catch {
+                DispatchQueue.main.async { completion(.failure(error)) }
+            }
+        }
+    }
+
+    @objc private func disconnectLibraryDrive(_ sender: Any?) {
+        guard !libraryMoveInProgress, !libraryDriveOperationInProgress else { return }
+        guard !updateCheckInProgress else {
+            showNonfatalError(
+                title: "Update check in progress",
+                message: "Wait for the update check to finish before disconnecting the library drive."
+            )
+            return
+        }
+        guard let ownedServer = serverProcess, ownedServer.isRunning else {
+            showNonfatalError(
+                title: "Reopen Lattice first",
+                message: "Lattice needs its own local service so it can release the library drive safely."
+            )
+            return
+        }
+        guard let python = pythonExecutable(), let helper = bundledLibraryMoveScript() else {
+            showNonfatalError(
+                title: "Disconnect library drive is unavailable",
+                message: "The Python runtime or bundled storage helper is missing. Rebuild or reinstall Lattice."
+            )
+            return
+        }
+        let stateFile: URL
+        do {
+            stateFile = try externalLibraryReconnectState()
+        } catch {
+            showNonfatalError(title: "Reconnect state is unavailable", message: error.localizedDescription)
+            return
+        }
+
+        let confirmation = NSAlert()
+        confirmation.alertStyle = .informational
+        confirmation.messageText = "Prepare this library drive for safe eject?"
+        confirmation.informativeText = """
+        Lattice will require Syncthing to be Up to Date, pause only the Lattice folder, stop its private local service, and close this app. Then eject the drive in Finder before unplugging it.
+
+        When the drive is connected again, open Lattice and choose Reconnect Library Sync.
+        """
+        confirmation.addButton(withTitle: "Disconnect Drive")
+        confirmation.addButton(withTitle: "Cancel")
+        guard confirmation.runModal() == .alertFirstButtonReturn else { return }
+
+        libraryDriveOperationInProgress = true
+        let progress = NSAlert()
+        progress.alertStyle = .informational
+        progress.messageText = "Releasing the library drive…"
+        progress.informativeText = "Pausing the Lattice Syncthing folder"
+        let indicator = NSProgressIndicator(frame: NSRect(x: 0, y: 0, width: 340, height: 18))
+        indicator.style = .bar
+        indicator.isIndeterminate = true
+        indicator.startAnimation(nil)
+        progress.accessoryView = indicator
+        let disabledButton = progress.addButton(withTitle: "Working…")
+        disabledButton.isEnabled = false
+        progress.beginSheetModal(for: window)
+
+        runLibraryStorageOperation(
+            operation: "disconnect",
+            python: python,
+            helper: helper,
+            source: libraryRoot,
+            stateFile: stateFile
+        ) { [weak self] result in
+            guard let self else { return }
+            self.window.endSheet(progress.window)
+            progress.window.orderOut(nil)
+            switch result {
+            case .failure(let error):
+                self.libraryDriveOperationInProgress = false
+                self.showNonfatalError(
+                    title: "Drive still connected",
+                    message: "The drive was not marked ready to eject. \(error.localizedDescription)"
+                )
+            case .success(let payload):
+                self.readerBridge?.finishWebSession()
+                self.immersiveReader?.closePDF(notifyWeb: false)
+                self.serverProcess = nil
+                ownedServer.terminationHandler = nil
+                if ownedServer.isRunning {
+                    ownedServer.terminate()
+                    ownedServer.waitUntilExit()
+                }
+                try? self.serverLog?.close()
+                self.serverLog = nil
+                self.currentServerURL = nil
+                self.webInterfaceReady = false
+                self.webView.load(URLRequest(url: URL(string: "about:blank")!))
+
+                let syncthingManaged = payload["syncthingManaged"] as? Bool == true
+                let syncthingRunning = payload["syncthingRunning"] as? Bool == true
+                let completed = NSAlert()
+                completed.alertStyle = .informational
+                completed.messageText = "Library drive is ready"
+                var message = syncthingManaged
+                    ? (syncthingRunning
+                        ? "Syncthing released the Lattice folder and Lattice's local service is stopped."
+                        : "Syncthing was already stopped, and Lattice's local service is now stopped.")
+                    : "Lattice's local service is stopped. This library is not managed by Syncthing."
+                message += "\n\nAfter Lattice closes, eject the drive in Finder before unplugging it."
+                completed.informativeText = message
+                completed.addButton(withTitle: "Close Lattice")
+                completed.runModal()
+                self.libraryDriveOperationInProgress = false
+                NSApp.terminate(nil)
+            }
+        }
+    }
+
+    @objc private func reconnectLibrarySync(_ sender: Any?) {
+        guard !libraryMoveInProgress, !libraryDriveOperationInProgress else { return }
+        guard !updateCheckInProgress else {
+            showNonfatalError(
+                title: "Update check in progress",
+                message: "Wait for the update check to finish before reconnecting library sync."
+            )
+            return
+        }
+        guard let python = pythonExecutable(), let helper = bundledLibraryMoveScript() else {
+            showNonfatalError(
+                title: "Reconnect library sync is unavailable",
+                message: "The Python runtime or bundled storage helper is missing. Rebuild or reinstall Lattice."
+            )
+            return
+        }
+        let stateFile: URL
+        do {
+            stateFile = try externalLibraryReconnectState()
+        } catch {
+            showNonfatalError(title: "Reconnect state is unavailable", message: error.localizedDescription)
+            return
+        }
+
+        libraryDriveOperationInProgress = true
+        let progress = NSAlert()
+        progress.alertStyle = .informational
+        progress.messageText = "Reconnecting library sync…"
+        progress.informativeText = "Checking the exact Lattice Syncthing folder"
+        let indicator = NSProgressIndicator(frame: NSRect(x: 0, y: 0, width: 340, height: 18))
+        indicator.style = .bar
+        indicator.isIndeterminate = true
+        indicator.startAnimation(nil)
+        progress.accessoryView = indicator
+        let disabledButton = progress.addButton(withTitle: "Working…")
+        disabledButton.isEnabled = false
+        progress.beginSheetModal(for: window)
+
+        runLibraryStorageOperation(
+            operation: "reconnect",
+            python: python,
+            helper: helper,
+            source: libraryRoot,
+            stateFile: stateFile
+        ) { [weak self] result in
+            guard let self else { return }
+            self.window.endSheet(progress.window)
+            progress.window.orderOut(nil)
+            self.libraryDriveOperationInProgress = false
+            switch result {
+            case .failure(let error):
+                self.showNonfatalError(
+                    title: "Reconnect library sync",
+                    message: "Lattice could not reconnect Syncthing. \(error.localizedDescription)"
+                )
+            case .success(let payload):
+                let managed = payload["syncthingManaged"] as? Bool == true
+                let resumed = payload["resumedByLattice"] as? Bool == true
+                let completed = NSAlert()
+                completed.alertStyle = .informational
+                completed.messageText = "Library sync connected"
+                completed.informativeText = !managed
+                    ? "This library is not managed by Syncthing. No sync setting was changed."
+                    : resumed
+                        ? "Lattice resumed the folder pause it created. The library is synchronized again."
+                        : "Syncthing is online. Its existing folder pause setting was preserved."
+                completed.addButton(withTitle: "OK")
+                completed.runModal()
             }
         }
     }
@@ -979,7 +1249,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, WKNavigationDelegate, 
     // MARK: Menus and alerts
 
     @objc private func checkForUpdates(_ sender: Any?) {
-        guard !updateCheckInProgress, !libraryMoveInProgress else { return }
+        guard !updateCheckInProgress, !libraryMoveInProgress, !libraryDriveOperationInProgress else { return }
         let installedVersion = installedAppVersion()
         updateCheckInProgress = true
 
@@ -1141,6 +1411,8 @@ final class AppDelegate: NSObject, NSApplicationDelegate, WKNavigationDelegate, 
         addMenuItem(fileMenu, "Add Materials…", #selector(addBooks(_:)), "o", [.command, .shift])
         addMenuItem(fileMenu, "Choose Library Folder…", #selector(chooseLibraryFolder(_:)))
         addMenuItem(fileMenu, "Move Library to External Storage…", #selector(moveLibrary(_:)))
+        addMenuItem(fileMenu, "Disconnect Library Drive…", #selector(disconnectLibraryDrive(_:)))
+        addMenuItem(fileMenu, "Reconnect Library Sync…", #selector(reconnectLibrarySync(_:)))
         fileMenu.addItem(.separator())
         addMenuItem(fileMenu, "Open Library Folder", #selector(openLibraryFolder(_:)), "o")
         addMenuItem(fileMenu, "Open Reader Data Folder", #selector(openReaderDataFolder(_:)))

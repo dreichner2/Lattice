@@ -81,7 +81,7 @@ final class ReaderBridge: NSObject, WKScriptMessageHandlerWithReply {
             guard let appInfoProvider else { throw BridgeError.unavailable("app.info") }
             return appInfoProvider()
 
-        case "app.checkForUpdates", "app.moveLibrary":
+        case "app.checkForUpdates", "app.moveLibrary", "app.disconnectLibrary", "app.reconnectLibrary":
             guard let appActionHandler else { throw BridgeError.unavailable(action) }
             appActionHandler(action)
             return ["started": true]

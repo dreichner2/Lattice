@@ -15,6 +15,7 @@ import json
 import os
 import shutil
 import stat
+import subprocess
 import sys
 import time
 import urllib.error
@@ -33,10 +34,15 @@ MINIMUM_FREE_SPACE_RESERVE = 64 * 1024 * 1024
 MAXIMUM_API_RESPONSE_BYTES = 4 * 1024 * 1024
 MAXIMUM_SYNCTHING_CONFIG_BYTES = 4 * 1024 * 1024
 MAXIMUM_API_KEY_CHARACTERS = 4096
+MAXIMUM_DISCONNECT_STATE_BYTES = 16 * 1024
 
 
 class LibraryMoveError(RuntimeError):
     """A user-actionable relocation failure."""
+
+
+class SyncthingUnavailableError(LibraryMoveError):
+    """The verified loopback endpoint is not currently running."""
 
 
 class Reporter:
@@ -90,6 +96,30 @@ class MoveResult:
     source_removed: bool
     syncthing_managed: bool
     warning: str | None = None
+
+
+@dataclass(frozen=True)
+class SyncthingDiscovery:
+    client: "SyncthingClient | None"
+    folder: dict[str, Any] | None
+    config_path: Path | None
+    managed: bool
+    running: bool
+
+
+@dataclass(frozen=True)
+class DisconnectResult:
+    syncthing_managed: bool
+    syncthing_running: bool
+    paused_by_lattice: bool
+
+
+@dataclass(frozen=True)
+class ReconnectResult:
+    syncthing_managed: bool
+    syncthing_running: bool
+    syncthing_started: bool
+    resumed_by_lattice: bool
 
 
 def _same_path(left: Path | str, right: Path | str) -> bool:
@@ -451,7 +481,7 @@ class SyncthingClient:
             error.close()
             raise LibraryMoveError("Syncthing's loopback API did not accept the storage change.") from error
         except (urllib.error.URLError, TimeoutError, OSError) as error:
-            raise LibraryMoveError("Syncthing's loopback API did not accept the storage change.") from error
+            raise SyncthingUnavailableError("Syncthing's loopback API is not running.") from error
         if len(payload) > MAXIMUM_API_RESPONSE_BYTES:
             raise LibraryMoveError("Syncthing returned an unexpectedly large API response.")
         if not payload:
@@ -490,45 +520,82 @@ class SyncthingClient:
         self._request("POST", f"/rest/db/scan?{query}")
 
 
-def _find_syncthing_client(
+def _configuration_claims_library(config_path: Path, source: Path, folder_id: str) -> bool:
+    if not config_path.is_file() or config_path.is_symlink():
+        return False
+    try:
+        config_size = config_path.stat().st_size
+        if config_size <= 0 or config_size > MAXIMUM_SYNCTHING_CONFIG_BYTES:
+            return False
+        configuration_root = ET.parse(config_path).getroot()
+    except (OSError, ET.ParseError):
+        return False
+    for configured_folder in configuration_root.findall("folder"):
+        configured_path = configured_folder.get("path")
+        if (
+            configured_folder.get("id") == folder_id
+            and isinstance(configured_path, str)
+            and _same_path(configured_path, source)
+        ):
+            return True
+    return False
+
+
+def _discover_syncthing(
     source: Path,
     folder_id: str,
     explicit_config: Path | str | None,
-) -> tuple[SyncthingClient, dict[str, Any]] | None:
+) -> SyncthingDiscovery:
     configuration_claims_source = False
+    offline_config: Path | None = None
+    claimed_configuration_error: LibraryMoveError | None = None
     for config_path in _configuration_candidates(explicit_config):
         if not config_path.is_file():
             continue
-        try:
-            if config_path.is_symlink():
-                continue
-            config_size = config_path.stat().st_size
-            if config_size <= 0 or config_size > MAXIMUM_SYNCTHING_CONFIG_BYTES:
-                continue
-            configuration_root = ET.parse(config_path).getroot()
-            for configured_folder in configuration_root.findall("folder"):
-                if (
-                    configured_folder.get("id") == folder_id
-                    and isinstance(configured_folder.get("path"), str)
-                    and _same_path(configured_folder.get("path", ""), source)
-                ):
-                    configuration_claims_source = True
-        except (OSError, ET.ParseError):
-            pass
+        claims_source = _configuration_claims_library(config_path, source, folder_id)
+        configuration_claims_source = configuration_claims_source or claims_source
         try:
             client = SyncthingClient(_read_syncthing_connection(config_path))
             folder = client.folder(folder_id)
-        except LibraryMoveError:
+        except SyncthingUnavailableError:
+            if claims_source:
+                offline_config = config_path.resolve()
+            continue
+        except LibraryMoveError as error:
+            if claims_source:
+                claimed_configuration_error = error
             continue
         configured_path = folder.get("path")
         if isinstance(configured_path, str) and _same_path(configured_path, source):
-            return client, folder
+            return SyncthingDiscovery(client, folder, config_path.resolve(), True, True)
+
+    if claimed_configuration_error is not None:
+        raise claimed_configuration_error
+    if offline_config is not None:
+        return SyncthingDiscovery(None, None, offline_config, True, False)
 
     if (
         (source / ".stfolder").exists()
         or configuration_claims_source
         or explicit_config is not None
     ):
+        raise LibraryMoveError(
+            "Lattice could not verify that the running Syncthing instance manages this exact library. "
+            "Start Syncthing and make sure its Lattice folder is healthy, then try again."
+        )
+    return SyncthingDiscovery(None, None, None, False, False)
+
+
+def _find_syncthing_client(
+    source: Path,
+    folder_id: str,
+    explicit_config: Path | str | None,
+) -> tuple[SyncthingClient, dict[str, Any]] | None:
+    discovery = _discover_syncthing(source, folder_id, explicit_config)
+    if discovery.running:
+        assert discovery.client is not None and discovery.folder is not None
+        return discovery.client, discovery.folder
+    if discovery.managed:
         raise LibraryMoveError(
             "Lattice could not verify that the running Syncthing instance manages this exact library. "
             "Start Syncthing and make sure its Lattice folder is healthy, then try again."
@@ -555,18 +622,371 @@ def _wait_for_syncthing(
     *,
     allow_paused: bool,
     timeout: float,
+    required_state: str | None = None,
 ) -> None:
     deadline = time.monotonic() + timeout
     last_status: dict[str, Any] | None = None
     while time.monotonic() < deadline:
         last_status = client.status(folder_id)
-        if _validate_syncthing_status(last_status, allow_paused):
+        if (
+            _validate_syncthing_status(last_status, allow_paused)
+            and (required_state is None or last_status.get("state") == required_state)
+        ):
             return
         time.sleep(0.4)
     state = last_status.get("state") if last_status else "unknown"
     raise LibraryMoveError(
         f"Syncthing did not return the relocated folder to an up-to-date state (state: {state})."
     )
+
+
+def _disconnect_state_path(source: Path, state_value: Path | str) -> Path:
+    state_input = Path(state_value).expanduser()
+    unresolved = Path(os.path.abspath(state_input))
+    if _is_within(unresolved, source):
+        raise LibraryMoveError(
+            "Lattice's reconnect record must stay off the synchronized library drive."
+        )
+    if state_input.exists() and state_input.is_symlink():
+        raise LibraryMoveError("Lattice's external-drive reconnect record cannot be a symbolic link.")
+    try:
+        state_input.parent.mkdir(mode=0o700, parents=True, exist_ok=True)
+        parent = state_input.parent.resolve(strict=True)
+    except OSError as error:
+        raise LibraryMoveError("Lattice could not open its local reconnect-state folder.") from error
+    state_path = parent / state_input.name
+    if _is_within(state_path, source):
+        raise LibraryMoveError(
+            "Lattice's reconnect record must stay off the synchronized library drive."
+        )
+    return state_path
+
+
+def _read_disconnect_state(source: Path, state_value: Path | str) -> dict[str, Any] | None:
+    state_path = _disconnect_state_path(source, state_value)
+    if not state_path.exists():
+        return None
+    if state_path.is_symlink() or not state_path.is_file():
+        raise LibraryMoveError("Lattice's external-drive reconnect record is unsafe.")
+    try:
+        size = state_path.stat().st_size
+        if size <= 0 or size > MAXIMUM_DISCONNECT_STATE_BYTES:
+            raise LibraryMoveError("Lattice's external-drive reconnect record has an unsafe size.")
+        value = json.loads(state_path.read_text(encoding="utf-8"))
+    except LibraryMoveError:
+        raise
+    except (OSError, UnicodeError, json.JSONDecodeError) as error:
+        raise LibraryMoveError("Lattice's external-drive reconnect record could not be read.") from error
+    if (
+        not isinstance(value, dict)
+        or value.get("schemaVersion") != 1
+        or not isinstance(value.get("folderId"), str)
+        or not isinstance(value.get("libraryRoot"), str)
+        or not isinstance(value.get("resumeRequired"), bool)
+    ):
+        raise LibraryMoveError("Lattice's external-drive reconnect record is invalid.")
+    return value
+
+
+def _write_disconnect_state(
+    source: Path,
+    state_value: Path | str,
+    folder_id: str,
+) -> None:
+    state_path = _disconnect_state_path(source, state_value)
+    existing = _read_disconnect_state(source, state_path)
+    if existing is not None and (
+        existing["folderId"] != folder_id
+        or not _same_path(existing["libraryRoot"], source)
+    ):
+        raise LibraryMoveError(
+            "Another Lattice library is waiting to reconnect. Reconnect that drive before disconnecting this one."
+        )
+    payload = {
+        "schemaVersion": 1,
+        "folderId": folder_id,
+        "libraryRoot": str(source),
+        "resumeRequired": True,
+    }
+    temporary = state_path.parent / f".{state_path.name}.{uuid.uuid4().hex}.tmp"
+    try:
+        with temporary.open("x", encoding="utf-8", newline="\n") as output:
+            json.dump(payload, output, ensure_ascii=False, separators=(",", ":"))
+            output.write("\n")
+            output.flush()
+            os.fsync(output.fileno())
+        try:
+            temporary.chmod(0o600)
+        except OSError:
+            pass
+        os.replace(temporary, state_path)
+    except OSError as error:
+        try:
+            temporary.unlink()
+        except OSError:
+            pass
+        raise LibraryMoveError("Lattice could not save its external-drive reconnect record.") from error
+
+
+def _delete_disconnect_state(source: Path, state_value: Path | str) -> None:
+    state_path = _disconnect_state_path(source, state_value)
+    try:
+        state_path.unlink(missing_ok=True)
+    except OSError as error:
+        raise LibraryMoveError("Lattice reconnected sync but could not clear its reconnect record.") from error
+
+
+def _find_windows_syncthing_executable() -> Path | None:
+    candidates: list[Path] = []
+    for command in ("syncthing.exe", "syncthing"):
+        found = shutil.which(command)
+        if found:
+            candidates.append(Path(found))
+    local_app_data = os.environ.get("LOCALAPPDATA")
+    if local_app_data:
+        local_root = Path(local_app_data)
+        candidates.extend(
+            [
+                local_root / "Microsoft" / "WinGet" / "Links" / "syncthing.exe",
+                local_root / "Programs" / "Syncthing" / "syncthing.exe",
+            ]
+        )
+        packages = local_root / "Microsoft" / "WinGet" / "Packages"
+        if packages.is_dir():
+            candidates.extend(packages.glob("Syncthing.Syncthing_*/**/syncthing.exe"))
+    program_files = os.environ.get("ProgramFiles")
+    if program_files:
+        candidates.append(Path(program_files) / "Syncthing" / "syncthing.exe")
+    for candidate in candidates:
+        try:
+            if candidate.is_file():
+                return candidate.resolve()
+        except OSError:
+            continue
+    return None
+
+
+def _syncthing_process_may_be_running() -> bool:
+    try:
+        if os.name == "nt":
+            result = subprocess.run(
+                ["tasklist.exe", "/FI", "IMAGENAME eq syncthing.exe", "/FO", "CSV", "/NH"],
+                stdin=subprocess.DEVNULL,
+                stdout=subprocess.PIPE,
+                stderr=subprocess.DEVNULL,
+                timeout=3,
+                check=False,
+                creationflags=int(getattr(subprocess, "CREATE_NO_WINDOW", 0)),
+            )
+            output = result.stdout.decode("utf-8", errors="replace").lower()
+            return result.returncode == 0 and '"syncthing.exe"' in output
+        result = subprocess.run(
+            ["/usr/bin/pgrep", "-x", "syncthing"],
+            stdin=subprocess.DEVNULL,
+            stdout=subprocess.DEVNULL,
+            stderr=subprocess.DEVNULL,
+            timeout=3,
+            check=False,
+        )
+        return result.returncode == 0
+    except (OSError, subprocess.SubprocessError):
+        # If process state cannot be proven, do not tell the user the drive is safe.
+        return True
+
+
+def _start_windows_syncthing(config_path: Path) -> subprocess.Popen[bytes]:
+    if os.name != "nt":
+        raise LibraryMoveError(
+            "Syncthing is stopped. Start it, then choose Reconnect library sync again."
+        )
+    executable = _find_windows_syncthing_executable()
+    if executable is None:
+        raise LibraryMoveError(
+            "Syncthing is stopped and its executable could not be found. Reinstall Syncthing or rerun Lattice Windows setup."
+        )
+    home = config_path.parent.resolve(strict=True)
+    creation_flags = int(getattr(subprocess, "CREATE_NO_WINDOW", 0))
+    try:
+        return subprocess.Popen(
+            [
+                str(executable),
+                "serve",
+                "--no-browser",
+                "--no-console",
+                f"--home={home}",
+            ],
+            cwd=home,
+            stdin=subprocess.DEVNULL,
+            stdout=subprocess.DEVNULL,
+            stderr=subprocess.DEVNULL,
+            close_fds=True,
+            creationflags=creation_flags,
+        )
+    except OSError as error:
+        raise LibraryMoveError("Windows could not restart the dedicated Lattice Syncthing instance.") from error
+
+
+def _wait_for_started_syncthing(
+    source: Path,
+    folder_id: str,
+    config_path: Path,
+    process: subprocess.Popen[bytes],
+    timeout: float,
+) -> SyncthingDiscovery:
+    deadline = time.monotonic() + timeout
+    last_error: LibraryMoveError | None = None
+    while time.monotonic() < deadline:
+        if process.poll() is not None:
+            raise LibraryMoveError(
+                "Syncthing exited before its local API became ready. Rerun Lattice Windows setup to repair it."
+            )
+        try:
+            discovery = _discover_syncthing(source, folder_id, config_path)
+            if discovery.running:
+                return discovery
+        except LibraryMoveError as error:
+            last_error = error
+        time.sleep(0.4)
+    if last_error is not None and not isinstance(last_error, SyncthingUnavailableError):
+        raise last_error
+    raise LibraryMoveError("Syncthing did not come back online within 30 seconds.")
+
+
+def prepare_library_disconnect(
+    source_value: Path | str,
+    state_file: Path | str,
+    *,
+    folder_id: str = DEFAULT_FOLDER_ID,
+    syncthing_config: Path | str | None = None,
+    sync_timeout: float = 30.0,
+) -> DisconnectResult:
+    source_input = Path(source_value).expanduser()
+    if source_input.is_symlink():
+        raise LibraryMoveError("The current library root cannot be a symbolic link.")
+    source = source_input.resolve(strict=True)
+    _validate_library_root(source, folder_id)
+    existing_state = _read_disconnect_state(source, state_file)
+    if existing_state is not None and (
+        existing_state["folderId"] != folder_id
+        or not _same_path(existing_state["libraryRoot"], source)
+    ):
+        raise LibraryMoveError(
+            "Another Lattice library is waiting to reconnect. Reconnect that drive before disconnecting this one."
+        )
+    discovery = _discover_syncthing(source, folder_id, syncthing_config)
+    if not discovery.managed:
+        return DisconnectResult(False, False, False)
+    if not discovery.running:
+        if _syncthing_process_may_be_running():
+            raise LibraryMoveError(
+                "Syncthing's local API is unavailable, but a Syncthing process is still running. "
+                "Restart Syncthing, wait for Lattice to show Live sync, and try disconnecting again."
+            )
+        # A proven-stopped process has no watcher or filesystem handle to release.
+        return DisconnectResult(True, False, False)
+
+    assert discovery.client is not None and discovery.folder is not None
+    client = discovery.client
+    folder = discovery.folder
+    if folder.get("type") != "sendreceive":
+        raise LibraryMoveError("The Lattice Syncthing folder must be Send & Receive before disconnecting.")
+    if client.restart_required():
+        raise LibraryMoveError("Syncthing has a pending restart. Restart it, then try disconnecting again.")
+    original_paused = bool(folder.get("paused", False))
+    if original_paused:
+        return DisconnectResult(True, True, False)
+    initial_status = client.status(folder_id)
+    if not _validate_syncthing_status(initial_status, allow_paused=False):
+        raise LibraryMoveError(
+            "Wait for the Lattice folder to show Up to Date before disconnecting its drive."
+        )
+
+    client.patch_folder(folder_id, {"paused": True})
+    try:
+        if not bool(client.folder(folder_id).get("paused", False)):
+            raise LibraryMoveError("Syncthing did not pause the Lattice folder.")
+        _wait_for_syncthing(
+            client,
+            folder_id,
+            allow_paused=True,
+            timeout=sync_timeout,
+            required_state="paused",
+        )
+        _write_disconnect_state(source, state_file, folder_id)
+    except BaseException as error:
+        try:
+            client.patch_folder(folder_id, {"paused": False})
+            client.scan(folder_id)
+        except Exception as restore_error:  # pragma: no cover - catastrophic API failure
+            raise LibraryMoveError(
+                f"{error} Syncthing also could not restore the folder after disconnect preparation failed: {restore_error}"
+            ) from error
+        raise
+    return DisconnectResult(True, True, True)
+
+
+def reconnect_library(
+    source_value: Path | str,
+    state_file: Path | str,
+    *,
+    folder_id: str = DEFAULT_FOLDER_ID,
+    syncthing_config: Path | str | None = None,
+    start_if_needed: bool = False,
+    sync_timeout: float = 120.0,
+) -> ReconnectResult:
+    source_input = Path(source_value).expanduser()
+    if source_input.is_symlink():
+        raise LibraryMoveError("The current library root cannot be a symbolic link.")
+    source = source_input.resolve(strict=True)
+    _validate_library_root(source, folder_id)
+    state = _read_disconnect_state(source, state_file)
+    if state is not None and (
+        state["folderId"] != folder_id
+        or not _same_path(state["libraryRoot"], source)
+    ):
+        raise LibraryMoveError(
+            "The saved reconnect record belongs to another library path. Reconnect that drive before changing this folder."
+        )
+
+    discovery = _discover_syncthing(source, folder_id, syncthing_config)
+    started = False
+    if discovery.managed and not discovery.running and start_if_needed:
+        if discovery.config_path is None:
+            raise LibraryMoveError("Lattice could not locate Syncthing's configuration for this library.")
+        process = _start_windows_syncthing(discovery.config_path)
+        discovery = _wait_for_started_syncthing(
+            source,
+            folder_id,
+            discovery.config_path,
+            process,
+            30.0,
+        )
+        started = True
+    if not discovery.managed:
+        return ReconnectResult(False, False, False, False)
+    if not discovery.running:
+        raise LibraryMoveError(
+            "Syncthing is stopped. Start it, then choose Reconnect library sync again."
+        )
+
+    assert discovery.client is not None and discovery.folder is not None
+    client = discovery.client
+    folder = discovery.folder
+    if folder.get("type") != "sendreceive":
+        raise LibraryMoveError("The Lattice Syncthing folder must be Send & Receive before reconnecting.")
+    if client.restart_required():
+        raise LibraryMoveError("Syncthing has a pending restart. Restart it, then reconnect the library.")
+    resumed = False
+    if state is not None and state["resumeRequired"]:
+        if bool(folder.get("paused", False)):
+            client.patch_folder(folder_id, {"paused": False})
+            if bool(client.folder(folder_id).get("paused", True)):
+                raise LibraryMoveError("Syncthing did not resume the Lattice folder.")
+            resumed = True
+        client.scan(folder_id)
+        _wait_for_syncthing(client, folder_id, allow_paused=False, timeout=sync_timeout)
+        _delete_disconnect_state(source, state_file)
+    return ReconnectResult(True, True, started, resumed)
 
 
 def _remove_tree(path: Path) -> None:
@@ -712,9 +1132,16 @@ def move_library(
 
 
 def _parser() -> argparse.ArgumentParser:
-    parser = argparse.ArgumentParser(description="Relocate a Lattice library safely.")
+    parser = argparse.ArgumentParser(description="Manage Lattice library storage safely.")
+    parser.add_argument(
+        "--operation",
+        choices=("move", "disconnect", "reconnect"),
+        default="move",
+    )
     parser.add_argument("--source", required=True, help="Current Lattice library root")
-    parser.add_argument("--destination", required=True, help="New, not-yet-existing library root")
+    parser.add_argument("--destination", help="New, not-yet-existing library root")
+    parser.add_argument("--state-file", help="Local reconnect record outside the library")
+    parser.add_argument("--start-if-needed", action="store_true", help=argparse.SUPPRESS)
     parser.add_argument("--folder-id", default=DEFAULT_FOLDER_ID)
     parser.add_argument("--protected-path", action="append", default=[])
     parser.add_argument("--syncthing-config", help=argparse.SUPPRESS)
@@ -725,25 +1152,73 @@ def main(argv: list[str] | None = None) -> int:
     arguments = _parser().parse_args(argv)
     reporter = Reporter()
     try:
-        result = move_library(
-            arguments.source,
-            arguments.destination,
-            folder_id=arguments.folder_id,
-            protected_paths=arguments.protected_path,
-            syncthing_config=arguments.syncthing_config,
-            report=reporter,
-        )
+        if arguments.operation == "move":
+            if not arguments.destination:
+                raise LibraryMoveError("Move Library requires a destination folder.")
+            result = move_library(
+                arguments.source,
+                arguments.destination,
+                folder_id=arguments.folder_id,
+                protected_paths=arguments.protected_path,
+                syncthing_config=arguments.syncthing_config,
+                report=reporter,
+            )
+            reporter(
+                "complete",
+                operation="move",
+                destination=str(result.destination),
+                sourceRemoved=result.source_removed,
+                syncthingManaged=result.syncthing_managed,
+                warning=result.warning,
+                message="Your Lattice library is ready on the new drive.",
+            )
+        elif arguments.operation == "disconnect":
+            if not arguments.state_file:
+                raise LibraryMoveError("Disconnect library drive requires a local state file.")
+            disconnected = prepare_library_disconnect(
+                arguments.source,
+                arguments.state_file,
+                folder_id=arguments.folder_id,
+                syncthing_config=arguments.syncthing_config,
+            )
+            reporter(
+                "complete",
+                operation="disconnect",
+                syncthingManaged=disconnected.syncthing_managed,
+                syncthingRunning=disconnected.syncthing_running,
+                pausedByLattice=disconnected.paused_by_lattice,
+                message=(
+                    "Syncthing released the Lattice folder. Close Lattice before ejecting the drive."
+                    if disconnected.syncthing_running
+                    else "Syncthing is already stopped. Close Lattice before ejecting the drive."
+                ),
+            )
+        else:
+            if not arguments.state_file:
+                raise LibraryMoveError("Reconnect library sync requires a local state file.")
+            reconnected = reconnect_library(
+                arguments.source,
+                arguments.state_file,
+                folder_id=arguments.folder_id,
+                syncthing_config=arguments.syncthing_config,
+                start_if_needed=arguments.start_if_needed,
+            )
+            reporter(
+                "complete",
+                operation="reconnect",
+                syncthingManaged=reconnected.syncthing_managed,
+                syncthingRunning=reconnected.syncthing_running,
+                syncthingStarted=reconnected.syncthing_started,
+                resumedByLattice=reconnected.resumed_by_lattice,
+                message=(
+                    "The Lattice library and Syncthing are reconnected."
+                    if reconnected.syncthing_managed
+                    else "This library is not managed by Syncthing."
+                ),
+            )
     except (LibraryMoveError, OSError, ValueError) as error:
         reporter("error", message=str(error))
         return 1
-    reporter(
-        "complete",
-        destination=str(result.destination),
-        sourceRemoved=result.source_removed,
-        syncthingManaged=result.syncthing_managed,
-        warning=result.warning,
-        message="Your Lattice library is ready on the new drive.",
-    )
     return 0
 
 

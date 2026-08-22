@@ -177,11 +177,17 @@ class running_syncthing:
         return int(self.server.server_address[1])
 
 
-def write_syncthing_config(path: Path, port: int) -> None:
+def write_syncthing_config(path: Path, port: int, source: Path | None = None) -> None:
     path.parent.mkdir(parents=True)
+    folder = (
+        f'<folder id="{FOLDER_ID}" path="{source}" type="sendreceive" paused="false" />'
+        if source is not None
+        else ""
+    )
     path.write_text(
         "<?xml version=\"1.0\"?>\n"
         "<configuration>"
+        f"{folder}"
         f"<gui enabled=\"true\" tls=\"false\"><address>127.0.0.1:{port}</address>"
         f"<apikey>{API_KEY}</apikey></gui>"
         "</configuration>\n",
@@ -190,6 +196,131 @@ def write_syncthing_config(path: Path, port: int) -> None:
 
 
 class MoveLibraryTests(unittest.TestCase):
+    def test_disconnect_pauses_exact_folder_and_reconnect_restores_only_lattice_pause(self) -> None:
+        with tempfile.TemporaryDirectory() as temporary:
+            base = Path(temporary)
+            source = base / "external" / "Lattice"
+            state_file = base / "local-state" / "external-drive.json"
+            config = base / "syncthing" / "config.xml"
+            source.parent.mkdir()
+            make_library(source, synced=True)
+            with running_syncthing(source) as fixture:
+                write_syncthing_config(config, fixture.port, source)
+                disconnected = move_library.prepare_library_disconnect(
+                    source,
+                    state_file,
+                    syncthing_config=config,
+                    sync_timeout=1,
+                )
+                self.assertTrue(disconnected.syncthing_managed)
+                self.assertTrue(disconnected.syncthing_running)
+                self.assertTrue(disconnected.paused_by_lattice)
+                self.assertTrue(fixture.state.folder["paused"])
+                saved = json.loads(state_file.read_text(encoding="utf-8"))
+                self.assertEqual(saved["folderId"], FOLDER_ID)
+                self.assertTrue(saved["resumeRequired"])
+                self.assertNotIn(API_KEY, state_file.read_text(encoding="utf-8"))
+
+                reconnected = move_library.reconnect_library(
+                    source,
+                    state_file,
+                    syncthing_config=config,
+                    sync_timeout=1,
+                )
+                self.assertTrue(reconnected.syncthing_running)
+                self.assertTrue(reconnected.resumed_by_lattice)
+                self.assertFalse(reconnected.syncthing_started)
+                self.assertFalse(fixture.state.folder["paused"])
+                self.assertFalse(state_file.exists())
+                self.assertGreaterEqual(fixture.state.scans, 1)
+
+    def test_disconnect_preserves_a_pause_not_created_by_lattice(self) -> None:
+        with tempfile.TemporaryDirectory() as temporary:
+            base = Path(temporary)
+            source = base / "external" / "Lattice"
+            state_file = base / "local-state" / "external-drive.json"
+            config = base / "syncthing" / "config.xml"
+            source.parent.mkdir()
+            make_library(source, synced=True)
+            with running_syncthing(source) as fixture:
+                fixture.state.folder["paused"] = True
+                write_syncthing_config(config, fixture.port, source)
+                disconnected = move_library.prepare_library_disconnect(
+                    source,
+                    state_file,
+                    syncthing_config=config,
+                    sync_timeout=1,
+                )
+                self.assertFalse(disconnected.paused_by_lattice)
+                self.assertFalse(state_file.exists())
+                reconnected = move_library.reconnect_library(
+                    source,
+                    state_file,
+                    syncthing_config=config,
+                    sync_timeout=1,
+                )
+                self.assertFalse(reconnected.resumed_by_lattice)
+                self.assertTrue(fixture.state.folder["paused"])
+
+    def test_disconnect_accepts_verified_stopped_syncthing_as_already_released(self) -> None:
+        with tempfile.TemporaryDirectory() as temporary:
+            base = Path(temporary)
+            source = base / "external" / "Lattice"
+            state_file = base / "local-state" / "external-drive.json"
+            config = base / "syncthing" / "config.xml"
+            source.parent.mkdir()
+            make_library(source, synced=True)
+            with running_syncthing(source) as fixture:
+                write_syncthing_config(config, fixture.port, source)
+            with mock.patch.object(
+                move_library,
+                "_syncthing_process_may_be_running",
+                return_value=False,
+            ):
+                disconnected = move_library.prepare_library_disconnect(
+                    source,
+                    state_file,
+                    syncthing_config=config,
+                    sync_timeout=0.1,
+                )
+            self.assertTrue(disconnected.syncthing_managed)
+            self.assertFalse(disconnected.syncthing_running)
+            self.assertFalse(disconnected.paused_by_lattice)
+            self.assertFalse(state_file.exists())
+
+    def test_disconnect_never_calls_an_unreachable_api_safe_while_syncthing_runs(self) -> None:
+        with tempfile.TemporaryDirectory() as temporary:
+            base = Path(temporary)
+            source = base / "external" / "Lattice"
+            state_file = base / "local-state" / "external-drive.json"
+            config = base / "syncthing" / "config.xml"
+            source.parent.mkdir()
+            make_library(source, synced=True)
+            with running_syncthing(source) as fixture:
+                write_syncthing_config(config, fixture.port, source)
+            with mock.patch.object(
+                move_library,
+                "_syncthing_process_may_be_running",
+                return_value=True,
+            ):
+                with self.assertRaisesRegex(move_library.LibraryMoveError, "still running"):
+                    move_library.prepare_library_disconnect(
+                        source,
+                        state_file,
+                        syncthing_config=config,
+                        sync_timeout=0.1,
+                    )
+
+    def test_disconnect_state_must_stay_outside_synchronized_library(self) -> None:
+        with tempfile.TemporaryDirectory() as temporary:
+            source = Path(temporary) / "Lattice"
+            make_library(source, synced=False)
+            with self.assertRaisesRegex(move_library.LibraryMoveError, "must stay off"):
+                move_library.prepare_library_disconnect(
+                    source,
+                    source / "reconnect.json",
+                )
+
     def test_unsynced_library_moves_with_hidden_files_and_verified_bytes(self) -> None:
         with tempfile.TemporaryDirectory() as temporary:
             base = Path(temporary)
@@ -419,6 +550,47 @@ class MoveLibraryTests(unittest.TestCase):
                 move_library._same_path(Path(messages[-1]["destination"]), destination)
             )
             self.assertNotIn(API_KEY, output.getvalue())
+
+    def test_cli_disconnect_and_reconnect_contract_is_machine_readable(self) -> None:
+        with tempfile.TemporaryDirectory() as temporary:
+            base = Path(temporary)
+            source = base / "external" / "Lattice"
+            state_file = base / "local-state" / "external-drive.json"
+            config = base / "syncthing" / "config.xml"
+            source.parent.mkdir()
+            make_library(source, synced=True)
+            with running_syncthing(source) as fixture:
+                write_syncthing_config(config, fixture.port, source)
+                output = io.StringIO()
+                with contextlib.redirect_stdout(output):
+                    exit_code = move_library.main(
+                        [
+                            "--operation", "disconnect",
+                            "--source", str(source),
+                            "--state-file", str(state_file),
+                            "--syncthing-config", str(config),
+                        ]
+                    )
+                message = json.loads(output.getvalue().splitlines()[-1])
+                self.assertEqual(exit_code, 0)
+                self.assertEqual(message["operation"], "disconnect")
+                self.assertTrue(message["pausedByLattice"])
+
+                output = io.StringIO()
+                with contextlib.redirect_stdout(output):
+                    exit_code = move_library.main(
+                        [
+                            "--operation", "reconnect",
+                            "--source", str(source),
+                            "--state-file", str(state_file),
+                            "--syncthing-config", str(config),
+                        ]
+                    )
+                message = json.loads(output.getvalue().splitlines()[-1])
+                self.assertEqual(exit_code, 0)
+                self.assertEqual(message["operation"], "reconnect")
+                self.assertTrue(message["resumedByLattice"])
+                self.assertNotIn(API_KEY, output.getvalue())
 
 
 if __name__ == "__main__":

@@ -12,6 +12,17 @@ internal sealed record LibraryMoveOutcome(
     bool SyncthingManaged,
     string? Warning);
 
+internal sealed record LibraryDisconnectOutcome(
+    bool SyncthingManaged,
+    bool SyncthingRunning,
+    bool PausedByLattice);
+
+internal sealed record LibraryReconnectOutcome(
+    bool SyncthingManaged,
+    bool SyncthingRunning,
+    bool SyncthingStarted,
+    bool ResumedByLattice);
+
 internal static class LibraryMoveClient
 {
     private const string FolderId = "cs-library-3b8290f24f15";
@@ -27,13 +38,77 @@ internal static class LibraryMoveClient
     {
         source = Path.GetFullPath(source);
         destination = Path.GetFullPath(destination);
-        var start = CreateStartInfo(source, destination);
+        var completed = await RunStorageHelperAsync(
+            "move", source, destination, stateFile: null, startIfNeeded: false, progress: progress);
+        var completedDestination = RequiredString(completed, "destination");
+        if (!string.Equals(
+                Path.TrimEndingDirectorySeparator(Path.GetFullPath(completedDestination)),
+                Path.TrimEndingDirectorySeparator(destination),
+                StringComparison.OrdinalIgnoreCase))
+            throw new InvalidDataException("The storage helper reported an unexpected destination.");
+        return new LibraryMoveOutcome(
+            Path.GetFullPath(completedDestination),
+            RequiredBoolean(completed, "sourceRemoved"),
+            RequiredBoolean(completed, "syncthingManaged"),
+            completed.TryGetProperty("warning", out var warningValue)
+                && warningValue.ValueKind == JsonValueKind.String
+                    ? warningValue.GetString()
+                    : null);
+    }
+
+    internal static async Task<LibraryDisconnectOutcome> DisconnectAsync(
+        string source,
+        string stateFile,
+        IProgress<LibraryMoveProgress>? progress = null)
+    {
+        var completed = await RunStorageHelperAsync(
+            "disconnect",
+            Path.GetFullPath(source),
+            destination: null,
+            stateFile: Path.GetFullPath(stateFile),
+            startIfNeeded: false,
+            progress: progress);
+        return new LibraryDisconnectOutcome(
+            RequiredBoolean(completed, "syncthingManaged"),
+            RequiredBoolean(completed, "syncthingRunning"),
+            RequiredBoolean(completed, "pausedByLattice"));
+    }
+
+    internal static async Task<LibraryReconnectOutcome> ReconnectAsync(
+        string source,
+        string stateFile,
+        bool startIfNeeded,
+        IProgress<LibraryMoveProgress>? progress = null)
+    {
+        var completed = await RunStorageHelperAsync(
+            "reconnect",
+            Path.GetFullPath(source),
+            destination: null,
+            stateFile: Path.GetFullPath(stateFile),
+            startIfNeeded: startIfNeeded,
+            progress: progress);
+        return new LibraryReconnectOutcome(
+            RequiredBoolean(completed, "syncthingManaged"),
+            RequiredBoolean(completed, "syncthingRunning"),
+            RequiredBoolean(completed, "syncthingStarted"),
+            RequiredBoolean(completed, "resumedByLattice"));
+    }
+
+    private static async Task<JsonElement> RunStorageHelperAsync(
+        string operation,
+        string source,
+        string? destination,
+        string? stateFile,
+        bool startIfNeeded,
+        IProgress<LibraryMoveProgress>? progress)
+    {
+        var start = CreateStartInfo(operation, source, destination, stateFile, startIfNeeded);
         using var process = new Process { StartInfo = start };
         if (!process.Start())
             throw new InvalidOperationException("The Lattice storage helper did not start.");
 
         var standardError = process.StandardError.ReadToEndAsync();
-        LibraryMoveOutcome? outcome = null;
+        JsonElement? completion = null;
         string? reportedError = null;
         while (await process.StandardOutput.ReadLineAsync() is { } line)
         {
@@ -67,40 +142,35 @@ internal static class LibraryMoveClient
             }
             else if (string.Equals(eventName, "complete", StringComparison.Ordinal))
             {
-                var completedDestination = root.GetProperty("destination").GetString()
-                    ?? throw new InvalidDataException("The completed move has no destination.");
-                if (!string.Equals(
-                        Path.TrimEndingDirectorySeparator(Path.GetFullPath(completedDestination)),
-                        Path.TrimEndingDirectorySeparator(destination),
-                        StringComparison.OrdinalIgnoreCase))
-                    throw new InvalidDataException("The storage helper reported an unexpected destination.");
-                outcome = new LibraryMoveOutcome(
-                    Path.GetFullPath(completedDestination),
-                    root.GetProperty("sourceRemoved").GetBoolean(),
-                    root.GetProperty("syncthingManaged").GetBoolean(),
-                    root.TryGetProperty("warning", out var warningValue)
-                        && warningValue.ValueKind == JsonValueKind.String
-                            ? warningValue.GetString()
-                            : null);
+                if (!root.TryGetProperty("operation", out var operationValue)
+                    || operationValue.ValueKind != JsonValueKind.String
+                    || !string.Equals(operationValue.GetString(), operation, StringComparison.Ordinal))
+                    throw new InvalidDataException("The storage helper completed an unexpected operation.");
+                completion = root.Clone();
             }
         }
 
         await process.WaitForExitAsync();
         var errorDetail = await standardError;
-        if (process.ExitCode != 0 || outcome is null)
+        if (process.ExitCode != 0 || completion is null)
         {
             var detail = !string.IsNullOrWhiteSpace(reportedError)
                 ? reportedError
                 : Truncate(errorDetail.Trim(), MaximumMessageLength);
             throw new InvalidOperationException(
                 string.IsNullOrWhiteSpace(detail)
-                    ? $"The library move stopped with exit code {process.ExitCode}."
+                    ? $"The library storage operation stopped with exit code {process.ExitCode}."
                     : detail);
         }
-        return outcome;
+        return completion.Value;
     }
 
-    private static ProcessStartInfo CreateStartInfo(string source, string destination)
+    private static ProcessStartInfo CreateStartInfo(
+        string operation,
+        string source,
+        string? destination,
+        string? stateFile,
+        bool startIfNeeded)
     {
         var packagedHelper = Path.Combine(AppContext.BaseDirectory, "Tools", "LatticeStorage.exe");
         ProcessStartInfo start;
@@ -122,18 +192,45 @@ internal static class LibraryMoveClient
         start.RedirectStandardOutput = true;
         start.RedirectStandardError = true;
         start.CreateNoWindow = true;
-        start.WorkingDirectory = Path.GetDirectoryName(destination)
-            ?? throw new InvalidOperationException("The destination has no parent folder.");
+        var workingPath = destination is not null
+            ? Path.GetDirectoryName(destination)
+            : Path.GetDirectoryName(stateFile!);
+        if (string.IsNullOrWhiteSpace(workingPath))
+            throw new InvalidOperationException("The storage operation has no safe working folder.");
+        Directory.CreateDirectory(workingPath);
+        start.WorkingDirectory = workingPath;
+        start.ArgumentList.Add("--operation");
+        start.ArgumentList.Add(operation);
         start.ArgumentList.Add("--source");
         start.ArgumentList.Add(source);
-        start.ArgumentList.Add("--destination");
-        start.ArgumentList.Add(destination);
+        if (destination is not null)
+        {
+            start.ArgumentList.Add("--destination");
+            start.ArgumentList.Add(destination);
+        }
+        if (stateFile is not null)
+        {
+            start.ArgumentList.Add("--state-file");
+            start.ArgumentList.Add(stateFile);
+        }
+        if (startIfNeeded) start.ArgumentList.Add("--start-if-needed");
         start.ArgumentList.Add("--folder-id");
         start.ArgumentList.Add(FolderId);
         start.ArgumentList.Add("--protected-path");
         start.ArgumentList.Add(AppContext.BaseDirectory);
         return start;
     }
+
+    private static string RequiredString(JsonElement value, string name) =>
+        value.TryGetProperty(name, out var property) && property.ValueKind == JsonValueKind.String
+            ? property.GetString()!
+            : throw new InvalidDataException($"The storage helper omitted {name}.");
+
+    private static bool RequiredBoolean(JsonElement value, string name) =>
+        value.TryGetProperty(name, out var property)
+            && property.ValueKind is JsonValueKind.True or JsonValueKind.False
+                ? property.GetBoolean()
+                : throw new InvalidDataException($"The storage helper omitted {name}.");
 
     private static string Truncate(string value, int maximum) =>
         value.Length <= maximum ? value : value[..maximum];

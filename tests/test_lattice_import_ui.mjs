@@ -85,6 +85,8 @@ test("desktop apps expose native actions in the inline header menu", () => {
   assert.match(HTML, /id="appMoreButton"[^>]*aria-label="Lattice options"/);
   assert.match(HTML, /id="appCheckUpdatesButton"/);
   assert.match(HTML, /id="appMoveLibraryButton"/);
+  assert.match(HTML, /id="appDisconnectLibraryButton"/);
+  assert.match(HTML, /id="appReconnectLibraryButton"/);
   assert.match(HTML, /id="appOpenLibraryButton"[^>]*hidden/);
   assert.match(HTML, /id="appChooseLibraryButton"[^>]*hidden/);
   assert.match(HTML, /id="appReloadButton"[^>]*hidden/);
@@ -93,13 +95,17 @@ test("desktop apps expose native actions in the inline header menu", () => {
   assert.match(APP, /csLibraryNativeCall\("app\.info"\)/);
   assert.match(APP, /invokeNativeAppAction\("app\.checkForUpdates"\)/);
   assert.match(APP, /invokeNativeAppAction\("app\.moveLibrary"\)/);
+  assert.match(APP, /invokeNativeAppAction\("app\.disconnectLibrary"\)/);
+  assert.match(APP, /invokeNativeAppAction\("app\.reconnectLibrary"\)/);
   assert.match(APP, /invokeNativeAppAction\("app\.openLibraryFolder"\)/);
   assert.match(APP, /invokeNativeAppAction\("app\.chooseLibrary"\)/);
   assert.match(APP, /invokeNativeAppAction\("app\.reload"\)/);
   assert.match(APP, /\["macOS", "windows"\]\.includes\(info\.platform\)/);
   assert.match(APP, /info\.platform === "macOS"[\s\S]*?"app\.checkForUpdates", "app\.moveLibrary"/);
   assert.match(MAC_BRIDGE, /case "app\.info":/);
-  assert.match(MAC_BRIDGE, /case "app\.checkForUpdates", "app\.moveLibrary":/);
+  assert.match(MAC_BRIDGE, /case "app\.checkForUpdates", "app\.moveLibrary", "app\.disconnectLibrary", "app\.reconnectLibrary":/);
+  assert.match(MAC_APP, /#selector\(disconnectLibraryDrive\(_:\)\)/);
+  assert.match(MAC_APP, /#selector\(reconnectLibrarySync\(_:\)\)/);
   assert.match(MAC_APP, /"version": self\?\.installedAppVersion\(\)/);
   assert.doesNotMatch(MAC_APP, /NSTitlebarAccessoryViewController/);
   assert.match(MAC_UPDATE, /releases\/latest\/download\/update-manifest\.json/);

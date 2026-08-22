@@ -114,6 +114,8 @@ class WindowsNativeShellTests(unittest.TestCase):
             "WebMessageReceived",
             '"app.checkForUpdates"',
             '"app.moveLibrary"',
+            '"app.disconnectLibrary"',
+            '"app.reconnectLibrary"',
             '"app.openLibraryFolder"',
             '"app.chooseLibrary"',
             '"app.reload"',
@@ -175,6 +177,18 @@ class WindowsNativeShellTests(unittest.TestCase):
             self.windows_installer.count("Tools\\LatticeStorage.exe"),
             2,
         )
+
+    def test_external_drive_disconnect_releases_and_reconnects_syncthing(self) -> None:
+        self.assertIn("DisconnectLibrary_Click", self.window_code)
+        self.assertIn("ReconnectLibrary_Click", self.window_code)
+        self.assertIn("LibraryMoveClient.DisconnectAsync", self.window_code)
+        self.assertIn("LibraryMoveClient.ReconnectAsync", self.window_code)
+        self.assertIn("StopOwnedServer();", self.window_code)
+        self.assertIn("Application.Current.Shutdown();", self.window_code)
+        self.assertIn('"--operation"', self.library_move_code)
+        self.assertIn('"disconnect"', self.library_move_code)
+        self.assertIn('"reconnect"', self.library_move_code)
+        self.assertIn('"--start-if-needed"', self.library_move_code)
 
     def test_bounded_packaged_smoke_mode_emits_proof_contract(self) -> None:
         for option in ("--smoke-test", "--library-root", "--smoke-output", "--smoke-pdf"):

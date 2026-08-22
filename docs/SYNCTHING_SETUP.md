@@ -22,7 +22,7 @@ cd "$HOME\Lattice"
 & ".\windows\setup\Install Lattice and Connect.cmd"
 ```
 
-The script validates the existing scaffold, installs the pinned Lattice `v2.2.3`
+The script validates the existing scaffold, installs the pinned Lattice `v2.2.4`
 package for the current user, installs official Syncthing `2.1.3` through
 WinGet when needed, saves the clone as Lattice's library, and configures this
 exact Syncthing folder on the Windows side:
@@ -109,6 +109,16 @@ instead of treating the whole library as deleted. Reconnect it at the same path;
 if Windows assigned a different drive letter, use **Choose another library…**
 to select its `Lattice` folder, then update the Syncthing path before resuming.
 The Mac mini hub is deliberately excluded from this client workflow.
+
+Before ejecting a connected library SSD, open Lattice's three-dot menu and use
+**Disconnect library drive**. Lattice first requires the folder to be Up to
+Date, pauses only folder `cs-library-3b8290f24f15`, waits for Syncthing to
+confirm the paused state, stops its own drive-backed service, and closes. Eject
+the SSD through Windows or Finder only after that window closes. When the drive
+is mounted again, reopen Lattice and choose **Reconnect library sync**. Lattice
+resumes only a pause it recorded itself; an existing manual pause is preserved.
+On Windows, Reconnect can also restart the dedicated `%LOCALAPPDATA%\Syncthing`
+instance if it was stopped.
 
 ## What a clean clone already contains
 

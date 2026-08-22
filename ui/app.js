@@ -93,11 +93,13 @@ const elements = {
   appCheckUpdatesDetail: $("#appCheckUpdatesDetail"),
   appCheckUpdatesTitle: $("#appCheckUpdatesTitle"),
   appChooseLibraryButton: $("#appChooseLibraryButton"),
+  appDisconnectLibraryButton: $("#appDisconnectLibraryButton"),
   appLibraryActionsDivider: $("#appLibraryActionsDivider"),
   appMoreButton: $("#appMoreButton"),
   appMoveLibraryButton: $("#appMoveLibraryButton"),
   appOpenLibraryButton: $("#appOpenLibraryButton"),
   appPlatformLabel: $("#appPlatformLabel"),
+  appReconnectLibraryButton: $("#appReconnectLibraryButton"),
   appReloadButton: $("#appReloadButton"),
   appShell: $(".app-shell"),
   appVersionLabel: $("#appVersionLabel"),
@@ -2757,6 +2759,8 @@ async function initializeNativeAppMenu() {
     const actionButtons = new Map([
       ["app.checkForUpdates", elements.appCheckUpdatesButton],
       ["app.moveLibrary", elements.appMoveLibraryButton],
+      ["app.disconnectLibrary", elements.appDisconnectLibraryButton],
+      ["app.reconnectLibrary", elements.appReconnectLibraryButton],
       ["app.openLibraryFolder", elements.appOpenLibraryButton],
       ["app.chooseLibrary", elements.appChooseLibraryButton],
       ["app.reload", elements.appReloadButton],
@@ -2788,6 +2792,8 @@ function applyNativeAppStatus(status) {
   elements.appCheckUpdatesButton.disabled = busy;
   if (typeof status.libraryActionsEnabled === "boolean") {
     elements.appMoveLibraryButton.disabled = !status.libraryActionsEnabled || busy;
+    elements.appDisconnectLibraryButton.disabled = !status.libraryActionsEnabled || busy;
+    elements.appReconnectLibraryButton.disabled = !status.libraryActionsEnabled || busy;
     elements.appOpenLibraryButton.disabled = !status.libraryActionsEnabled;
     elements.appChooseLibraryButton.disabled = !status.libraryActionsEnabled;
   }
@@ -2827,6 +2833,12 @@ function bindNativeAppMenuEvents() {
   });
   elements.appMoveLibraryButton.addEventListener("click", () => {
     void invokeNativeAppAction("app.moveLibrary");
+  });
+  elements.appDisconnectLibraryButton.addEventListener("click", () => {
+    void invokeNativeAppAction("app.disconnectLibrary");
+  });
+  elements.appReconnectLibraryButton.addEventListener("click", () => {
+    void invokeNativeAppAction("app.reconnectLibrary");
   });
   elements.appOpenLibraryButton.addEventListener("click", () => {
     void invokeNativeAppAction("app.openLibraryFolder");
