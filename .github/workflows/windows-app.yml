@@ -424,6 +424,7 @@ jobs:
           $smokeRoot = Join-Path $env:RUNNER_TEMP "lattice-native-smoke"
           $stdout = Join-Path $env:RUNNER_TEMP "lattice-native.stdout.log"
           $stderr = Join-Path $env:RUNNER_TEMP "lattice-native.stderr.log"
+          $reportPath = Join-Path $smokeRoot "lattice-smoke.json"
           $smokePdf = Join-Path $libraryRoot "books\lattice-reader-smoke.pdf"
           Remove-Item $smokeRoot -Recurse -Force -ErrorAction SilentlyContinue
           New-Item $smokeRoot -ItemType Directory -Force | Out-Null
@@ -447,10 +448,13 @@ jobs:
           if ($process.ExitCode -ne 0) {
             $out = if (Test-Path $stdout) { Get-Content $stdout -Raw } else { "" }
             $err = if (Test-Path $stderr) { Get-Content $stderr -Raw } else { "" }
-            throw "The packaged native shell failed with code $($process.ExitCode). stdout: $out stderr: $err"
+            $reportDetail = if (Test-Path $reportPath) { Get-Content $reportPath -Raw } else { "missing" }
+            throw (
+              "The packaged native shell failed with code $($process.ExitCode). " +
+              "report: $reportDetail stdout: $out stderr: $err"
+            )
           }
 
-          $reportPath = Join-Path $smokeRoot "lattice-smoke.json"
           $screenshotPath = Join-Path $smokeRoot "lattice-webview.png"
           $pdfScreenshotPath = Join-Path $smokeRoot "lattice-pdf-reader.png"
           if (-not (Test-Path $reportPath)) { throw "Native smoke report is missing" }
@@ -575,6 +579,7 @@ jobs:
           retention-days: 30
 
       - name: Upload native shell smoke evidence
+        if: always()
         uses: actions/upload-artifact@v4
         with:
           name: Lattice-Windows-smoke-evidence
@@ -582,5 +587,5 @@ jobs:
             ${{ runner.temp }}/lattice-native-smoke/lattice-smoke.json
             ${{ runner.temp }}/lattice-native-smoke/lattice-webview.png
             ${{ runner.temp }}/lattice-native-smoke/lattice-pdf-reader.png
-          if-no-files-found: error
+          if-no-files-found: warn
           retention-days: 30
