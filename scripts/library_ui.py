@@ -114,6 +114,7 @@ EPUB_ACTIVE_MEDIA_TYPES = frozenset(
     }
 )
 EPUB_DOCUMENT_TYPES = frozenset({"application/xhtml+xml", "text/html"})
+EPUB_RENDERER_VERSION = 2
 EPUB_OPS_NAMESPACE = "http://www.idpf.org/2007/ops"
 YOUTUBE_VIDEO_ID = re.compile(r"^[A-Za-z0-9_-]{11}$")
 LECTURE_SOURCE_ALIASES = {
@@ -1358,8 +1359,19 @@ def decode_epub_key(value: str) -> str:
     return decoded
 
 
-def _epub_url(book_key: str, entry: str, fragment: str = "") -> str:
+def _epub_url(
+    book_key: str,
+    entry: str,
+    fragment: str = "",
+    *,
+    reader_document: bool = True,
+) -> str:
+    # Version the reading-document URL so an app update cannot reuse a chapter
+    # cached with obsolete parsing rules. Relative EPUB assets still resolve
+    # against the same archive directory because the query is discarded.
     url = f"/epub/{book_key}/{urllib.parse.quote(entry, safe='/')}"
+    if reader_document:
+        url += f"?reader={EPUB_RENDERER_VERSION}"
     if fragment:
         url += f"#{urllib.parse.quote(fragment, safe='-._~!$&\'()*+,;=:@/?')}"
     return url
@@ -1661,7 +1673,11 @@ def parse_epub_package(path: Path, relative: str) -> tuple[dict[str, Any], dict[
             "authors": creators,
             "language": language,
             "progression": progression,
-            "coverUrl": _epub_url(book_key, cover_item["entry"]) if cover_item else "",
+            "coverUrl": (
+                _epub_url(book_key, cover_item["entry"], reader_document=False)
+                if cover_item
+                else ""
+            ),
             "chapters": chapters,
             "toc": toc,
         }
@@ -3402,7 +3418,14 @@ class LibraryRequestHandler(BaseHTTPRequestHandler):
 
         content_type = media_types.get(entry) or mimetypes.guess_type(entry)[0]
         content_type = content_type or "application/octet-stream"
-        if content_type in EPUB_DOCUMENT_TYPES:
+        is_reading_document = content_type in EPUB_DOCUMENT_TYPES
+        if content_type == "application/xhtml+xml":
+            # EPUB 3 reading documents use XML parsing rules. Serving them as
+            # text/html changes the meaning of valid self-closing elements
+            # such as Kobo's <script/> marker: an HTML parser treats the rest
+            # of the chapter as script text, leaving the reader visibly blank.
+            content_type = "application/xhtml+xml; charset=utf-8"
+        elif content_type == "text/html":
             content_type = "text/html; charset=utf-8"
         elif content_type == "text/css":
             content_type = "text/css; charset=utf-8"
@@ -3417,7 +3440,10 @@ class LibraryRequestHandler(BaseHTTPRequestHandler):
             "frame-ancestors 'self'; base-uri 'self'; form-action 'none'",
         )
         self.send_header("Cross-Origin-Resource-Policy", "same-origin")
-        self.send_header("Cache-Control", "private, max-age=3600")
+        self.send_header(
+            "Cache-Control",
+            "no-store" if is_reading_document else "private, max-age=3600",
+        )
         self.send_header("Content-Type", content_type)
         self.send_header("Content-Length", str(info.file_size))
         self.send_header("Content-Disposition", "inline")

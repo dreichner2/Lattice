@@ -11,6 +11,8 @@
   upload or Luna metadata work has started.
 - Luna metadata enrichment now uses the supported Structured Outputs schema
   subset; uniqueness is still enforced by Lattice before metadata is saved.
+- XHTML chapters that contain Kobo-style self-closing script markers now render
+  normally instead of appearing as blank pages; embedded scripts remain blocked.
 - The zero-argument Windows onboarding launcher now resolves the cloned
   library root correctly under Windows PowerShell 5.1.
 

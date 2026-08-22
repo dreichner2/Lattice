@@ -41,7 +41,7 @@ def kobo_epub_bytes() -> bytes:
         )
         archive.writestr(
             "EPUB/chapter.xhtml",
-            """<html xmlns="http://www.w3.org/1999/xhtml"><head><script src="js/kobo.js"></script></head><body>Readable text</body></html>""",
+            """<html xmlns="http://www.w3.org/1999/xhtml"><head><script src="js/kobo.js"/></head><body>Readable text</body></html>""",
         )
         archive.writestr("EPUB/js/kobo.js", "document.body.textContent = 'executed';")
     return payload.getvalue()
@@ -230,6 +230,12 @@ class ImportPipelineTests(unittest.TestCase):
         self.assertNotIn("EPUB/js/kobo.js", media_types)
 
         key = library_ui.encode_epub_key(relative)
+        chapter_url = package["chapters"][0]["url"].replace(
+            "/epub/", f"{self.base}/epub/", 1
+        )
+        with urllib.request.urlopen(chapter_url, timeout=3) as response:
+            self.assertEqual(response.headers.get_content_type(), "application/xhtml+xml")
+            self.assertIn(b"Readable text", response.read())
         with self.assertRaises(urllib.error.HTTPError) as caught:
             urllib.request.urlopen(
                 f"{self.base}/epub/{key}/EPUB/js/kobo.js",

@@ -66,7 +66,7 @@ def write_test_epub(path: Path) -> None:
         )
         archive.writestr(
             "EPUB/text/one.xhtml",
-            """<html xmlns="http://www.w3.org/1999/xhtml"><head><link rel="stylesheet" href="../styles/book.css"/><script src="../js/kobo.js"></script><script>document.body.dataset.executed = 'yes';</script></head><body><h1 id="start">The Beginning</h1><p id="details">Readable text.</p><img src="../images/diagram.svg"/></body></html>""",
+            """<html xmlns="http://www.w3.org/1999/xhtml"><head><link rel="stylesheet" href="../styles/book.css"/><script src="../js/kobo.js"/><script>document.body.dataset.executed = 'yes';</script></head><body><h1 id="start">The Beginning</h1><p id="details">Readable text.</p><img src="../images/diagram.svg"/></body></html>""",
         )
         archive.writestr(
             "EPUB/text/two.xhtml",
@@ -536,6 +536,7 @@ class EpubReaderTests(unittest.TestCase):
         self.assertEqual(package["title"], "Fixture EPUB")
         self.assertEqual(package["authors"], ["Test Author"])
         self.assertEqual([chapter["label"] for chapter in package["chapters"]], ["The Beginning", "The End"])
+        self.assertIn(f"?reader={library_ui.EPUB_RENDERER_VERSION}", package["chapters"][0]["url"])
         self.assertEqual(len(package["toc"]), 3)
         self.assertEqual(package["toc"][1]["depth"], 1)
         self.assertTrue(package["coverUrl"].endswith("/EPUB/images/diagram.svg"))
@@ -558,8 +559,12 @@ class EpubReaderTests(unittest.TestCase):
             chapter = response.read()
             self.assertEqual(response.headers["X-Frame-Options"], "SAMEORIGIN")
             self.assertIn("script-src 'none'", response.headers["Content-Security-Policy"])
-            self.assertTrue(response.headers["Content-Type"].startswith("text/html"))
+            self.assertTrue(
+                response.headers["Content-Type"].startswith("application/xhtml+xml")
+            )
+            self.assertEqual(response.headers["Cache-Control"], "no-store")
         self.assertIn(b"Readable text", chapter)
+        self.assertIn(b'<script src="../js/kobo.js"/>', chapter)
 
         markup = (ROOT / "ui" / "index.html").read_text(encoding="utf-8")
         frame = re.search(r'<iframe[^>]+id="epubFrame"[^>]*>', markup)
