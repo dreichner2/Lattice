@@ -59,8 +59,10 @@ jobs:
           test -f "Lattice.app/Contents/Resources/LibraryWorkspace.js"
           test -x "Lattice.app/Contents/Resources/LatticeUpdateInstaller"
           test "$(/usr/libexec/PlistBuddy -c 'Print :LatticeCommit' 'Lattice.app/Contents/Info.plist')" = "${GITHUB_SHA}"
-          /usr/bin/lipo -verify_arch arm64 x86_64 "Lattice.app/Contents/MacOS/Lattice"
-          /usr/bin/lipo -verify_arch arm64 x86_64 "Lattice.app/Contents/Resources/LatticeUpdateInstaller"
+          /usr/bin/lipo -verify_arch arm64 "Lattice.app/Contents/MacOS/Lattice"
+          /usr/bin/lipo -verify_arch x86_64 "Lattice.app/Contents/MacOS/Lattice"
+          /usr/bin/lipo -verify_arch arm64 "Lattice.app/Contents/Resources/LatticeUpdateInstaller"
+          /usr/bin/lipo -verify_arch x86_64 "Lattice.app/Contents/Resources/LatticeUpdateInstaller"
           /usr/bin/codesign --verify --deep --strict "Lattice.app"
           /usr/bin/plutil -lint "Lattice.app/Contents/Info.plist"
 
