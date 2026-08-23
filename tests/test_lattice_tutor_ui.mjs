@@ -10,6 +10,7 @@ const APP = fs.readFileSync(new URL("../ui/app.js", import.meta.url), "utf8");
 const VIDEOS = fs.readFileSync(new URL("../ui/videos.js", import.meta.url), "utf8");
 const MAC_BUILD = fs.readFileSync(new URL("../scripts/build-macos-app.sh", import.meta.url), "utf8");
 const WINDOWS_BUILD = fs.readFileSync(new URL("../windows/build-windows.ps1", import.meta.url), "utf8");
+const WINDOWS_UPDATE_HARNESS = fs.readFileSync(new URL("../windows/UpdateSecurityHarness/Program.cs", import.meta.url), "utf8");
 
 
 test("Tutor stays an optional closed drawer with an explicit local-source disclosure", () => {
@@ -78,5 +79,8 @@ test("desktop packages carry the Tutor UI, broker, and PDF parser", () => {
   }
   for (const required of ["tutor.js", "tutor-styles.css", "lattice_tutor.py", "scripts\\vendor"]) {
     assert.ok(WINDOWS_BUILD.includes(required), `Windows build should include ${required}`);
+  }
+  for (const required of ["ui/tutor.js", "ui/tutor-styles.css"]) {
+    assert.ok(WINDOWS_UPDATE_HARNESS.includes(`"${required}"`), `Windows updater fixtures should include ${required}`);
   }
 });

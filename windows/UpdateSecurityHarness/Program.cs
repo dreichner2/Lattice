@@ -515,6 +515,8 @@ static void BuildPackageDirectory(string root, string version, bool includeStora
         "Server/LatticeServer.exe",
         "ui/index.html",
         "ui/app.js",
+        "ui/tutor.js",
+        "ui/tutor-styles.css",
     };
     if (includeStorageHelper) packageFiles.Add("Tools/LatticeStorage.exe");
     foreach (var relative in packageFiles)
