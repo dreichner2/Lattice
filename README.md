@@ -166,13 +166,15 @@ recovery steps instead of deleting either one.
 Keep the external drive connected while Lattice is open. If it is disconnected,
 Syncthing's missing-folder marker protection stops that folder instead of
 announcing every book as deleted. Reconnect the drive before opening books or
-resuming synchronization. Before ejecting it, choose **Disconnect library
-drive** from Lattice's three-dot menu and wait for Lattice to close. After
-mounting it again, choose **Reconnect library sync**. If the exact Lattice
-folder is still paused without a saved Lattice pause record, the app asks
-whether to resume it and verifies active synchronization before calling it
-connected. On macOS, install `Lattice.app` outside the library (normally in
-`/Applications`) before moving the library itself.
+resuming synchronization. On Windows, **Disconnect library drive** waits for
+Up to Date, releases Lattice and Syncthing, shows **Ejecting…**, and calls the
+native USB-device eject; unplug only after **Safe to unplug** appears. On
+macOS, use the same menu command and eject through Finder after Lattice closes.
+When the saved volume is mounted again, Windows resolves it even if its drive
+letter changed, restarts Syncthing, rescans, and waits for Up to Date. If the
+exact folder had a pre-existing pause, Lattice asks before resuming it. On
+macOS, install `Lattice.app` outside the library (normally in `/Applications`)
+before moving the library itself.
 
 ## Windows app
 

@@ -105,21 +105,24 @@ pause state when its API remains reachable. If restoration cannot be confirmed,
 both copies are retained and the error identifies the path that needs checking.
 
 An unplugged drive makes `.stfolder` unavailable, so Syncthing stops the folder
-instead of treating the whole library as deleted. Reconnect it at the same path;
-if Windows assigned a different drive letter, use **Choose another library…**
-to select its `Lattice` folder, then update the Syncthing path before resuming.
-The Mac mini hub is deliberately excluded from this client workflow.
+instead of treating the whole library as deleted. On Windows, Lattice saves the
+volume identity and library-relative path before ejecting. When that volume is
+mounted again, Lattice resolves the current drive letter and safely restores
+the same paused Syncthing folder binding before resuming it. The Mac mini hub
+is deliberately excluded from this client workflow.
 
 Before ejecting a connected library SSD, open Lattice's three-dot menu and use
 **Disconnect library drive**. Lattice first requires the folder to be Up to
-Date, pauses only folder `cs-library-3b8290f24f15`, waits for Syncthing to
-confirm the paused state, stops its own drive-backed service, and closes. Eject
-the SSD through Windows or Finder only after that window closes. When the drive
-is mounted again, reopen Lattice and choose **Reconnect library sync**. Lattice
-automatically resumes only a pause it recorded itself; an existing manual pause
-is preserved unless the user explicitly chooses **Resume Sync**.
-On Windows, Reconnect can also restart the dedicated `%LOCALAPPDATA%\Syncthing`
-instance if it was stopped.
+Date, pauses only folder `cs-library-3b8290f24f15`, stops the dedicated
+Syncthing process, releases its WebView and local service, and then asks Windows
+to eject the parent USB device. Keep the SSD attached while **Ejecting…** is
+shown and unplug only after **Safe to unplug**. A Windows veto leaves the
+library disconnected and reports the exact veto type and name; Lattice never
+falls back to a manual volume dismount. On macOS, eject through Finder after
+Lattice closes. When the drive is mounted again, reopen Lattice. Windows
+automatically detects the saved volume, restarts Syncthing, rescans, and waits
+for Up to Date. Lattice resumes only a pause it recorded itself; an existing
+manual pause is preserved unless the user explicitly chooses **Resume Sync**.
 
 If the exact Lattice folder is paused but no Lattice-owned reconnect record is
 available, Reconnect reports that distinction and asks whether to **Resume

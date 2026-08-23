@@ -159,13 +159,17 @@ enabled: selecting it performs another signed update check without requiring
 the newly updated window to be closed and reopened.
 
 For an external library SSD, use the in-app three-dot menu's **Disconnect
-library drive** command before Windows Eject. It waits for an Up to Date folder,
-pauses only Lattice's stable Syncthing folder ID, stops the local Lattice
-service, and closes the app. After reconnecting the SSD, use **Reconnect library
-sync**; it restarts the dedicated Syncthing instance when needed. A pause
-recorded by Lattice resumes automatically. If only an existing pause remains,
-Lattice asks before resuming that exact folder and verifies active sync before
-calling it connected.
+library drive** command. It waits for an Up to Date folder, pauses only
+Lattice's stable Syncthing folder ID, stops the dedicated Syncthing process and
+local service, releases the WebView, resolves the parent USB device, and awaits
+Windows' native eject request. Keep the SSD attached while **Ejecting…** is
+visible and unplug only after **Safe to unplug**. Lattice does not use volume
+lock, dismount, offline, or mount-point operations. If Windows vetoes eject,
+Lattice reports the exact veto type and name and leaves the library
+disconnected. After reconnecting the SSD and reopening Lattice, the app detects
+the saved volume even if its drive letter changed, restarts Syncthing, rescans,
+and waits for Up to Date. A pause recorded by Lattice resumes automatically. If
+only an existing pause remains, Lattice asks before resuming that exact folder.
 
 This release-manifest signature is an application update control, not a Windows
 Authenticode signature. The current executable is not Authenticode-signed, so
