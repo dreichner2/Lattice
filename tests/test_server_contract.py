@@ -84,7 +84,8 @@ class ServerContractTests(unittest.TestCase):
 
     def test_bind_failure_closes_partial_server_without_masking_socket_error(self) -> None:
         with socket.socket(socket.AF_INET, socket.SOCK_STREAM) as occupied:
-            occupied.setsockopt(socket.SOL_SOCKET, socket.SO_REUSEADDR, 1)
+            if hasattr(socket, "SO_EXCLUSIVEADDRUSE"):
+                occupied.setsockopt(socket.SOL_SOCKET, socket.SO_EXCLUSIVEADDRUSE, 1)
             occupied.bind(("127.0.0.1", 0))
             occupied.listen(1)
             port = int(occupied.getsockname()[1])

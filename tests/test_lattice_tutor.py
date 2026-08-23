@@ -286,8 +286,10 @@ class TutorManagerTests(unittest.TestCase):
         self.assertIn("--ignore-rules", captured)
         self.assertIn("permissions.lattice-tutor.network.enabled=false", captured)
         permission = next(value for value in captured if value.startswith("permissions.lattice-tutor.filesystem="))
-        self.assertIn(str(self.source.resolve()), permission)
-        self.assertNotIn(str(self.root / "books"), permission.replace(str(self.source.resolve()), ""))
+        source_grant = f"{lattice_tutor._toml_string(str(self.source.resolve()))}=\"read\""
+        parent_grant = f"{lattice_tutor._toml_string(str(self.root / 'books'))}=\"read\""
+        self.assertIn(source_grant, permission)
+        self.assertNotIn(parent_grant, permission)
 
     def test_child_environment_drops_api_keys_and_proxy_credentials(self) -> None:
         with mock.patch.dict(
