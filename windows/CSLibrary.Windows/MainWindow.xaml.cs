@@ -1639,7 +1639,57 @@ public partial class MainWindow : Window
         StopOwnedServer();
     }
 
-    private static Process LaunchNativeEjectHelper(NativeEjectTarget target)
+    private IReadOnlyList<EjectProcessIdentity> CaptureWebViewProcessIdentities()
+    {
+        var webView = Browser.CoreWebView2
+            ?? throw new InvalidOperationException(
+                "Lattice could not identify its WebView processes before ejecting the drive.");
+        var processIds = webView.Environment
+            .GetProcessInfos()
+            .Select(info => info.ProcessId)
+            .Append(checked((int)webView.BrowserProcessId))
+            .Where(processId => processId > 0 && processId != Environment.ProcessId)
+            .Distinct()
+            .OrderBy(processId => processId)
+            .ToArray();
+        if (processIds.Length > 64)
+            throw new InvalidOperationException(
+                "Lattice found an unexpected number of WebView processes and did not eject the drive.");
+
+        var identities = new List<EjectProcessIdentity>(processIds.Length);
+        foreach (var processId in processIds)
+        {
+            try
+            {
+                using var process = Process.GetProcessById(processId);
+                if (!process.HasExited)
+                {
+                    identities.Add(new EjectProcessIdentity(
+                        processId,
+                        process.StartTime.ToUniversalTime().Ticks));
+                }
+            }
+            catch (ArgumentException)
+            {
+                // The WebView process exited after the environment snapshot.
+            }
+            catch (InvalidOperationException)
+            {
+                // The WebView process exited while its identity was being read.
+            }
+            catch (Win32Exception error)
+            {
+                throw new InvalidOperationException(
+                    $"Lattice could not verify WebView process {processId} before ejecting the drive.",
+                    error);
+            }
+        }
+        return identities;
+    }
+
+    private static Process LaunchNativeEjectHelper(
+        NativeEjectTarget target,
+        IReadOnlyList<EjectProcessIdentity> waitProcesses)
     {
         var executable = Environment.ProcessPath;
         if (string.IsNullOrWhiteSpace(executable) || !File.Exists(executable))
@@ -1658,7 +1708,7 @@ public partial class MainWindow : Window
         }
 
         Environment.CurrentDirectory = SettingsRoot;
-        var options = EjectHelperOptions.ForCurrentProcess(target);
+        var options = EjectHelperOptions.ForCurrentProcess(target, waitProcesses);
         var start = new ProcessStartInfo(executable)
         {
             UseShellExecute = false,
@@ -2049,7 +2099,8 @@ public partial class MainWindow : Window
             this,
             "Safely eject this library drive?\n\n"
             + "Lattice will require Syncthing to be Up to Date, stop Syncthing and LatticeServer, "
-            + "release the reading window, and ask Windows to eject the parent USB device. "
+            + "release the reading window, wait for its WebView processes to exit, and ask Windows "
+            + "to eject the parent USB device. "
             + "Keep the drive connected while Ejecting… is shown.\n\n"
             + "Lattice will say Safe to unplug only after Windows accepts the eject request.",
             "Disconnect library drive",
@@ -2168,9 +2219,10 @@ public partial class MainWindow : Window
                 ExternalLibraryVolumeStatePath,
                 ejectTarget,
                 outcome.SyncthingManaged);
+            var webViewProcesses = CaptureWebViewProcessIdentities();
             Browser.Dispose();
             _browserDisposed = true;
-            using var helper = LaunchNativeEjectHelper(ejectTarget);
+            using var helper = LaunchNativeEjectHelper(ejectTarget, webViewProcesses);
         }
         catch (Exception error)
         {

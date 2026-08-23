@@ -247,6 +247,10 @@ class WindowsNativeShellTests(unittest.TestCase):
         )
         self.assertLess(
             disconnect.index("ExternalLibraryVolumeRecord.Save"),
+            disconnect.index("CaptureWebViewProcessIdentities"),
+        )
+        self.assertLess(
+            disconnect.index("CaptureWebViewProcessIdentities"),
             disconnect.index("Browser.Dispose()"),
         )
         self.assertLess(
@@ -265,20 +269,35 @@ class WindowsNativeShellTests(unittest.TestCase):
         self.assertIn("Environment.CurrentDirectory = SettingsRoot", launch_helper)
         self.assertIn("WorkingDirectory = SettingsRoot", launch_helper)
         self.assertIn("target.DriveRoot", launch_helper)
+        self.assertIn("waitProcesses", launch_helper)
+
+        capture_processes = self.window_code[
+            self.window_code.index("private IReadOnlyList<EjectProcessIdentity> CaptureWebViewProcessIdentities") :
+            self.window_code.index("private static Process LaunchNativeEjectHelper")
+        ]
+        self.assertIn("webView.Environment", capture_processes)
+        self.assertIn("GetProcessInfos()", capture_processes)
+        self.assertIn("webView.BrowserProcessId", capture_processes)
+        self.assertIn("process.StartTime.ToUniversalTime().Ticks", capture_processes)
 
         helper_start = self.app_code.index("EjectHelperOptions.IsRequested(e.Args)")
         update_redirect = self.app_code.index("UpdateStartupRedirect.TryRedirectToActiveVersion(e.Args)")
         self.assertLess(helper_start, update_redirect)
         self.assertIn('private const string HelperSwitch = "--eject-helper"', self.eject_helper_code)
-        wait_for_parent = self.eject_helper_code.index("await WaitForParentExitAsync(_options)")
+        self.assertIn('private const string WaitProcessOption = "--wait-process"', self.eject_helper_code)
+        wait_for_parent = self.eject_helper_code.index("await WaitForTrackedProcessesExitAsync(_options)")
         request_eject = self.eject_helper_code.index("NativeDriveEjector.RequestEject(")
         self.assertLess(wait_for_parent, request_eject)
-        self.assertIn("parent.WaitForExitAsync(timeout.Token)", self.eject_helper_code)
-        self.assertIn("MaximumEjectAttempts = 3", self.eject_helper_code)
+        self.assertIn("process.StartTime.ToUniversalTime().Ticks", self.eject_helper_code)
+        self.assertIn("MaximumEjectAttempts = 8", self.eject_helper_code)
+        self.assertIn("TrackedProcessExitTimeout = TimeSpan.FromSeconds(45)", self.eject_helper_code)
+        self.assertIn("HandleDrainDelay = TimeSpan.FromSeconds(2)", self.eject_helper_code)
         self.assertIn("NativeDriveEjector.IsTransientCloseVeto(result)", self.eject_helper_code)
         self.assertIn("PNP_VetoPendingClose", self.native_eject_code)
         self.assertIn("PNP_VetoOutstandingOpen", self.native_eject_code)
         self.assertIn("actualDeviceInstanceId", self.native_eject_code)
+        self.assertIn('"last-eject-diagnostic.txt"', self.eject_helper_code)
+        self.assertIn("after every tracked Lattice process exited", self.eject_helper_code)
         veto_branch = self.eject_helper_code.index("if (!result.Success)")
         safe_to_unplug = self.eject_helper_code.rindex('"Safe to unplug"')
         self.assertLess(veto_branch, safe_to_unplug)

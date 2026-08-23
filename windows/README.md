@@ -32,7 +32,7 @@ You can also double-click `windows\setup\Install Lattice and Connect.cmd` after
 cloning. The script:
 
 1. validates the clone and its complete empty library scaffold;
-2. downloads the pinned public `v2.2.8` release and verifies its SHA-256;
+2. downloads the pinned public `v2.2.9` release and verifies its SHA-256;
 3. installs Lattice for the current user under
    `%LOCALAPPDATA%\Programs\Lattice`;
 4. installs official Syncthing `2.1.3` with WinGet when needed;
@@ -56,7 +56,7 @@ powershell.exe -NoProfile -ExecutionPolicy Bypass -File .\windows\setup\Setup-La
 ```
 
 The pinned release can also be downloaded directly from
-[`v2.2.8/Lattice-Windows-win-x64.zip`](https://github.com/dreichner2/Lattice/releases/download/v2.2.8/Lattice-Windows-win-x64.zip).
+[`v2.2.9/Lattice-Windows-win-x64.zip`](https://github.com/dreichner2/Lattice/releases/download/v2.2.9/Lattice-Windows-win-x64.zip).
 See [`windows/setup/README.md`](setup/README.md) for offline/test inputs and the
 full switch list.
 
@@ -168,13 +168,17 @@ Lattice's stable Syncthing folder ID, stops the dedicated Syncthing process and
 local service, releases the WebView, resolves the parent USB device, saves
 reconnect state, and launches a detached eject helper from local storage. The
 main Lattice process exits completely before the helper makes Windows' native
-eject request. The helper stays visibly in **Ejecting…** and retries briefly
-only for pending or outstanding handle closes. Keep the SSD attached until
+eject request. Before disposal, Lattice records the exact PID and start time of
+every process reported by its WebView2 environment; the helper waits for the
+main app and every captured process to exit, then allows final handles to
+drain. The helper stays visibly in **Ejecting…** and retries only pending or
+outstanding handle closes within a bounded window. Keep the SSD attached until
 **Safe to unplug** appears. Lattice does not use volume lock, dismount, offline,
 or mount-point operations. If Windows vetoes eject, Lattice reports the exact
-veto type and name and leaves the library disconnected. After reconnecting the
-SSD and reopening Lattice, the app detects the saved volume even if its drive
-letter changed, restarts Syncthing, rescans,
+veto type and name, writes `%LOCALAPPDATA%\CS Library\last-eject-diagnostic.txt`,
+and leaves the library disconnected. After reconnecting the SSD and reopening
+Lattice, the app detects the saved volume even if its drive letter changed,
+restarts Syncthing, rescans,
 and waits for Up to Date. A pause recorded by Lattice resumes automatically. If
 only an existing pause remains, Lattice asks before resuming that exact folder.
 

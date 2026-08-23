@@ -169,10 +169,15 @@ announcing every book as deleted. Reconnect the drive before opening books or
 resuming synchronization. On Windows, **Disconnect library drive** waits for
 Up to Date, stops Syncthing and the local service, saves reconnect state, and
 hands eject to a detached local helper. The main Lattice process exits before
-that helper calls Windows' native USB-device eject; brief retries are limited
-to pending or outstanding handle closes. Keep the SSD attached while
-**Ejecting…** is visible and unplug only after **Safe to unplug** appears. On
-macOS, use the same menu command and eject through Finder after Lattice closes.
+that helper calls Windows' native USB-device eject. Before closing, Lattice
+records the exact PID and start time of every process in its WebView2
+environment; the helper waits for the main app and that complete captured set
+to exit, then allows final handles to drain. Retries are bounded and limited to
+pending or outstanding handle closes. A failed attempt records timing and veto
+details in `%LOCALAPPDATA%\CS Library\last-eject-diagnostic.txt`. Keep the SSD
+attached while **Ejecting…** is visible and unplug only after **Safe to unplug**
+appears. On macOS, use the same menu command and eject through Finder after
+Lattice closes.
 When the saved volume is mounted again, Windows resolves it even if its drive
 letter changed, restarts Syncthing, rescans, and waits for Up to Date. If the
 exact folder had a pre-existing pause, Lattice asks before resuming it. On
@@ -209,7 +214,7 @@ cd "$HOME\Lattice"
 & ".\windows\setup\Install Lattice and Connect.cmd"
 ```
 
-The setup downloads and installs the pinned Lattice `v2.2.8` release for the
+The setup downloads and installs the pinned Lattice `v2.2.9` release for the
 current user, installs official Syncthing `2.1.3` through WinGet when needed,
 selects this clone as the library, configures the Mac mini hub and shared folder
 on the Windows side, starts both apps, and copies the Windows Syncthing Device ID.

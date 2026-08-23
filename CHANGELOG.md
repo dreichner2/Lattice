@@ -1,5 +1,26 @@
 # Changelog
 
+## 2.2.9 — 2026-08-22
+
+### Fixed
+
+- A real Windows SSD test of 2.2.8 still returned
+  `PNP_VetoOutstandingOpen` on all three attempts. The main process had exited,
+  but the detached helper had not been given the identities of the existing
+  WebView2 subprocesses and could ask Configuration Manager to eject before
+  that full process set finished closing.
+- Before disposal, Lattice now snapshots every process reported by its WebView2
+  environment plus the browser process. The detached helper binds each wait to
+  both PID and start time, and does not call Configuration Manager until the
+  main app and every captured WebView process have exited.
+- After the exact process set closes, the helper allows a two-second handle
+  drain and retries only pending-close or outstanding-open vetoes up to eight
+  times at 1.5-second intervals. Other veto types still stop immediately.
+- Every eject attempt now writes a local diagnostic to
+  `%LOCALAPPDATA%\CS Library\last-eject-diagnostic.txt`, including process-wait
+  completion, timing, Configuration Manager result, veto type, and veto name.
+  **Safe to unplug** still requires `CR_SUCCESS`.
+
 ## 2.2.8 — 2026-08-22
 
 ### Fixed

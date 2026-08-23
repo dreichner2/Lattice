@@ -38,7 +38,7 @@ malicious document is required.
 
 ### Windows installer and updater
 
-- The one-click bootstrap downloads the pinned `v2.2.8` Windows release and
+- The one-click bootstrap downloads the pinned `v2.2.9` Windows release and
   compares it with its published SHA-256 companion before installation. It does
   not use a mutable GitHub Actions artifact or require a GitHub token.
 - Automatic updates are supported only from the per-user versioned installation
@@ -141,14 +141,18 @@ install Lattice.
   path. This prevents the helper from deleting its own running application.
 - Windows drive eject saves reconnect state and starts a strict eject-helper
   mode only from an executable and working directory outside the library
-  volume. The helper binds its wait to both the parent PID and process start
-  time, then asks Configuration Manager to resolve the saved USB device ID only
-  after that exact Lattice process has exited.
+  volume. Before disposal, Lattice snapshots every process reported by its
+  WebView2 environment plus the browser process. The helper binds every wait to
+  both PID and process start time, then asks Configuration Manager to resolve
+  the saved USB device ID only after the main app and every captured WebView
+  process have exited.
 - The eject helper uses only `CM_Request_Device_EjectW`; it never locks,
-  dismounts, offlines, or rewrites a volume mount point. Retries are bounded and
-  allowed only for Configuration Manager pending-close or outstanding-open
-  vetoes. A safe-to-unplug claim requires `CR_SUCCESS`; otherwise the exact
-  final veto is shown and the disconnected reconnect record remains intact.
+  dismounts, offlines, or rewrites a volume mount point. After a two-second
+  handle drain, at most eight retries are allowed and only for Configuration
+  Manager pending-close or outstanding-open vetoes. A safe-to-unplug claim
+  requires `CR_SUCCESS`; otherwise the exact final veto is shown, a local
+  diagnostic is retained, and the disconnected reconnect record remains
+  intact.
 
 ### Release signing key custody and rotation
 

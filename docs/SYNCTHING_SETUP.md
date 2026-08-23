@@ -22,7 +22,7 @@ cd "$HOME\Lattice"
 & ".\windows\setup\Install Lattice and Connect.cmd"
 ```
 
-The script validates the existing scaffold, installs the pinned Lattice `v2.2.8`
+The script validates the existing scaffold, installs the pinned Lattice `v2.2.9`
 package for the current user, installs official Syncthing `2.1.3` through
 WinGet when needed, saves the clone as Lattice's library, and configures this
 exact Syncthing folder on the Windows side:
@@ -116,11 +116,14 @@ Before ejecting a connected library SSD, open Lattice's three-dot menu and use
 Date, pauses only folder `cs-library-3b8290f24f15`, stops the dedicated
 Syncthing process and local service, releases its WebView, and saves reconnect
 state. It then launches a detached helper from local storage and closes the
-main Lattice process completely. Only after that exact process exits does the
-helper ask Windows to eject the parent USB device. It retries briefly only for
-pending or outstanding handle closes. Keep the SSD attached while
-**Ejecting…** is shown and unplug only after **Safe to unplug**. A Windows veto
-leaves the library disconnected and reports the exact veto type and name;
+main Lattice process completely. Lattice passes the helper the exact PID and
+start time of every process in its WebView2 environment, and the helper waits
+for the main app and the complete captured process set to exit before asking
+Windows to eject the parent USB device. It then allows final handles to drain
+and retries only pending or outstanding handle closes within a bounded window.
+Keep the SSD attached while **Ejecting…** is shown and unplug only after **Safe
+to unplug**. A Windows veto leaves the library disconnected, reports the exact
+veto type and name, and records `%LOCALAPPDATA%\CS Library\last-eject-diagnostic.txt`;
 Lattice never falls back to a manual volume dismount. On macOS, eject through
 Finder after Lattice closes. When the drive is mounted again, reopen Lattice.
 Windows automatically detects the saved volume, restarts Syncthing, rescans, and waits
