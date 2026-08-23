@@ -23,6 +23,8 @@ var tests = new (string Name, Action Body)[]
     ("keeps active authority monotonic when an older candidate finishes last", RejectsLateOlderPromotion),
     ("prunes a valid obsolete version", PrunesValidObsoleteVersion),
     ("leaves a corrupt obsolete version without blocking startup", IgnoresCorruptObsoleteVersion),
+    ("accepts only an exact out-of-install launcher mirror", AcceptsOnlyExactPortableMirror),
+    ("atomically replaces a digest-bound portable launcher", ReplacesVerifiedPortableLauncher),
 };
 
 var failures = 0;
@@ -397,6 +399,75 @@ static void IgnoresCorruptObsoleteVersion()
             throw new Exception("Corrupt obsolete content was treated as deletion authority.");
         if (!Directory.Exists(previous) || !Directory.Exists(active))
             throw new Exception("Corrupt obsolete content blocked healthy retention state.");
+    });
+}
+
+static void AcceptsOnlyExactPortableMirror()
+{
+    WithTemporaryRoot(root =>
+    {
+        var installRoot = Path.Combine(root, "installed");
+        var versionRoot = Path.Combine(installRoot, "versions", "2.2.8");
+        Directory.CreateDirectory(versionRoot);
+        var current = Path.Combine(versionRoot, "Lattice.exe");
+        var mirror = Path.Combine(root, "Desktop", "Lattice.exe");
+        Directory.CreateDirectory(Path.GetDirectoryName(mirror)!);
+        File.WriteAllBytes(current, Encoding.UTF8.GetBytes("verified-current"));
+        File.WriteAllBytes(mirror, Encoding.UTF8.GetBytes("verified-current"));
+        var installation = new UpdateInstallation(
+            installRoot,
+            Path.Combine(installRoot, "versions"),
+            versionRoot,
+            StableSemanticVersion.Parse("2.2.8"));
+
+        Equal(
+            Path.GetFullPath(mirror),
+            PortableLauncherMaintenance.ResolveMirrorForUpdate(
+                installation,
+                mirror,
+                current));
+        File.WriteAllBytes(mirror, Encoding.UTF8.GetBytes("different-copy"));
+        Equal<string?>(
+            null,
+            PortableLauncherMaintenance.ResolveMirrorForUpdate(
+                installation,
+                mirror,
+                current));
+    });
+}
+
+static void ReplacesVerifiedPortableLauncher()
+{
+    WithTemporaryRoot(root =>
+    {
+        var installRoot = Path.Combine(root, "installed");
+        var versionRoot = Path.Combine(installRoot, "versions", "2.2.8");
+        Directory.CreateDirectory(versionRoot);
+        var source = Path.Combine(versionRoot, "Lattice.exe");
+        var target = Path.Combine(root, "Desktop", "Lattice.exe");
+        Directory.CreateDirectory(Path.GetDirectoryName(target)!);
+        File.WriteAllBytes(source, Encoding.UTF8.GetBytes("new-version"));
+        File.WriteAllBytes(target, Encoding.UTF8.GetBytes("old-version"));
+        var expected = PortableLauncherMaintenance.ComputeSha256(target);
+
+        PortableUpdateReplacement.ReplaceVerifiedExecutable(
+            source,
+            target,
+            expected,
+            installRoot);
+        Equal("new-version", File.ReadAllText(target));
+        if (Directory.EnumerateFiles(Path.GetDirectoryName(target)!, ".Lattice-update-*").Any())
+            throw new Exception("Portable replacement left an operation file after success.");
+
+        File.WriteAllBytes(target, Encoding.UTF8.GetBytes("old-version"));
+        expected = PortableLauncherMaintenance.ComputeSha256(target);
+        File.WriteAllBytes(target, Encoding.UTF8.GetBytes("changed-after-start"));
+        Throws<InvalidDataException>(() => PortableUpdateReplacement.ReplaceVerifiedExecutable(
+            source,
+            target,
+            expected,
+            installRoot));
+        Equal("changed-after-start", File.ReadAllText(target));
     });
 }
 

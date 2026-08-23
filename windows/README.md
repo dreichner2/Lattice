@@ -32,7 +32,7 @@ You can also double-click `windows\setup\Install Lattice and Connect.cmd` after
 cloning. The script:
 
 1. validates the clone and its complete empty library scaffold;
-2. downloads the pinned public `v2.2.7` release and verifies its SHA-256;
+2. downloads the pinned public `v2.2.8` release and verifies its SHA-256;
 3. installs Lattice for the current user under
    `%LOCALAPPDATA%\Programs\Lattice`;
 4. installs official Syncthing `2.1.3` with WinGet when needed;
@@ -56,7 +56,7 @@ powershell.exe -NoProfile -ExecutionPolicy Bypass -File .\windows\setup\Setup-La
 ```
 
 The pinned release can also be downloaded directly from
-[`v2.2.7/Lattice-Windows-win-x64.zip`](https://github.com/dreichner2/Lattice/releases/download/v2.2.7/Lattice-Windows-win-x64.zip).
+[`v2.2.8/Lattice-Windows-win-x64.zip`](https://github.com/dreichner2/Lattice/releases/download/v2.2.8/Lattice-Windows-win-x64.zip).
 See [`windows/setup/README.md`](setup/README.md) for offline/test inputs and the
 full switch list.
 
@@ -152,7 +152,11 @@ replace a newer version. The authority is published first so a stale shortcut
 or old executable redirects to the healthy candidate. Once promotion is
 durable, the candidate closes the exact superseded Lattice window; a failed
 candidate leaves the current version open. One previous healthy version is
-retained.
+retained. An exact copied `Lattice.exe` on the desktop is digest-bound when the
+update starts, then atomically replaced by a detached helper only after the old
+process exits. A changed or unrelated executable is never overwritten. The
+updated launcher remains at the same desktop path and redirects to the verified
+active installation when opened.
 
 After an update activates, the menu shows **Version &lt;ID&gt;**. That item remains
 enabled: selecting it performs another signed update check without requiring
@@ -161,13 +165,16 @@ the newly updated window to be closed and reopened.
 For an external library SSD, use the in-app three-dot menu's **Disconnect
 library drive** command. It waits for an Up to Date folder, pauses only
 Lattice's stable Syncthing folder ID, stops the dedicated Syncthing process and
-local service, releases the WebView, resolves the parent USB device, and awaits
-Windows' native eject request. Keep the SSD attached while **Ejecting…** is
-visible and unplug only after **Safe to unplug**. Lattice does not use volume
-lock, dismount, offline, or mount-point operations. If Windows vetoes eject,
-Lattice reports the exact veto type and name and leaves the library
-disconnected. After reconnecting the SSD and reopening Lattice, the app detects
-the saved volume even if its drive letter changed, restarts Syncthing, rescans,
+local service, releases the WebView, resolves the parent USB device, saves
+reconnect state, and launches a detached eject helper from local storage. The
+main Lattice process exits completely before the helper makes Windows' native
+eject request. The helper stays visibly in **Ejecting…** and retries briefly
+only for pending or outstanding handle closes. Keep the SSD attached until
+**Safe to unplug** appears. Lattice does not use volume lock, dismount, offline,
+or mount-point operations. If Windows vetoes eject, Lattice reports the exact
+veto type and name and leaves the library disconnected. After reconnecting the
+SSD and reopening Lattice, the app detects the saved volume even if its drive
+letter changed, restarts Syncthing, rescans,
 and waits for Up to Date. A pause recorded by Lattice resumes automatically. If
 only an existing pause remains, Lattice asks before resuming that exact folder.
 

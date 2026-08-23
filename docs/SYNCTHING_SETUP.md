@@ -22,7 +22,7 @@ cd "$HOME\Lattice"
 & ".\windows\setup\Install Lattice and Connect.cmd"
 ```
 
-The script validates the existing scaffold, installs the pinned Lattice `v2.2.7`
+The script validates the existing scaffold, installs the pinned Lattice `v2.2.8`
 package for the current user, installs official Syncthing `2.1.3` through
 WinGet when needed, saves the clone as Lattice's library, and configures this
 exact Syncthing folder on the Windows side:
@@ -114,13 +114,16 @@ is deliberately excluded from this client workflow.
 Before ejecting a connected library SSD, open Lattice's three-dot menu and use
 **Disconnect library drive**. Lattice first requires the folder to be Up to
 Date, pauses only folder `cs-library-3b8290f24f15`, stops the dedicated
-Syncthing process, releases its WebView and local service, and then asks Windows
-to eject the parent USB device. Keep the SSD attached while **Ejecting…** is
-shown and unplug only after **Safe to unplug**. A Windows veto leaves the
-library disconnected and reports the exact veto type and name; Lattice never
-falls back to a manual volume dismount. On macOS, eject through Finder after
-Lattice closes. When the drive is mounted again, reopen Lattice. Windows
-automatically detects the saved volume, restarts Syncthing, rescans, and waits
+Syncthing process and local service, releases its WebView, and saves reconnect
+state. It then launches a detached helper from local storage and closes the
+main Lattice process completely. Only after that exact process exits does the
+helper ask Windows to eject the parent USB device. It retries briefly only for
+pending or outstanding handle closes. Keep the SSD attached while
+**Ejecting…** is shown and unplug only after **Safe to unplug**. A Windows veto
+leaves the library disconnected and reports the exact veto type and name;
+Lattice never falls back to a manual volume dismount. On macOS, eject through
+Finder after Lattice closes. When the drive is mounted again, reopen Lattice.
+Windows automatically detects the saved volume, restarts Syncthing, rescans, and waits
 for Up to Date. Lattice resumes only a pause it recorded itself; an existing
 manual pause is preserved unless the user explicitly chooses **Resume Sync**.
 

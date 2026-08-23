@@ -20,10 +20,13 @@ APP_CODE = WINDOWS / "App.xaml.cs"
 WINDOW_XAML = WINDOWS / "MainWindow.xaml"
 WINDOW_CODE = WINDOWS / "MainWindow.xaml.cs"
 UPDATE_CANDIDATE_CODE = WINDOWS / "UpdateCandidateSession.cs"
+UPDATE_STARTUP_CODE = WINDOWS / "UpdateStartupRedirect.cs"
 UPDATE_MODELS_CODE = WINDOWS / "UpdateModels.cs"
 UPDATE_SERVICE_CODE = WINDOWS / "UpdateService.cs"
 LIBRARY_MOVE_CODE = WINDOWS / "LibraryMoveClient.cs"
 NATIVE_EJECT_CODE = WINDOWS / "NativeDriveEjector.cs"
+EJECT_HELPER_CODE = WINDOWS / "EjectHelperWindow.cs"
+PORTABLE_LAUNCHER_CODE = WINDOWS / "PortableLauncherUpdate.cs"
 EXTERNAL_VOLUME_CODE = WINDOWS / "ExternalLibraryVolumeRecord.cs"
 WINDOWS_BUILD = ROOT / "windows" / "build-windows.ps1"
 WINDOWS_INSTALLER = ROOT / "windows" / "install.ps1"
@@ -48,10 +51,13 @@ class WindowsNativeShellTests(unittest.TestCase):
         cls.window_xaml = WINDOW_XAML.read_text(encoding="utf-8")
         cls.window_code = WINDOW_CODE.read_text(encoding="utf-8")
         cls.update_candidate_code = UPDATE_CANDIDATE_CODE.read_text(encoding="utf-8")
+        cls.update_startup_code = UPDATE_STARTUP_CODE.read_text(encoding="utf-8")
         cls.update_models_code = UPDATE_MODELS_CODE.read_text(encoding="utf-8")
         cls.update_service_code = UPDATE_SERVICE_CODE.read_text(encoding="utf-8")
         cls.library_move_code = LIBRARY_MOVE_CODE.read_text(encoding="utf-8")
         cls.native_eject_code = NATIVE_EJECT_CODE.read_text(encoding="utf-8")
+        cls.eject_helper_code = EJECT_HELPER_CODE.read_text(encoding="utf-8")
+        cls.portable_launcher_code = PORTABLE_LAUNCHER_CODE.read_text(encoding="utf-8")
         cls.external_volume_code = EXTERNAL_VOLUME_CODE.read_text(encoding="utf-8")
         cls.windows_build = WINDOWS_BUILD.read_text(encoding="utf-8")
         cls.windows_installer = WINDOWS_INSTALLER.read_text(encoding="utf-8")
@@ -203,6 +209,7 @@ class WindowsNativeShellTests(unittest.TestCase):
     def test_external_drive_eject_uses_only_native_configuration_manager(self) -> None:
         for contract in (
             "CM_Request_Device_EjectW",
+            "CM_Locate_DevNodeW",
             "CM_Get_Parent",
             "IOCTL_STORAGE_GET_DEVICE_NUMBER",
             "53F56307-B6BF-11D0-94F2-00A0C91EFB8B",
@@ -235,13 +242,45 @@ class WindowsNativeShellTests(unittest.TestCase):
             disconnect.index("StopOwnedServerForEject"),
         )
         self.assertLess(
+            disconnect.index("StopOwnedServerForEject"),
+            disconnect.index("ExternalLibraryVolumeRecord.Save"),
+        )
+        self.assertLess(
+            disconnect.index("ExternalLibraryVolumeRecord.Save"),
             disconnect.index("Browser.Dispose()"),
-            disconnect.index("NativeDriveEjector.RequestEject"),
+        )
+        self.assertLess(
+            disconnect.index("Browser.Dispose()"),
+            disconnect.index("LaunchNativeEjectHelper"),
         )
         self.assertIn('"Ejecting…"', disconnect)
-        self.assertIn("await Task.Run(() => NativeDriveEjector.RequestEject", disconnect)
-        veto_branch = disconnect.index("if (!ejectResult.Success)")
-        safe_to_unplug = disconnect.rindex('"Safe to unplug"')
+        self.assertNotIn("NativeDriveEjector.RequestEject", disconnect)
+        self.assertIn("Application.Current.Shutdown();", disconnect)
+
+        launch_helper = self.window_code[
+            self.window_code.index("private static Process LaunchNativeEjectHelper") :
+            self.window_code.index("private async Task ReleaseLibraryWebViewAsync")
+        ]
+        self.assertIn("Environment.ProcessPath", launch_helper)
+        self.assertIn("Environment.CurrentDirectory = SettingsRoot", launch_helper)
+        self.assertIn("WorkingDirectory = SettingsRoot", launch_helper)
+        self.assertIn("target.DriveRoot", launch_helper)
+
+        helper_start = self.app_code.index("EjectHelperOptions.IsRequested(e.Args)")
+        update_redirect = self.app_code.index("UpdateStartupRedirect.TryRedirectToActiveVersion(e.Args)")
+        self.assertLess(helper_start, update_redirect)
+        self.assertIn('private const string HelperSwitch = "--eject-helper"', self.eject_helper_code)
+        wait_for_parent = self.eject_helper_code.index("await WaitForParentExitAsync(_options)")
+        request_eject = self.eject_helper_code.index("NativeDriveEjector.RequestEject(")
+        self.assertLess(wait_for_parent, request_eject)
+        self.assertIn("parent.WaitForExitAsync(timeout.Token)", self.eject_helper_code)
+        self.assertIn("MaximumEjectAttempts = 3", self.eject_helper_code)
+        self.assertIn("NativeDriveEjector.IsTransientCloseVeto(result)", self.eject_helper_code)
+        self.assertIn("PNP_VetoPendingClose", self.native_eject_code)
+        self.assertIn("PNP_VetoOutstandingOpen", self.native_eject_code)
+        self.assertIn("actualDeviceInstanceId", self.native_eject_code)
+        veto_branch = self.eject_helper_code.index("if (!result.Success)")
+        safe_to_unplug = self.eject_helper_code.rindex('"Safe to unplug"')
         self.assertLess(veto_branch, safe_to_unplug)
 
     def test_external_volume_record_drives_automatic_verified_reconnect(self) -> None:
@@ -340,6 +379,7 @@ class WindowsNativeShellTests(unittest.TestCase):
         self.assertLess(consent, download)
         self.assertLess(download, launch)
         self.assertIn("closes automatically only after", self.window_code)
+        self.assertIn("desktop launcher will then be replaced at that same path", self.window_code)
         self.assertIn("private void ShowUpdateProgress", self.window_code)
         self.assertIn("_updateProgressValue = Math.Clamp(value, 0, 100)", self.window_code)
         self.assertIn("UpdateProgress.Value = _updateProgressValue", self.window_code)
@@ -369,6 +409,31 @@ class WindowsNativeShellTests(unittest.TestCase):
         )
         self.assertIn("process.CloseMainWindow()", self.update_candidate_code)
         self.assertIn("expectedExecutable", self.update_candidate_code)
+
+        for field in (
+            "LauncherProcessStartTimeUtcTicks",
+            "LauncherExecutablePath",
+            "LauncherMirrorPath",
+            "LauncherMirrorSha256",
+        ):
+            self.assertIn(f"public {('long?' if field == 'LauncherProcessStartTimeUtcTicks' else 'string?')} {field}", self.update_models_code)
+        self.assertIn('LauncherMirrorOption = "--launcher-mirror"', self.portable_launcher_code)
+        self.assertIn('HelperSwitch = "--portable-update-helper"', self.portable_launcher_code)
+        self.assertIn("Environment.SpecialFolder.DesktopDirectory", self.portable_launcher_code)
+        self.assertIn("ComputeSha256(fullPath)", self.portable_launcher_code)
+        self.assertIn("WaitForExactParentExitAsync(options)", self.portable_launcher_code)
+        self.assertIn("parent.StartTime.ToUniversalTime().Ticks", self.portable_launcher_code)
+        self.assertIn("parent.MainModule?.FileName", self.portable_launcher_code)
+        self.assertIn("File.Replace(temporary, target, backup", self.portable_launcher_code)
+        self.assertIn("The portable Lattice launcher changed", self.portable_launcher_code)
+        helper_dispatch = self.app_code.index("PortableUpdateHelperOptions.IsRequested(e.Args)")
+        self.assertLess(helper_dispatch, redirect)
+        self.assertIn('case "--launcher-mirror":', self.app_code)
+        self.assertIn("TryRedirectPortableLauncher", self.update_startup_code)
+        self.assertIn("LauncherMirrorOption", self.update_startup_code)
+        portable_launch = self.update_candidate_code.index("LaunchPortableLauncherReplacement();")
+        old_window_close = self.update_candidate_code.index("RequestSupersededLauncherShutdown();")
+        self.assertLess(portable_launch, old_window_close)
 
         # A runtime failure after the candidate's health-gated commit must not
         # claim that the now-active version was rolled back or left unpromoted.

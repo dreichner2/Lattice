@@ -167,8 +167,11 @@ Keep the external drive connected while Lattice is open. If it is disconnected,
 Syncthing's missing-folder marker protection stops that folder instead of
 announcing every book as deleted. Reconnect the drive before opening books or
 resuming synchronization. On Windows, **Disconnect library drive** waits for
-Up to Date, releases Lattice and Syncthing, shows **Ejecting…**, and calls the
-native USB-device eject; unplug only after **Safe to unplug** appears. On
+Up to Date, stops Syncthing and the local service, saves reconnect state, and
+hands eject to a detached local helper. The main Lattice process exits before
+that helper calls Windows' native USB-device eject; brief retries are limited
+to pending or outstanding handle closes. Keep the SSD attached while
+**Ejecting…** is visible and unplug only after **Safe to unplug** appears. On
 macOS, use the same menu command and eject through Finder after Lattice closes.
 When the saved volume is mounted again, Windows resolves it even if its drive
 letter changed, restarts Syncthing, rescans, and waits for Up to Date. If the
@@ -206,7 +209,7 @@ cd "$HOME\Lattice"
 & ".\windows\setup\Install Lattice and Connect.cmd"
 ```
 
-The setup downloads and installs the pinned Lattice `v2.2.7` release for the
+The setup downloads and installs the pinned Lattice `v2.2.8` release for the
 current user, installs official Syncthing `2.1.3` through WinGet when needed,
 selects this clone as the library, configures the Mac mini hub and shared folder
 on the Windows side, starts both apps, and copies the Windows Syncthing Device ID.
@@ -224,7 +227,11 @@ Installed Windows builds use versioned directories under
 stable release whose exact manifest bytes pass the embedded release-key
 signature check and whose versioned GitHub asset matches the signed size and
 SHA-256. A candidate becomes active only after its own isolated loopback service
-and the complete shared WebView interface have both passed health checks.
+and the complete shared WebView interface have both passed health checks. If an
+exact copy of the superseded `Lattice.exe` is on the Windows desktop, a detached
+post-exit helper atomically replaces that same file with the verified new
+executable. Opening it later redirects to the healthy versioned installation,
+so the launcher stays where the user put it without becoming a stale copy.
 Promotion re-checks the active authority so a slower older candidate cannot
 replace a newer version; the previous healthy version remains available for
 rollback.

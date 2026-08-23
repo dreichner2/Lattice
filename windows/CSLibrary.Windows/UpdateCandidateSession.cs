@@ -206,6 +206,19 @@ internal sealed class UpdateCandidateSession
         }
         try
         {
+            LaunchPortableLauncherReplacement();
+        }
+        catch (Exception error) when (error is IOException
+            or UnauthorizedAccessException
+            or InvalidOperationException
+            or NotSupportedException
+            or System.ComponentModel.Win32Exception
+            or System.Security.Cryptography.CryptographicException)
+        {
+            UpdateMaintenance.RecordIssue(_installation, "portable-launcher", error);
+        }
+        try
+        {
             RequestSupersededLauncherShutdown();
         }
         catch (Exception error) when (error is InvalidOperationException
@@ -217,6 +230,78 @@ internal sealed class UpdateCandidateSession
             // healthy candidate.
             UpdateMaintenance.RecordIssue(_installation, "superseded-window", error);
         }
+    }
+
+    private void LaunchPortableLauncherReplacement()
+    {
+        if (!_promoted || _pending.LauncherProcessId is not int launcherProcessId)
+            return;
+
+        var previousVersion = StableSemanticVersion.Parse(
+            _pending.PreviousVersion,
+            "previous version");
+        var previousExecutable = Path.GetFullPath(Path.Combine(
+            _installation.VersionsRoot,
+            previousVersion.ToString(),
+            "Lattice.exe"));
+        var mirror = _pending.LauncherMirrorPath;
+        var mirrorSha256 = _pending.LauncherMirrorSha256;
+        if (string.IsNullOrWhiteSpace(mirror) || string.IsNullOrWhiteSpace(mirrorSha256))
+        {
+            mirror = PortableLauncherMaintenance.FindLegacyDesktopMirror(
+                _installation,
+                previousExecutable);
+            if (mirror is null) return;
+            mirrorSha256 = PortableLauncherMaintenance.ComputeSha256(mirror);
+        }
+
+        var parentStartTimeUtcTicks = _pending.LauncherProcessStartTimeUtcTicks;
+        try
+        {
+            using var launcher = Process.GetProcessById(launcherProcessId);
+            if (!launcher.HasExited)
+            {
+                var executable = launcher.MainModule?.FileName;
+                if (string.IsNullOrWhiteSpace(executable)
+                    || !string.Equals(
+                        Path.GetFullPath(executable),
+                        previousExecutable,
+                        StringComparison.OrdinalIgnoreCase))
+                    throw new InvalidDataException(
+                        "The superseded Lattice launcher path changed before replacement.");
+                var actualStartTime = launcher.StartTime.ToUniversalTime().Ticks;
+                if (parentStartTimeUtcTicks is long expectedStartTime
+                    && expectedStartTime != actualStartTime)
+                    throw new InvalidDataException(
+                        "The superseded Lattice launcher identity changed before replacement.");
+                parentStartTimeUtcTicks = actualStartTime;
+            }
+        }
+        catch (ArgumentException)
+        {
+            // The old launcher already exited. The helper can replace its mirror immediately.
+        }
+        if (parentStartTimeUtcTicks is not > 0)
+            parentStartTimeUtcTicks = 1;
+
+        var options = new PortableUpdateHelperOptions(
+            launcherProcessId,
+            parentStartTimeUtcTicks.Value,
+            previousExecutable,
+            Path.GetFullPath(mirror),
+            mirrorSha256,
+            _pending.CandidateVersion);
+        var executablePath = Environment.ProcessPath
+            ?? throw new InvalidOperationException("The portable replacement helper executable is unavailable.");
+        Directory.CreateDirectory(PortableLauncherMaintenance.LocalSettingsRoot);
+        var start = new ProcessStartInfo(executablePath)
+        {
+            UseShellExecute = false,
+            WorkingDirectory = PortableLauncherMaintenance.LocalSettingsRoot,
+        };
+        options.AddArguments(start);
+        using var helper = Process.Start(start)
+            ?? throw new InvalidOperationException("Windows did not start the portable replacement helper.");
     }
 
     private void RequestSupersededLauncherShutdown()
@@ -319,6 +404,33 @@ internal sealed class UpdateCandidateSession
                 Path.TrimEndingDirectorySeparator(Path.GetFullPath(expectedDirectory)),
                 StringComparison.OrdinalIgnoreCase))
             throw new InvalidDataException("The update activation points outside the versioned installation.");
+        var expectedLauncher = Path.GetFullPath(Path.Combine(
+            installation.VersionsRoot,
+            previous.ToString(),
+            "Lattice.exe"));
+        var hasLauncherStartTime = pending.LauncherProcessStartTimeUtcTicks is not null;
+        var hasLauncherPath = !string.IsNullOrWhiteSpace(pending.LauncherExecutablePath);
+        if (hasLauncherStartTime != hasLauncherPath
+            || pending.LauncherProcessStartTimeUtcTicks is <= 0
+            || (hasLauncherPath
+                && !string.Equals(
+                    Path.GetFullPath(pending.LauncherExecutablePath!),
+                    expectedLauncher,
+                    StringComparison.OrdinalIgnoreCase)))
+            throw new InvalidDataException("The update launcher identity is invalid.");
+        var hasMirrorPath = !string.IsNullOrWhiteSpace(pending.LauncherMirrorPath);
+        var hasMirrorDigest = !string.IsNullOrWhiteSpace(pending.LauncherMirrorSha256);
+        if (hasMirrorPath != hasMirrorDigest
+            || (hasMirrorPath
+                && (!string.Equals(
+                        Path.GetExtension(Path.GetFullPath(pending.LauncherMirrorPath!)),
+                        ".exe",
+                        StringComparison.OrdinalIgnoreCase)
+                    || !PortableLauncherMaintenance.IsOutsideInstallRoot(
+                        pending.LauncherMirrorPath!,
+                        installation.InstallRoot)
+                    || !UpdateSecurity.IsLowerHexSha256(pending.LauncherMirrorSha256!))))
+            throw new InvalidDataException("The portable launcher replacement record is invalid.");
         UpdateSecurity.ValidatePackageDirectory(installation.VersionDirectory, candidate);
         ValidateCurrentCandidateExecutable(installation, pending);
     }

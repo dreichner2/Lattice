@@ -17,6 +17,61 @@ public partial class App : Application
     {
         base.OnStartup(e);
         var smokeRequested = e.Args.Contains("--smoke-test", StringComparer.Ordinal);
+        if (PortableUpdateHelperOptions.IsRequested(e.Args))
+        {
+            try
+            {
+                var helperOptions = PortableUpdateHelperOptions.Parse(e.Args);
+                Directory.CreateDirectory(CSLibrary.Windows.MainWindow.LocalSettingsRoot);
+                Environment.CurrentDirectory = CSLibrary.Windows.MainWindow.LocalSettingsRoot;
+                ShutdownMode = ShutdownMode.OnExplicitShutdown;
+                RunPortableUpdateHelperAsync(helperOptions);
+            }
+            catch (Exception error) when (error is IOException
+                                          or UnauthorizedAccessException
+                                          or ArgumentException
+                                          or InvalidOperationException
+                                          or System.ComponentModel.Win32Exception
+                                          or System.Security.Cryptography.CryptographicException)
+            {
+                ReportStartupIssue(
+                    "Lattice could not start the portable update helper. The existing launcher was not replaced. "
+                    + error.Message,
+                    smokeRequested,
+                    MessageBoxImage.Warning);
+                Shutdown(5);
+            }
+            return;
+        }
+
+        if (EjectHelperOptions.IsRequested(e.Args))
+        {
+            try
+            {
+                var helperOptions = EjectHelperOptions.Parse(e.Args);
+                Directory.CreateDirectory(CSLibrary.Windows.MainWindow.LocalSettingsRoot);
+                Environment.CurrentDirectory = CSLibrary.Windows.MainWindow.LocalSettingsRoot;
+                var ejectWindow = new EjectHelperWindow(helperOptions);
+                ejectWindow.SourceInitialized += (_, _) => ApplyNativeChrome(ejectWindow);
+                MainWindow = ejectWindow;
+                ejectWindow.Show();
+            }
+            catch (Exception error) when (error is IOException
+                                          or UnauthorizedAccessException
+                                          or ArgumentException
+                                          or InvalidOperationException
+                                          or System.ComponentModel.Win32Exception)
+            {
+                ReportStartupIssue(
+                    "Lattice could not start the native eject helper. The drive was not ejected. "
+                    + error.Message,
+                    smokeRequested,
+                    MessageBoxImage.Warning);
+                Shutdown(4);
+            }
+            return;
+        }
+
         try
         {
             if (UpdateStartupRedirect.TryRedirectToActiveVersion(e.Args))
@@ -58,6 +113,32 @@ public partial class App : Application
         window.SourceInitialized += (_, _) => ApplyNativeChrome(window);
         MainWindow = window;
         window.Show();
+    }
+
+    private async void RunPortableUpdateHelperAsync(PortableUpdateHelperOptions options)
+    {
+        try
+        {
+            await PortableUpdateReplacement.ReplaceAsync(options);
+            Shutdown(0);
+        }
+        catch (Exception error) when (error is IOException
+                                      or UnauthorizedAccessException
+                                      or ArgumentException
+                                      or InvalidOperationException
+                                      or NotSupportedException
+                                      or System.ComponentModel.Win32Exception
+                                      or System.Security.Cryptography.CryptographicException
+                                      or TaskCanceledException)
+        {
+            MessageBox.Show(
+                "Lattice updated successfully, but the older launcher could not be replaced in its original location. "
+                + "The verified installed version remains active.\n\n" + error.Message,
+                "Lattice launcher not replaced",
+                MessageBoxButton.OK,
+                MessageBoxImage.Warning);
+            Shutdown(6);
+        }
     }
 
     private static void ReportStartupIssue(
@@ -103,14 +184,18 @@ public partial class App : Application
         int valueSize);
 }
 
-internal sealed record LaunchOptions(string? LibraryRoot, SmokeTestOptions? SmokeTest)
+internal sealed record LaunchOptions(
+    string? LibraryRoot,
+    string? LauncherMirror,
+    SmokeTestOptions? SmokeTest)
 {
-    internal static LaunchOptions Empty { get; } = new(null, null);
+    internal static LaunchOptions Empty { get; } = new(null, null, null);
 
     internal static LaunchOptions Parse(IReadOnlyList<string> arguments)
     {
         var smokeTest = false;
         string? libraryRoot = null;
+        string? launcherMirror = null;
         string? smokeOutput = null;
         string? smokePdf = null;
         var positional = new List<string>();
@@ -125,6 +210,9 @@ internal sealed record LaunchOptions(string? LibraryRoot, SmokeTestOptions? Smok
                     break;
                 case "--library-root":
                     libraryRoot = ReadValue(arguments, ref index, "--library-root");
+                    break;
+                case "--launcher-mirror":
+                    launcherMirror = ReadValue(arguments, ref index, "--launcher-mirror");
                     break;
                 case "--smoke-output":
                     smokeOutput = ReadValue(arguments, ref index, "--smoke-output");
@@ -146,7 +234,7 @@ internal sealed record LaunchOptions(string? LibraryRoot, SmokeTestOptions? Smok
         }
 
         libraryRoot ??= positional.FirstOrDefault();
-        if (!smokeTest) return new LaunchOptions(libraryRoot, null);
+        if (!smokeTest) return new LaunchOptions(libraryRoot, launcherMirror, null);
         if (unknownOptions.Count > 0)
             throw new ArgumentException($"Unknown smoke-test option: {unknownOptions[0]}");
         if (string.IsNullOrWhiteSpace(libraryRoot) || string.IsNullOrWhiteSpace(smokeOutput))
@@ -157,7 +245,7 @@ internal sealed record LaunchOptions(string? LibraryRoot, SmokeTestOptions? Smok
 
         var root = Path.GetFullPath(libraryRoot);
         var output = Path.GetFullPath(smokeOutput);
-        return new LaunchOptions(root, new SmokeTestOptions(
+        return new LaunchOptions(root, launcherMirror, new SmokeTestOptions(
             Root: root,
             ReportPath: Path.Combine(output, "lattice-smoke.json"),
             ScreenshotPath: Path.Combine(output, "lattice-webview.png"),

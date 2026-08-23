@@ -9,5 +9,6 @@
   <ItemGroup>
     <Compile Include="Program.cs" />
     <Compile Include="..\CSLibrary.Windows\Update*.cs" Link="Updater\%(Filename)%(Extension)" />
+    <Compile Include="..\CSLibrary.Windows\PortableLauncherUpdate.cs" Link="Updater\PortableLauncherUpdate.cs" />
   </ItemGroup>
 </Project>

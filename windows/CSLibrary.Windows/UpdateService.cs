@@ -100,14 +100,19 @@ internal sealed class UpdateService
     };
     private static readonly HttpClient Client = CreateClient();
     private readonly UpdateInstallation? _installation;
+    private readonly string? _launcherMirrorPath;
 
-    internal UpdateService() : this(UpdateInstallation.TryDetect())
+    internal UpdateService(string? launcherMirrorPath = null)
+        : this(UpdateInstallation.TryDetect(), launcherMirrorPath)
     {
     }
 
-    internal UpdateService(UpdateInstallation? installation)
+    internal UpdateService(
+        UpdateInstallation? installation,
+        string? launcherMirrorPath = null)
     {
         _installation = installation;
+        _launcherMirrorPath = launcherMirrorPath;
     }
 
     internal bool IsAutomaticUpdateSupported => _installation is not null;
@@ -271,6 +276,19 @@ internal sealed class UpdateService
         var activationId = Guid.NewGuid().ToString("N");
         var tokenBytes = RandomNumberGenerator.GetBytes(32);
         var token = Convert.ToHexString(tokenBytes).ToLowerInvariant();
+        var launcherExecutable = Environment.ProcessPath;
+        var expectedLauncher = Path.Combine(_installation.VersionDirectory, "Lattice.exe");
+        if (string.IsNullOrWhiteSpace(launcherExecutable)
+            || !string.Equals(
+                Path.GetFullPath(launcherExecutable),
+                Path.GetFullPath(expectedLauncher),
+                StringComparison.OrdinalIgnoreCase))
+            throw new InvalidDataException("Only the running installed Lattice version may launch an update.");
+        using var launcherProcess = Process.GetCurrentProcess();
+        var launcherMirror = PortableLauncherMaintenance.ResolveMirrorForUpdate(
+            _installation,
+            _launcherMirrorPath,
+            launcherExecutable);
         var pending = new PendingUpdateActivation
         {
             SchemaVersion = 1,
@@ -281,6 +299,12 @@ internal sealed class UpdateService
             CandidateVersion = candidateVersion.ToString(),
             CandidateDirectory = expectedDirectory,
             LauncherProcessId = Environment.ProcessId,
+            LauncherProcessStartTimeUtcTicks = launcherProcess.StartTime.ToUniversalTime().Ticks,
+            LauncherExecutablePath = Path.GetFullPath(launcherExecutable),
+            LauncherMirrorPath = launcherMirror,
+            LauncherMirrorSha256 = launcherMirror is null
+                ? null
+                : PortableLauncherMaintenance.ComputeSha256(launcherMirror),
         };
         var pendingRoot = Path.Combine(_installation.UpdatesRoot, "pending");
         Directory.CreateDirectory(pendingRoot);

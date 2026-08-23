@@ -14,7 +14,9 @@ internal static class UpdateStartupRedirect
     internal static bool TryRedirectToActiveVersion(IReadOnlyList<string>? arguments = null)
     {
         var installation = UpdateInstallation.TryDetect();
-        if (installation is null) return false;
+        if (installation is null)
+            return TryRedirectPortableLauncher(
+                arguments ?? Environment.GetCommandLineArgs().Skip(1).ToArray());
         installation.AssertSafeRoots();
         var activePath = Path.Combine(installation.InstallRoot, "active-version.json");
         if (!File.Exists(activePath)) return false;
@@ -75,11 +77,67 @@ internal static class UpdateStartupRedirect
         return true;
     }
 
-    private static IEnumerable<string> RemoveCandidateProof(IReadOnlyList<string> arguments)
+    private static bool TryRedirectPortableLauncher(IReadOnlyList<string> arguments)
+    {
+        var processPath = Environment.ProcessPath;
+        var localApplicationData = Environment.GetFolderPath(
+            Environment.SpecialFolder.LocalApplicationData);
+        if (string.IsNullOrWhiteSpace(processPath)
+            || string.IsNullOrWhiteSpace(localApplicationData)
+            || !File.Exists(processPath)
+            || !string.Equals(Path.GetExtension(processPath), ".exe", StringComparison.OrdinalIgnoreCase)
+            || (File.GetAttributes(processPath) & FileAttributes.ReparsePoint) != 0)
+            return false;
+
+        processPath = Path.GetFullPath(processPath);
+        var installRoot = Path.GetFullPath(Path.Combine(localApplicationData, "Programs", "Lattice"));
+        if (!PortableLauncherMaintenance.IsOutsideInstallRoot(processPath, installRoot)) return false;
+        var activePath = Path.Combine(installRoot, "active-version.json");
+        if (!File.Exists(activePath)) return false;
+        if ((File.GetAttributes(activePath) & FileAttributes.ReparsePoint) != 0)
+            throw new InvalidDataException("The active-version record cannot be a reparse point.");
+
+        var active = UpdateService.ReadBoundedJson<ActiveVersionRecord>(activePath, 16 * 1024);
+        if (active.SchemaVersion != 1
+            || !DateTimeOffset.TryParse(active.PromotedAt, out var promotedAt)
+            || promotedAt.Offset != TimeSpan.Zero)
+            throw new InvalidDataException("The active-version record is invalid.");
+        var activeVersion = StableSemanticVersion.Parse(active.Version, "active version");
+        var assemblyVersion = typeof(UpdateStartupRedirect).Assembly.GetName().Version
+            ?? throw new InvalidDataException("The portable launcher has no application version.");
+        var launcherVersion = new StableSemanticVersion(
+            assemblyVersion.Major,
+            assemblyVersion.Minor,
+            assemblyVersion.Build);
+        if (launcherVersion.CompareTo(activeVersion) > 0) return false;
+
+        var versionsRoot = Path.Combine(installRoot, "versions");
+        var activeDirectory = Path.Combine(versionsRoot, activeVersion.ToString());
+        UpdateSecurity.ValidatePackageDirectory(activeDirectory, activeVersion);
+        var executable = Path.Combine(activeDirectory, "Lattice.exe");
+        var start = new ProcessStartInfo(executable)
+        {
+            UseShellExecute = true,
+            WorkingDirectory = activeDirectory,
+        };
+        foreach (var argument in RemoveCandidateProof(arguments, removeLauncherMirror: true))
+            start.ArgumentList.Add(argument);
+        start.ArgumentList.Add(PortableLauncherMaintenance.LauncherMirrorOption);
+        start.ArgumentList.Add(processPath);
+        if (Process.Start(start) is null)
+            throw new InvalidOperationException("The active Lattice version did not start.");
+        return true;
+    }
+
+    private static IEnumerable<string> RemoveCandidateProof(
+        IReadOnlyList<string> arguments,
+        bool removeLauncherMirror = false)
     {
         for (var index = 0; index < arguments.Count; index++)
         {
-            if (arguments[index] is "--update-candidate" or "--update-token")
+            if (arguments[index] is "--update-candidate" or "--update-token"
+                || (removeLauncherMirror
+                    && arguments[index] == PortableLauncherMaintenance.LauncherMirrorOption))
             {
                 if (index + 1 < arguments.Count) index += 1;
                 continue;

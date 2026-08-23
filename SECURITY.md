@@ -38,7 +38,7 @@ malicious document is required.
 
 ### Windows installer and updater
 
-- The one-click bootstrap downloads the pinned `v2.2.7` Windows release and
+- The one-click bootstrap downloads the pinned `v2.2.8` Windows release and
   compares it with its published SHA-256 companion before installation. It does
   not use a mutable GitHub Actions artifact or require a GitHub token.
 - Automatic updates are supported only from the per-user versioned installation
@@ -69,6 +69,13 @@ malicious document is required.
   to close. Current handoffs bind that request to the recorded launcher PID
   and exact previous-version executable path; the 2.0.1 compatibility path
   still requires an exact canonical executable-path match.
+- A desktop launcher mirror is eligible for replacement only when its SHA-256
+  exactly matches the superseded installed executable and it is a regular
+  `.exe` outside the installation root. The detached helper binds the old
+  process by PID, start time, and executable path, rechecks the target digest
+  after that process exits, copies and verifies the healthy candidate, and uses
+  an atomic replacement with rollback backup. A changed or unrelated file is
+  left untouched.
 - The healthy active version is never overwritten in place. After successful
   promotion, the active version and one previous healthy version are retained;
   recognized older non-running versions may be pruned. Launching a stale older
@@ -132,6 +139,16 @@ install Lattice.
 - macOS refuses relocation while `Lattice.app` is inside the selected library;
   Windows passes its installed application directory as an equivalent protected
   path. This prevents the helper from deleting its own running application.
+- Windows drive eject saves reconnect state and starts a strict eject-helper
+  mode only from an executable and working directory outside the library
+  volume. The helper binds its wait to both the parent PID and process start
+  time, then asks Configuration Manager to resolve the saved USB device ID only
+  after that exact Lattice process has exited.
+- The eject helper uses only `CM_Request_Device_EjectW`; it never locks,
+  dismounts, offlines, or rewrites a volume mount point. Retries are bounded and
+  allowed only for Configuration Manager pending-close or outstanding-open
+  vetoes. A safe-to-unplug claim requires `CR_SUCCESS`; otherwise the exact
+  final veto is shown and the disconnected reconnect record remains intact.
 
 ### Release signing key custody and rotation
 

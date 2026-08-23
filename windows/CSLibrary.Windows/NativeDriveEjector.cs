@@ -54,6 +54,7 @@ internal sealed record NativeEjectResult(
 internal static class NativeDriveEjector
 {
     private const uint CrSuccess = 0;
+    private const uint CrRemoveVetoed = 0x00000017;
     private const int ErrorNoMoreItems = 259;
     private const int ErrorInsufficientBuffer = 122;
     private const uint DigcfPresent = 0x00000002;
@@ -120,11 +121,26 @@ internal static class NativeDriveEjector
             volumeDevice.DeviceNumber);
     }
 
-    internal static NativeEjectResult RequestEject(NativeEjectTarget target)
+    internal static NativeEjectResult RequestEject(string deviceInstanceId)
     {
+        if (string.IsNullOrWhiteSpace(deviceInstanceId)
+            || !deviceInstanceId.StartsWith("USB\\", StringComparison.OrdinalIgnoreCase)
+            || deviceInstanceId.StartsWith("USB\\ROOT_HUB", StringComparison.OrdinalIgnoreCase))
+            throw new InvalidOperationException(
+                "The saved eject target is not a removable USB device.");
+
+        var locateResult = CM_Locate_DevNodeW(out var deviceInstance, deviceInstanceId, 0);
+        if (locateResult != CrSuccess)
+            throw new InvalidOperationException(
+                $"Windows could not locate the saved USB device (0x{locateResult:X8}). The drive was not ejected.");
+        var actualDeviceInstanceId = GetDeviceInstanceId(deviceInstance);
+        if (!string.Equals(actualDeviceInstanceId, deviceInstanceId, StringComparison.OrdinalIgnoreCase))
+            throw new InvalidOperationException(
+                "The USB device identity changed before eject. Windows was not asked to remove it.");
+
         var vetoName = new StringBuilder(MaxPath);
         var result = CM_Request_Device_EjectW(
-            target.DeviceInstance,
+            deviceInstance,
             out var vetoType,
             vetoName,
             (uint)vetoName.Capacity,
@@ -135,6 +151,11 @@ internal static class NativeDriveEjector
             vetoType,
             vetoName.ToString());
     }
+
+    internal static bool IsTransientCloseVeto(NativeEjectResult result) =>
+        result.ConfigurationManagerResult == CrRemoveVetoed
+        && result.VetoType is PnpVetoType.PNP_VetoPendingClose
+            or PnpVetoType.PNP_VetoOutstandingOpen;
 
     internal static string GetVolumeName(string driveRoot)
     {
@@ -419,6 +440,12 @@ internal static class NativeDriveEjector
     private static extern uint CM_Get_Parent(
         out uint parentDeviceInstance,
         uint deviceInstance,
+        uint flags);
+
+    [DllImport("cfgmgr32.dll", CharSet = CharSet.Unicode)]
+    private static extern uint CM_Locate_DevNodeW(
+        out uint deviceInstance,
+        string deviceInstanceId,
         uint flags);
 
     [DllImport("cfgmgr32.dll")]

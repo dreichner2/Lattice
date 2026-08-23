@@ -28,6 +28,7 @@ public partial class MainWindow : Window
     private static readonly string ExternalLibraryVolumeStatePath = Path.Combine(
         SettingsRoot,
         "external-library-volume.json");
+    internal static string LocalSettingsRoot => SettingsRoot;
     private const string NativeBridgeBootstrapScript = """
         (() => {
           if (window.top !== window || window.csLibraryNativeCall || !window.chrome?.webview) return;
@@ -64,7 +65,7 @@ public partial class MainWindow : Window
     private readonly LaunchOptions _launchOptions;
     private readonly CancellationTokenSource _lifetime = new();
     private readonly DispatcherTimer? _smokeTimer;
-    private readonly UpdateService _updateService = new();
+    private readonly UpdateService _updateService;
     private readonly UpdateCandidateSession? _updateCandidate;
     private readonly bool _candidateLaunchRequested;
     private Process? _serverProcess;
@@ -113,6 +114,7 @@ public partial class MainWindow : Window
     internal MainWindow(LaunchOptions launchOptions)
     {
         _launchOptions = launchOptions;
+        _updateService = new UpdateService(launcherMirrorPath: launchOptions.LauncherMirror);
         var processArguments = Environment.GetCommandLineArgs().Skip(1).ToArray();
         _candidateLaunchRequested = processArguments.Contains("--update-candidate", StringComparer.Ordinal)
             || processArguments.Contains("--update-token", StringComparer.Ordinal);
@@ -1637,6 +1639,36 @@ public partial class MainWindow : Window
         StopOwnedServer();
     }
 
+    private static Process LaunchNativeEjectHelper(NativeEjectTarget target)
+    {
+        var executable = Environment.ProcessPath;
+        if (string.IsNullOrWhiteSpace(executable) || !File.Exists(executable))
+            throw new FileNotFoundException(
+                "Lattice could not locate its installed executable for the detached eject helper.",
+                executable);
+
+        Directory.CreateDirectory(SettingsRoot);
+        var helperRoot = Path.GetPathRoot(Path.GetFullPath(executable));
+        var settingsDrive = Path.GetPathRoot(Path.GetFullPath(SettingsRoot));
+        if (string.Equals(helperRoot, target.DriveRoot, StringComparison.OrdinalIgnoreCase)
+            || string.Equals(settingsDrive, target.DriveRoot, StringComparison.OrdinalIgnoreCase))
+        {
+            throw new InvalidOperationException(
+                "The eject helper must run from local storage outside the library drive.");
+        }
+
+        Environment.CurrentDirectory = SettingsRoot;
+        var options = EjectHelperOptions.ForCurrentProcess(target);
+        var start = new ProcessStartInfo(executable)
+        {
+            UseShellExecute = false,
+            WorkingDirectory = SettingsRoot,
+        };
+        options.AddArguments(start);
+        return Process.Start(start)
+            ?? throw new InvalidOperationException("Windows did not start the detached eject helper.");
+    }
+
     private async Task ReleaseLibraryWebViewAsync()
     {
         var webView = Browser.CoreWebView2;
@@ -1738,7 +1770,8 @@ public partial class MainWindow : Window
                 $"Lattice {latestVersion} is available.\n\n"
                 + "Lattice will download the signed Windows package, verify its signature and SHA-256, "
                 + "then open it as an isolated candidate. This window closes automatically only after "
-                + "the new version proves its local service and interface are healthy.\n\nDownload and open the update?",
+                + "the new version proves its local service and interface are healthy. An exact Lattice.exe "
+                + "copy used as a desktop launcher will then be replaced at that same path.\n\nDownload and open the update?",
                 $"Update to Lattice {latestVersion}",
                 MessageBoxButton.YesNo,
                 MessageBoxImage.Information,
@@ -2120,49 +2153,24 @@ public partial class MainWindow : Window
             return;
         }
 
-        try
-        {
-            StopOwnedServerForEject();
-            _serverUrl = null;
-            Browser.Dispose();
-            _browserDisposed = true;
-            ExternalLibraryVolumeRecord.Save(
-                ExternalLibraryVolumeStatePath,
-                ejectTarget,
-                outcome.SyncthingManaged);
-        }
-        catch (Exception error)
-        {
-            SetLoading(
-                "The library is disconnected, but the drive was not ejected",
-                error.Message,
-                chooseFolder: false,
-                busy: false);
-            SetShellStatus("Drive disconnected", ShellStatus.Attention);
-            _libraryDriveOperationInProgress = false;
-            _openingLibrary = false;
-            MessageBox.Show(
-                this,
-                "The eject sequence stopped after Syncthing disconnected. Windows was not asked to eject "
-                + "the drive, and Lattice will close to release any remaining local handles.\n\n" + error.Message,
-                "Drive disconnected — not ejected",
-                MessageBoxButton.OK,
-                MessageBoxImage.Warning);
-            Application.Current.Shutdown();
-            return;
-        }
-
         SetLoading(
             "Ejecting…",
-            $"Waiting for Windows to safely remove {ejectTarget.DeviceInstanceId}",
+            "Closing Lattice completely before the detached helper asks Windows to eject the drive",
             chooseFolder: false,
             busy: true);
         SetShellStatus("Ejecting…", ShellStatus.Loading);
 
-        NativeEjectResult ejectResult;
         try
         {
-            ejectResult = await Task.Run(() => NativeDriveEjector.RequestEject(ejectTarget));
+            StopOwnedServerForEject();
+            _serverUrl = null;
+            ExternalLibraryVolumeRecord.Save(
+                ExternalLibraryVolumeStatePath,
+                ejectTarget,
+                outcome.SyncthingManaged);
+            Browser.Dispose();
+            _browserDisposed = true;
+            using var helper = LaunchNativeEjectHelper(ejectTarget);
         }
         catch (Exception error)
         {
@@ -2176,41 +2184,17 @@ public partial class MainWindow : Window
             _openingLibrary = false;
             MessageBox.Show(
                 this,
-                "The library remains disconnected and the drive was not ejected.\n\n" + error.Message,
-                "Windows eject failed",
+                "The eject sequence stopped after Syncthing disconnected. Windows was not asked to eject "
+                + "the drive, and Lattice will close to release any remaining local handles.\n\n" + error.Message,
+                "Drive disconnected — not ejected",
                 MessageBoxButton.OK,
                 MessageBoxImage.Warning);
             Application.Current.Shutdown();
             return;
         }
 
-        if (!ejectResult.Success)
-        {
-            SetLoading(
-                "The library is disconnected, but Windows did not eject the drive",
-                ejectResult.FailureDetail,
-                chooseFolder: false,
-                busy: false);
-            SetShellStatus("Eject vetoed", ShellStatus.Attention);
-            _libraryDriveOperationInProgress = false;
-            _openingLibrary = false;
-            MessageBox.Show(
-                this,
-                "Windows vetoed the native eject request. The library remains disconnected and the drive "
-                + "was not ejected.\n\n" + ejectResult.FailureDetail,
-                "Windows blocked eject",
-                MessageBoxButton.OK,
-                MessageBoxImage.Warning);
-            Application.Current.Shutdown();
-            return;
-        }
-
-        MessageBox.Show(
-            this,
-            "Windows accepted the native eject request and removed the USB storage device.\n\nSafe to unplug.",
-            "Safe to unplug",
-            MessageBoxButton.OK,
-            MessageBoxImage.Information);
+        // The detached helper owns all remaining UI and calls Configuration
+        // Manager only after this exact Lattice process has fully terminated.
         _libraryDriveOperationInProgress = false;
         _openingLibrary = false;
         Application.Current.Shutdown();

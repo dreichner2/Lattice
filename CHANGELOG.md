@@ -1,5 +1,23 @@
 # Changelog
 
+## 2.2.8 — 2026-08-22
+
+### Fixed
+
+- Windows safe eject now runs in a detached local helper only after the main
+  Lattice process has fully exited, eliminating the app-owned handle race that
+  produced `PNP_VetoOutstandingOpen` on the external library volume.
+- The eject helper visibly remains in **Ejecting…**, verifies that the saved USB
+  device identity has not changed, and retries briefly only when Configuration
+  Manager reports a pending close or outstanding open.
+- **Safe to unplug** still appears only after native Configuration Manager
+  success. A final failure preserves the disconnected library state and shows
+  the exact Windows veto type, name, and result.
+- After a healthy Windows update, an exact `Lattice.exe` copy on the desktop is
+  replaced atomically with the verified new executable after the superseded
+  process exits. The launcher remains in the same location and redirects to the
+  healthy versioned installation on later opens.
+
 ## 2.2.7 — 2026-08-22
 
 ### Added

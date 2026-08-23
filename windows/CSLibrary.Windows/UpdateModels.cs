@@ -103,6 +103,18 @@ internal sealed class PendingUpdateActivation
 
     [JsonPropertyName("launcherProcessId")]
     public int? LauncherProcessId { get; init; }
+
+    [JsonPropertyName("launcherProcessStartTimeUtcTicks")]
+    public long? LauncherProcessStartTimeUtcTicks { get; init; }
+
+    [JsonPropertyName("launcherExecutablePath")]
+    public string? LauncherExecutablePath { get; init; }
+
+    [JsonPropertyName("launcherMirrorPath")]
+    public string? LauncherMirrorPath { get; init; }
+
+    [JsonPropertyName("launcherMirrorSha256")]
+    public string? LauncherMirrorSha256 { get; init; }
 }
 
 [JsonUnmappedMemberHandling(JsonUnmappedMemberHandling.Disallow)]
