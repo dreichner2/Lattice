@@ -26,14 +26,20 @@ enum MacUpdateInstaller {
     static let requiredApplicationFiles = [
         "Contents/Resources/ui/index.html",
         "Contents/Resources/ui/app.js",
+        "Contents/Resources/ui/tutor.js",
+        "Contents/Resources/ui/tutor-styles.css",
         "Contents/Resources/ui/pdf-reader.html",
         "Contents/Resources/ui/pdf-reader.js",
         "Contents/Resources/ui/pdf-reader-lifecycle.mjs",
         "Contents/Resources/ui/vendor/pdfjs/build/pdf.min.mjs",
         "Contents/Resources/server/library_ui.py",
+        "Contents/Resources/server/lattice_tutor.py",
+        "Contents/Resources/server/vendor/pypdf/__init__.py",
+        "Contents/Resources/server/vendor/pypdf-LICENSE",
         "Contents/Resources/server/move_library.py",
         "Contents/Resources/ImmersiveEPUB.js",
         "Contents/Resources/LibraryWorkspace.js",
+        "Contents/Resources/THIRD_PARTY_NOTICES.md",
     ]
 
     static func isAutomaticUpdateSupported(
@@ -637,7 +643,7 @@ enum MacUpdateInstaller {
         return children[0]
     }
 
-    // MARK: Helper replacement and rollback
+    // MARK: Helper replacement and transient recovery
 
     private struct HelperPlan {
         let operationID: String
@@ -776,6 +782,13 @@ enum MacUpdateInstaller {
                 timeout: 90
             ) else { throw MacUpdateInstallerError.candidateDidNotBecomeHealthy }
 
+            // The previous bundle exists only to make this replacement
+            // transaction recoverable until the candidate proves healthy. A
+            // successful update must not retain versioned application copies;
+            // published releases remain available from GitHub if an older
+            // version is wanted later.
+            try FileManager.default.removeItem(at: backup)
+            oldApplicationMoved = false
             try? FileManager.default.removeItem(at: operation)
         } catch {
             if let candidate, candidate.isRunning {
@@ -785,6 +798,7 @@ enum MacUpdateInstaller {
                     _ = waitForExit(processID: candidate.processIdentifier, timeout: 5)
                 }
             }
+            var failedCandidate: URL?
             if oldApplicationMoved {
                 if FileManager.default.fileExists(atPath: plan.targetApplication.path) {
                     let failed = parent.appendingPathComponent(
@@ -793,11 +807,18 @@ enum MacUpdateInstaller {
                     )
                     if !FileManager.default.fileExists(atPath: failed.path) {
                         try? FileManager.default.moveItem(at: plan.targetApplication, to: failed)
+                        if FileManager.default.fileExists(atPath: failed.path) {
+                            failedCandidate = failed
+                        }
                     }
                 }
                 if !FileManager.default.fileExists(atPath: plan.targetApplication.path),
                    FileManager.default.fileExists(atPath: backup.path) {
                     try FileManager.default.moveItem(at: backup, to: plan.targetApplication)
+                }
+                if let failedCandidate,
+                   FileManager.default.fileExists(atPath: plan.targetApplication.path) {
+                    try? FileManager.default.removeItem(at: failedCandidate)
                 }
             }
             throw error

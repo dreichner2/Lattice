@@ -20,7 +20,9 @@ $PackageMetadataPath = Join-Path $PackageRoot "update-package.json"
 $RequiredUiFiles = @(
   "index.html",
   "app.js",
+  "tutor.js",
   "styles.css",
+  "tutor-styles.css",
   "video-styles.css",
   "videos.js",
   "pdf-reader.html",
@@ -40,6 +42,7 @@ $RequiredRootFiles = @(
   "LIBRARY_RULES.md",
   "README.md",
   "STUDY_GUIDE.md",
+  "THIRD_PARTY_NOTICES.md",
   "library-layout.json",
   "library-taxonomy.json"
 )
@@ -77,7 +80,7 @@ try {
 
   if (-not $SkipTests) {
     Write-Host "Running portable checks..."
-    python -m py_compile scripts/library_ui.py scripts/cross_platform_server.py scripts/move_library.py windows/server_bootstrap.py windows/generate_icon.py
+    python -m py_compile scripts/library_ui.py scripts/lattice_tutor.py scripts/cross_platform_server.py scripts/move_library.py windows/server_bootstrap.py windows/generate_icon.py
     Assert-NativeSuccess "Python compilation"
     python -m unittest discover -s tests -p "test_*.py" -v
     Assert-NativeSuccess "Python tests"
@@ -87,6 +90,8 @@ try {
     Assert-NativeSuccess "ui/pdf-reader.js syntax check"
     node --check ui/videos.js
     Assert-NativeSuccess "ui/videos.js syntax check"
+    node --check ui/tutor.js
+    Assert-NativeSuccess "ui/tutor.js syntax check"
     node --check native/ImmersiveEPUB.js
     Assert-NativeSuccess "native/ImmersiveEPUB.js syntax check"
     node --check native/LibraryWorkspace.js
@@ -117,6 +122,8 @@ try {
     --onefile `
     --name LatticeServer `
     --paths (Join-Path $RepoRoot "scripts") `
+    --paths (Join-Path $RepoRoot "scripts\vendor") `
+    --hidden-import pypdf `
     --distpath $ServerRoot `
     --workpath (Join-Path $BuildRoot "pyinstaller-work") `
     --specpath (Join-Path $BuildRoot "pyinstaller-spec") `

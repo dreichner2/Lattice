@@ -80,6 +80,7 @@ const state = {
   pdfCloseTimer: 0,
   videoCatalog: null,
   videoLibrary: null,
+  tutor: null,
   imports: [],
   importKind: "book",
   importDialogLastFocus: null,
@@ -148,6 +149,8 @@ const elements = {
   readerSettings: $("#readerSettingsButton"),
   readerShell: $("#readerShell"),
   readerStage: $("#readerStage"),
+  readerTutor: $("#readerTutorButton"),
+  readerTutorPeek: $("#readerTutorPeekButton"),
   readerTitle: $("#readerTitle"),
   readerToc: $("#readerTocButton"),
   readingCount: $("#readingCount"),
@@ -1134,6 +1137,8 @@ function showReaderShell(title, kicker, mode) {
   elements.readerToc.hidden = true;
   elements.readerSettings.hidden = true;
   elements.readerBookmark.hidden = true;
+  elements.readerTutor.hidden = true;
+  elements.readerTutorPeek.hidden = true;
   // The PDF reader supplies its own visible focus control. Keep this bridge
   // button available in the hidden host toolbar so older native app menus can
   // still invoke the same shared focus action.
@@ -1179,6 +1184,8 @@ function finishReaderClose() {
   elements.readerToc.hidden = true;
   elements.readerSettings.hidden = true;
   elements.readerBookmark.hidden = true;
+  elements.readerTutor.hidden = true;
+  elements.readerTutorPeek.hidden = true;
   elements.readerFocus.hidden = true;
   elements.readerFocus.setAttribute("aria-pressed", "false");
   elements.readerFocus.setAttribute("aria-label", "Focus on the page");
@@ -1242,6 +1249,15 @@ function configureLocalReaderActions(work, file) {
   elements.readerShell.dataset.format = file.format;
   elements.readerMac.hidden = false;
   elements.readerFinder.hidden = false;
+  const tutorAvailable = work.tutorEligible !== false;
+  elements.readerTutor.hidden = !tutorAvailable;
+  elements.readerTutorPeek.hidden = !tutorAvailable || file.format !== "PDF";
+  elements.readerTutor.title = !tutorAvailable
+    ? (work.tutorRestriction || "This edition is reserved for human study")
+    : `Ask Tutor about ${work.title}`;
+  elements.readerTutorPeek.title = !tutorAvailable
+    ? (work.tutorRestriction || "This edition is reserved for human study")
+    : `Open compact Tutor for ${work.title}`;
   elements.readerMac.textContent = file.format === "EPUB" && !IS_WINDOWS ? "Open in Books" : SYSTEM_OPEN_LABEL;
   elements.readerFinder.textContent = FILE_MANAGER_LABEL;
   const descriptor = {
@@ -2119,6 +2135,41 @@ async function openDocument(path, title = "Library document") {
   }
 }
 
+function openTutorCitation(citation) {
+  if (!citation || typeof citation !== "object") return;
+  if (citation.kind === "video") {
+    state.tutor?.close();
+    if (!state.videoLibrary?.openCourseById(String(citation.courseId || ""))) {
+      announce("That cited video course is no longer in the catalog", true);
+    }
+    return;
+  }
+  if (citation.kind === "document") {
+    state.tutor?.close();
+    void openDocument(String(citation.path || ""), String(citation.title || "Library document"));
+    return;
+  }
+  const work = state.workById.get(String(citation.workId || ""));
+  const file = work?.files.find((item) => item.path === citation.path);
+  if (!work || !file) {
+    announce("That cited local source is no longer on the shelf", true);
+    return;
+  }
+  if (file.format === "PDF") {
+    const page = Number(String(citation.locator || "").match(/\bpage\s+(\d+)\b/i)?.[1] || 0);
+    if (page > 0) {
+      state.pdfState[file.path] = {
+        ...(normalizePdfReaderState(state.pdfState[file.path]) || {}),
+        page,
+        updatedAt: new Date().toISOString(),
+      };
+      writeStorage(STORAGE.pdfState, state.pdfState);
+    }
+  }
+  state.tutor?.close();
+  void openFile(work, file);
+}
+
 function handleDocumentLink(event) {
   const link = event.target.closest("[data-md-link]");
   if (!link) return;
@@ -2626,6 +2677,9 @@ function renderDrawer(work) {
     macAction.disabled = !firstFile.exists;
     actions.append(macAction);
   }
+  if (work.tutorEligible !== false) {
+    actions.append(button("button button-quiet", "✦ Ask Tutor", () => state.tutor?.openForWork(work.id), `Ask Tutor about ${work.title}`));
+  }
   actions.append(button("button button-quiet", state.favorites.has(work.id) ? "♥ Favorited" : "♡ Favorite", () => toggleFavorite(work)));
   if (work.editableMetadata === true) actions.append(button("button button-quiet", "Edit details", () => openWorkMetadataEditor(work)));
   const finderAction = button("button button-quiet", FILE_MANAGER_LABEL, () => revealFile(firstFile), `Reveal in ${FILE_MANAGER_LABEL}`);
@@ -2939,6 +2993,11 @@ function bindEvents() {
   elements.readerToc.addEventListener("click", () => toggleEpubPanel("toc"));
   elements.readerSettings.addEventListener("click", () => toggleEpubPanel("settings"));
   elements.readerBookmark.addEventListener("click", toggleEpubBookmark);
+  const openReaderTutor = () => {
+    if (state.readerWorkId) state.tutor?.peekForWork(state.readerWorkId);
+  };
+  elements.readerTutor.addEventListener("click", openReaderTutor);
+  elements.readerTutorPeek.addEventListener("click", openReaderTutor);
   elements.readerFocus.addEventListener("click", toggleActiveReaderFocus);
   elements.epubFocusExit.addEventListener("click", () => setEpubFocus(false));
   elements.readerPdf.addEventListener("load", () => {
@@ -3033,6 +3092,7 @@ function bindEvents() {
   window.addEventListener("beforeunload", () => {
     state.eventSource?.close();
     state.videoLibrary?.closePlayer();
+    state.tutor?.destroy();
   });
 }
 
@@ -3043,6 +3103,7 @@ function initializeLibrary(payload) {
   state.token = payload.actionToken;
   state.revision = Number(payload.revision || state.revision || 0);
   state.workById = new Map(payload.works.map((work) => [work.id, work]));
+  state.tutor?.setLibrary(payload);
   elements.workStat.textContent = payload.stats.works;
   elements.artifactStat.textContent = payload.stats.artifacts;
   elements.sizeStat.textContent = humanBytes(payload.stats.bytes);
@@ -3141,12 +3202,19 @@ function connectLiveUpdates() {
 
 async function start() {
   initializeTheme();
+  state.tutor = window.LatticeTutor?.create({
+    announce,
+    onOpenCitation: openTutorCitation,
+  }) || null;
   state.videoLibrary = window.CSVideoLibrary?.create({
     announce,
     onCatalog: (catalog) => {
       state.videoCatalog = catalog;
+      state.tutor?.setVideoCatalog(catalog);
       if (state.view === "videos") renderViewMode();
     },
+    onAskTutor: (course) => state.tutor?.peekForCourse(course.id),
+    onCloseTutor: () => state.tutor?.closeContext("video"),
     onClearQuery: () => {
       state.query = "";
       elements.search.value = "";

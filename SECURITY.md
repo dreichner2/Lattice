@@ -27,7 +27,8 @@ malicious document is required.
 - Publishes a protocol version and library-root identity.
 - Serves only currently indexed files beneath approved payload roots.
 - Resolves paths and rejects traversal and symlink escape.
-- Requires a random in-memory token for platform file actions and reader-state APIs.
+- Requires a random in-memory token for platform file actions, reader-state APIs,
+  and Tutor chat/cancel/reset requests.
 - Requires that token for file import and metadata mutation. Browser requests
   must be same-origin; native clients may omit `Origin` and authenticate with
   the token over loopback.
@@ -38,7 +39,7 @@ malicious document is required.
 
 ### Windows installer and updater
 
-- The one-click bootstrap downloads the pinned `v2.2.9` Windows release and
+- The one-click bootstrap downloads the pinned `v2.3.0` Windows release and
   compares it with its published SHA-256 companion before installation. It does
   not use a mutable GitHub Actions artifact or require a GitHub token.
 - Automatic updates are supported only from the per-user versioned installation
@@ -103,13 +104,15 @@ install Lattice.
   rejected.
 - A helper mode in the already-running executable waits for the old process to
   exit, then re-verifies the signed manifest and archive before replacement.
-  The existing bundle is moved to a collision-safe backup rather than deleted.
+  The existing bundle is moved to a collision-safe transient backup rather than
+  deleted before the candidate is known healthy.
 - The candidate must launch from the installed path and write an
   operation-token and PID-bound health marker only after the loopback service
   and shared shelf load. Tokens stay in mode-0600 operation records and are
   never placed in helper or candidate process arguments. An early exit or
   90-second timeout terminates the candidate, restores the previous bundle,
-  and relaunches it.
+  discards the failed candidate, and relaunches it. A healthy candidate deletes
+  the transient backup, so successful updates retain no older app bundle.
 - The macOS archive is currently ad-hoc signed. That signature proves bundle
   consistency, not Developer ID identity; release authorization comes from the
   separately verified manifest signature and archive digest. The updater never
@@ -231,6 +234,44 @@ possibly compromised key to authorize its own replacement.
 - Missing CLI, signed-out state, timeout, model error, or invalid output never
   prevents the already validated local import from completing.
 
+### Lattice Tutor and Codex
+
+- Tutor is closed and inactive by default. It invokes Codex only after the user
+  sends a question; ordinary shelf, reader, notebook, import, and video use does
+  not send source text to a model.
+- It reuses the authenticated local Codex session. Lattice never reads, copies,
+  prints, synchronizes, or places credential contents in prompts or arguments.
+- Requests identify catalog work/course IDs, not paths. The server resolves
+  those IDs against a fresh library snapshot, limits selection and message
+  sizes, and rejects unknown or restricted works.
+- Every Codex turn is ephemeral and ignores user configuration and repository
+  instruction files. Apps, plugins, browser, computer-use, image, skill,
+  workspace-dependency, memory, hook, and multi-agent capabilities are disabled.
+  Model-tool network access is disabled.
+- The child process receives an allowlisted environment without API keys or
+  proxy credentials. Its custom filesystem profile is read-only and grants only
+  the exact eligible files in the active source scope; unrelated library files,
+  sidecars, credential storage, and restricted editions remain denied.
+- PDFs, EPUBs, supported source archives, and plain text are extracted under
+  bounded file, member, and text limits. The private SQLite/FTS cache is created
+  outside the synchronized library with user-only directory/file modes where
+  the platform supports them. A source removed from eligibility is pruned, and
+  an in-flight stale indexing result is discarded.
+- Publisher-marked human-study-only works and personalized/private editions are
+  excluded from whole-library and selected modes. This is an access-policy
+  boundary in addition to a filesystem sandbox boundary.
+- Library text and retrieved excerpts are treated as untrusted data, never as
+  instructions. Structured model output is size-bounded, and citations are
+  accepted only when their source key belongs to the resolved active scope.
+- Conversation history is bounded, memory-only, expires after inactivity, and
+  is removed on reset or service exit. It is not written to the library,
+  Syncthing, reader database, or Tutor source index.
+- A Tutor request sends the user's question, bounded conversation history,
+  source manifest, relevant eligible excerpts, and selected video catalog
+  metadata to OpenAI through Codex. Video frames, audio, captions, and
+  transcripts are not available unless separately present as an eligible local
+  source, so the prompt forbids claims of having watched a lecture.
+
 ### Reader data
 
 - Native Mac progress, notes, bookmarks, annotations, and sessions are stored
@@ -250,8 +291,9 @@ possibly compromised key to authorize its own replacement.
 - Web rendering depends on WebKit on macOS and WebView2 on Windows.
 - The Mac local service depends on the user's Python 3 runtime; the Windows
   artifact bundles its Python service with PyInstaller.
-- Optional metadata enrichment depends on the locally installed Codex CLI, its
-  authenticated session, model availability, and OpenAI service connectivity.
+- Optional metadata enrichment and Lattice Tutor depend on the locally installed
+  Codex CLI, its authenticated session, selected model availability, and OpenAI
+  service connectivity.
 - Ad-hoc signing verifies bundle consistency but is not Developer ID
   notarization.
 - Desktop update-manifest signing verifies release authorization inside

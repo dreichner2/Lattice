@@ -1,5 +1,53 @@
 # Changelog
 
+## 2.3.0 — 2026-08-23
+
+### Added
+
+- Added a compact reader Tutor peek that stays scoped to the open book, keeps
+  the page visible and interactive, and expands to the full Tutor only when
+  requested. The session can collapse again without closing, and PDFs expose it
+  through a quiet bottom-right button because their immersive reader
+  intentionally hides the host toolbar.
+- Added an optional, library-first Lattice Tutor drawer using the same local
+  Codex/ChatGPT sign-in as import enrichment. Users can choose Luna, Terra, or
+  Sol; select Light through Max reasoning; and ground a conversation in either
+  all eligible works or only selected books, papers, notes, and video courses.
+- Added clickable, server-validated citations back to local files, PDF pages,
+  library documents, and video-course catalog entries. Video grounding is
+  explicitly metadata-only.
+- Added incremental local extraction and private full-text indexing for PDF,
+  EPUB, text, and supported source archives, including a vendored BSD-licensed
+  `pypdf` parser for consistent desktop packaging.
+
+### Changed
+
+- The in-reader Tutor launcher is now the small star symbol only; it no longer
+  reveals a partial “Tutor” label on hover.
+- Successful macOS updates delete their transient recovery bundle immediately
+  after candidate health is proven. Failed candidates are discarded after the
+  prior app is restored, so updates do not retain application rollback copies.
+- The macOS launcher prevents bundled Python services from writing bytecode
+  caches into the app, preserving its code-signing seal after launch.
+- Video-course Tutor now opens as the same compact, reversible companion used
+  while reading, with a quiet symbol-only launcher that leaves the lecture visible.
+
+### Fixed
+
+- Embedded lecture players now receive explicit fullscreen permission and no
+  longer sit beneath a transformed parent layer that could render video black
+  during WebKit fullscreen transitions.
+
+### Security
+
+- Tutor Codex turns are ephemeral, ignore user config/rules, sanitize the child
+  environment, disable external tools and model-tool network access, and receive
+  exact-file read grants only for the resolved active source scope.
+- Human-study-only and personalized/private works are excluded and pruned from
+  the Tutor index. Chat/cancel/reset endpoints require the loopback action token,
+  conversations remain bounded in memory, and citations are validated against
+  the active scope before display.
+
 ## 2.2.9 — 2026-08-22
 
 ### Fixed

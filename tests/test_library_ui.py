@@ -267,6 +267,7 @@ class CatalogTests(unittest.TestCase):
     def test_video_ui_uses_privacy_enhanced_embeds_and_local_progress(self) -> None:
         markup = (ROOT / "ui" / "index.html").read_text(encoding="utf-8")
         controller = (ROOT / "ui" / "videos.js").read_text(encoding="utf-8")
+        styles = (ROOT / "ui" / "video-styles.css").read_text(encoding="utf-8")
         for element_id in ("videoSection", "videoPlayerShell", "videoFrame", "videoQueueList", "videoSourceSelect"):
             self.assertIn(f'id="{element_id}"', markup)
         self.assertIn("www.youtube-nocookie.com/embed/", controller)
@@ -274,6 +275,11 @@ class CatalogTests(unittest.TestCase):
         self.assertIn("/api/lectures", controller)
         self.assertIn("course.source.id", controller)
         self.assertIn("All sources", controller)
+        self.assertIn("encrypted-media; fullscreen; gyroscope", markup)
+        self.assertIn("webkitallowfullscreen", markup)
+        player_panel = re.search(r"\.video-player-panel\s*\{(?P<body>[^}]*)\}", styles)
+        self.assertIsNotNone(player_panel)
+        self.assertNotIn("transform:", player_panel.group("body"))
 
     def test_source_bundles_are_readable_editions(self) -> None:
         by_id = {work["id"]: work for work in self.library["works"]}
@@ -432,6 +438,30 @@ class ServerTests(unittest.TestCase):
         with urllib.request.urlopen(self.base + "/videos.js", timeout=3) as response:
             self.assertTrue(response.headers["Content-Type"].startswith("text/javascript"))
             self.assertIn(b"youtube-nocookie.com", response.read())
+
+    def test_tutor_assets_status_and_mutation_boundary(self) -> None:
+        with urllib.request.urlopen(self.base + "/tutor.js", timeout=3) as response:
+            self.assertTrue(response.headers["Content-Type"].startswith("text/javascript"))
+            self.assertIn(b"/api/tutor/chat", response.read())
+        with urllib.request.urlopen(self.base + "/tutor-styles.css", timeout=3) as response:
+            self.assertTrue(response.headers["Content-Type"].startswith("text/css"))
+            self.assertIn(b".tutor-panel", response.read())
+        with urllib.request.urlopen(self.base + "/api/tutor/status", timeout=5) as response:
+            status = json.loads(response.read())
+            self.assertEqual(status["authSource"], "local-codex-session")
+            self.assertEqual([model["label"] for model in status["models"]], ["Luna", "Terra", "Sol"])
+            self.assertEqual(status["sources"]["videoContent"], "catalog-metadata-only")
+
+        request = urllib.request.Request(
+            self.base + "/api/tutor/chat",
+            data=b'{"message":"hello"}',
+            headers={"Content-Type": "application/json"},
+            method="POST",
+        )
+        with self.assertRaises(urllib.error.HTTPError) as caught:
+            urllib.request.urlopen(request, timeout=3)
+        self.assertEqual(caught.exception.code, 403)
+        caught.exception.close()
 
     def test_pdf_reader_is_embeddable_secure_and_self_contained(self) -> None:
         with urllib.request.urlopen(self.base + "/pdf-reader.html", timeout=3) as response:

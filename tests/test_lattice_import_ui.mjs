@@ -123,6 +123,8 @@ test("desktop apps expose native actions in the inline header menu", () => {
   assert.match(MAC_APP, /addButton\(withTitle: "Install Update"\)/);
   assert.match(MAC_APP, /Darwin\.kill\(reportedParentPID, 0\) == 0/);
   assert.match(MAC_APP, /"--no-browser",\s*"--isolated"/);
+  assert.match(MAC_APP, /environment\["PYTHONDONTWRITEBYTECODE"\]\s*=\s*"1"/);
+  assert.match(MAC_APP, /process\.environment\s*=\s*Self\.pythonProcessEnvironment\(\)/);
   assert.match(MAC_APP, /locateRunningLibrary\(requireCurrentParent: true\)/);
   assert.match(MAC_INSTALLER, /\/Applications\/Lattice\.app/);
   assert.match(MAC_INSTALLER, /archiveDigestMismatch/);
@@ -130,6 +132,8 @@ test("desktop apps expose native actions in the inline header menu", () => {
   assert.match(MAC_INSTALLER, /cpuType == 0x0100_000c/);
   assert.match(MAC_INSTALLER, /candidateDidNotBecomeHealthy/);
   assert.match(MAC_INSTALLER, /moveItem\(at: backup, to: plan\.targetApplication\)/);
+  assert.match(MAC_INSTALLER, /waitForCandidate\([\s\S]*?removeItem\(at: backup\)[\s\S]*?removeItem\(at: operation\)/);
+  assert.match(MAC_INSTALLER, /moveItem\(at: backup, to: plan\.targetApplication\)[\s\S]*?removeItem\(at: failedCandidate\)/);
   assert.match(MAC_INSTALLER, /helper-plan\.json/);
   assert.match(MAC_INSTALLER, /candidate-activation\.json/);
   assert.match(MAC_INSTALLER, /guard arguments\.count == 3,[\s\S]*?arguments\[1\] == candidateFlag/);

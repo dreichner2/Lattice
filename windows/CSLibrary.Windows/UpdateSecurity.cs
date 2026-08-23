@@ -178,6 +178,8 @@ internal static class UpdateSecurity
             "Server/LatticeServer.exe",
             "ui/index.html",
             "ui/app.js",
+            "ui/tutor.js",
+            "ui/tutor-styles.css",
             "update-package.json",
             "update-files.json",
         })
@@ -252,6 +254,8 @@ internal static class UpdateSecurity
             "Server/LatticeServer.exe",
             "ui/index.html",
             "ui/app.js",
+            "ui/tutor.js",
+            "ui/tutor-styles.css",
             "update-package.json",
         })
         {

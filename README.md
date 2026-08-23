@@ -56,8 +56,8 @@ update check verifies Lattice's RSA-signed release manifest before trusting the
 version or `Lattice-macOS.zip`. When the app is installed at
 `/Applications/Lattice.app`, **Install Update** downloads the exact signed size
 and SHA-256, validates the app bundle, replaces it, and reopens Lattice. The old
-bundle remains available for rollback until the updated shelf loads
-successfully. Development copies elsewhere continue to offer the exact release
+bundle exists only as a transient recovery copy until the updated shelf loads
+successfully, then it is deleted. Development copies elsewhere continue to offer the exact release
 page instead of replacing themselves.
 
 ### PDF reading
@@ -113,8 +113,41 @@ does not change when the visible product name changes. The app creates daily
 local backups and supports complete JSON export/import plus human-readable
 Markdown export. Reader state has no telemetry or cloud synchronization.
 Syncthing can separately synchronize reading payloads and their metadata
-sidecars, and optional Codex-assisted import is the only feature that may use an
-external model.
+sidecars. Optional Codex-assisted import and Lattice Tutor are the only features
+that may use an external model, and both act only after the user invokes them.
+
+## Lattice Tutor
+
+**Study with Tutor** opens an optional side drawer; it stays closed during
+normal browsing and reading. Tutor can explain a passage, compare sources,
+build a study path, or quiz you without replacing the shelf or reader. A book's
+detail drawer can scope Tutor directly to that work, and the video player can
+scope it to one course. Inside the PDF/EPUB/TXT reader, **Tutor** opens as a
+small book-scoped peek with no dimming layer: the page stays visible and
+interactive, and the same size button expands or collapses the full controls
+without losing the conversation.
+
+Users can choose **Luna**, **Terra**, or **Sol**, with **Light**, **Balanced**,
+**Deep**, **Very deep**, or **Max** reasoning. Grounding can use every eligible
+work in the library or only checked books, papers, notes, and video courses.
+Answers return clickable citations that reopen the local source and, for cited
+PDF pages, restore that page in the reader.
+
+Tutor uses the same locally cached Codex/ChatGPT sign-in as import enrichment;
+Lattice never reads or copies credential files. When a question is sent, the
+question, bounded conversation history, selected catalog metadata, and relevant
+excerpts are processed by OpenAI through Codex. Conversations stay in server
+memory and disappear when reset or when the local service exits. Extracted
+source text is indexed only in a private per-device cache under
+`~/Library/Caches/Lattice/Tutor/` on macOS or
+`%LOCALAPPDATA%\Lattice\Tutor\` on Windows; it is outside the Syncthing folder.
+
+Video grounding includes course descriptions and lecture titles, not video,
+audio, captions, or transcripts, so Tutor never claims to have watched a
+lecture. Works recorded as personalized/private or human-study-only are
+excluded from both the local Tutor index and Codex source scope, including in
+whole-library mode. The shelf, readers, notebook, video catalog, imports, and
+manual metadata remain fully usable without Codex.
 
 ## Sharing Lattice with Syncthing
 
@@ -214,7 +247,7 @@ cd "$HOME\Lattice"
 & ".\windows\setup\Install Lattice and Connect.cmd"
 ```
 
-The setup downloads and installs the pinned Lattice `v2.2.9` release for the
+The setup downloads and installs the pinned Lattice `v2.3.0` release for the
 current user, installs official Syncthing `2.1.3` through WinGet when needed,
 selects this clone as the library, configures the Mac mini hub and shared folder
 on the Windows side, starts both apps, and copies the Windows Syncthing Device ID.
@@ -299,10 +332,12 @@ codex login status
 ```
 
 Lattice's core shelf, reader, search, drag-and-drop import, and manual metadata
-work without Codex. Never share a ChatGPT login or copy a Codex credential file
-between computers. See the official [Codex authentication
+work without Codex. Lattice Tutor also reuses this same local sign-in when the
+user explicitly asks it a question. Never share a ChatGPT login or copy a Codex
+credential file between computers. See the official [Codex authentication
 guide](https://learn.chatgpt.com/docs/auth), the
-[`gpt-5.6-luna` model page](https://developers.openai.com/api/docs/models/gpt-5.6-luna),
+[GPT-5.6 model guide](https://developers.openai.com/api/docs/guides/latest-model),
+the [Codex permissions guide](https://learn.chatgpt.com/docs/permissions),
 and [Importing and metadata sidecars](docs/IMPORTING.md).
 
 The repository tracks hidden placeholders for `books/`, `papers/`, `lectures/`,
@@ -501,8 +536,9 @@ process with generative AI.” Each work retains its own terms. In particular,
 the current OpenStax terms permit human reading but restrict generative-AI
 training or ingestion without permission. The import assistant therefore uses
 only filenames and embedded publication metadata; it does not send payload bytes
-or full text. Any future content-processing feature must honor recorded access
-terms and remain separately reviewable.
+or full text. Lattice Tutor separately excludes those works, plus personalized
+or private editions, from its index and model scope. Whole-library Tutor mode
+still honors every recorded source restriction.
 
 ## Current integrity state
 

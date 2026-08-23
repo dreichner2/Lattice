@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import json
+import socket
 import stat
 import sys
 import tempfile
@@ -80,6 +81,15 @@ class ServerContractTests(unittest.TestCase):
             (ui / "index.html").write_text("<!doctype html>", encoding="utf-8")
             with self.assertRaisesRegex(ValueError, "Not a Lattice library root"):
                 library_ui.create_server(0, root=root, ui_root=ui)
+
+    def test_bind_failure_closes_partial_server_without_masking_socket_error(self) -> None:
+        with socket.socket(socket.AF_INET, socket.SOCK_STREAM) as occupied:
+            occupied.setsockopt(socket.SOL_SOCKET, socket.SO_REUSEADDR, 1)
+            occupied.bind(("127.0.0.1", 0))
+            occupied.listen(1)
+            port = int(occupied.getsockname()[1])
+            with self.assertRaises(OSError):
+                library_ui.create_server(port, root=self.root, ui_root=self.ui)
 
 
 class EpubSafetyTests(unittest.TestCase):

@@ -380,13 +380,11 @@ body.video-player-open .video-player-shell {
   color: #f3f4f7;
   box-shadow: 0 35px 130px rgba(0, 0, 0, 0.5);
   opacity: 0;
-  transform: translateY(18px) scale(0.988);
-  transition: opacity 220ms ease, transform 260ms cubic-bezier(0.2, 0.75, 0.25, 1);
+  transition: opacity 220ms ease;
 }
 
 body.video-player-open .video-player-panel {
   opacity: 1;
-  transform: translateY(0) scale(1);
 }
 
 .video-player-header {

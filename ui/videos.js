@@ -147,6 +147,7 @@
       source: document.querySelector("#videoSourceSelect"),
       sourceNotes: document.querySelector("#videoSourcesButton"),
       subjectChips: document.querySelector("#videoSubjectChips"),
+      tutor: document.querySelector("#videoTutorButton"),
       watchedCount: document.querySelector("#videoWatchedCount"),
     };
     const state = {
@@ -413,6 +414,7 @@
 
     function closePlayer() {
       if (!document.body.classList.contains("video-player-open")) return false;
+      options.onCloseTutor?.();
       document.body.classList.remove("video-player-open");
       elements.playerShell.setAttribute("aria-hidden", "true");
       elements.frame.src = "about:blank";
@@ -485,6 +487,9 @@
     elements.playerBackdrop.addEventListener("click", closePlayer);
     elements.playerClose.addEventListener("click", closePlayer);
     elements.complete.addEventListener("click", toggleComplete);
+    elements.tutor.addEventListener("click", () => {
+      if (state.course) options.onAskTutor?.(state.course);
+    });
     elements.previous.addEventListener("click", () => playLecture(state.index - 1));
     elements.next.addEventListener("click", () => playLecture(state.index + 1));
     elements.queueSearch.addEventListener("input", renderQueue);
@@ -504,6 +509,12 @@
       ready,
       closePlayer,
       handleEscape: closePlayer,
+      openCourseById(courseId, videoId = "") {
+        const course = state.catalog?.courses.find((item) => item.id === courseId);
+        if (!course) return false;
+        openCourse(course, videoId);
+        return true;
+      },
       randomLecture() {
         if (!state.catalog) return false;
         const courses = filteredCourses();

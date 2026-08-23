@@ -8,6 +8,7 @@
     <title>Lattice</title>
     <link rel="stylesheet" href="/styles.css">
     <link rel="stylesheet" href="/video-styles.css">
+    <link rel="stylesheet" href="/tutor-styles.css">
   </head>
   <body>
     <div class="app-shell">
@@ -54,6 +55,14 @@
             <span class="nav-count" id="videoCount">—</span>
           </button>
         </nav>
+
+        <div class="tutor-sidebar-block">
+          <button class="tutor-launch" id="tutorOpenButton" type="button" aria-haspopup="dialog">
+            <span class="tutor-launch-mark" aria-hidden="true">✦</span>
+            <span class="tutor-launch-copy"><strong>Study with Tutor</strong><small>Optional · your sources</small></span>
+            <span class="tutor-launch-arrow" aria-hidden="true">›</span>
+          </button>
+        </div>
 
         <div class="nav-section material-section">
           <p class="nav-label">Materials</p>
@@ -404,6 +413,7 @@
             <h2 id="readerTitle">Reader</h2>
           </div>
           <div class="reader-actions">
+            <button class="reader-tool-button reader-tutor-button" id="readerTutorButton" type="button" title="Open a compact Tutor for this book" hidden><span aria-hidden="true">✦</span> Tutor</button>
             <button class="reader-tool-button reader-focus-button" id="readerFocusButton" type="button" aria-label="Focus on the page" aria-pressed="false" title="Focus on the page" hidden>⛶</button>
             <button class="reader-tool-button reader-bookmark-button" id="readerBookmarkButton" type="button" aria-label="Bookmark this position" title="Bookmark this position" hidden>☆</button>
             <button class="reader-tool-button reader-type-button" id="readerSettingsButton" type="button" aria-expanded="false" aria-label="Reading appearance" hidden>Aa</button>
@@ -413,6 +423,7 @@
           </div>
         </header>
         <div class="reader-stage" id="readerStage">
+          <button class="reader-tutor-peek-button" id="readerTutorPeekButton" type="button" aria-label="Open compact Tutor for this book" title="Open compact Tutor for this book" hidden><span aria-hidden="true">✦</span></button>
           <div class="reader-loading" id="readerLoading"><span></span><p>Preparing your reading desk…</p></div>
           <iframe class="pdf-reader" id="pdfReader" title="PDF reader" allow="fullscreen" allowfullscreen hidden></iframe>
           <article class="document-reader" id="documentReader" hidden></article>
@@ -517,8 +528,9 @@
                 title="Video lecture player"
                 src="about:blank"
                 referrerpolicy="strict-origin-when-cross-origin"
-                allow="accelerometer; autoplay; encrypted-media; gyroscope; picture-in-picture; web-share"
+                allow="accelerometer; autoplay; encrypted-media; fullscreen; gyroscope; picture-in-picture; web-share"
                 allowfullscreen
+                webkitallowfullscreen
               ></iframe>
             </div>
             <div class="video-now-playing">
@@ -528,6 +540,7 @@
               </div>
               <div class="video-now-actions">
                 <a class="video-lecture-source" id="videoLectureSource" href="#" target="_blank" rel="noreferrer">YouTube ↗</a>
+                <button class="video-complete-button video-tutor-button" id="videoTutorButton" type="button" aria-label="Open compact Tutor for this course" title="Open compact Tutor for this course"><span aria-hidden="true">✦</span></button>
                 <button class="video-complete-button" id="videoCompleteButton" type="button" aria-pressed="false"><span aria-hidden="true">✓</span> Mark complete</button>
               </div>
             </div>
@@ -556,8 +569,98 @@
       </section>
     </div>
 
+    <button class="tutor-scrim" id="tutorScrim" type="button" aria-label="Close Lattice Tutor" tabindex="-1"></button>
+    <aside class="tutor-panel" id="tutorPanel" role="dialog" aria-modal="false" aria-labelledby="tutorTitle" aria-hidden="true">
+      <header class="tutor-header">
+        <div class="tutor-heading-mark" aria-hidden="true">✦</div>
+        <div class="tutor-heading">
+          <span id="tutorHeadingContext">Optional study companion</span>
+          <h2 id="tutorTitle">Lattice Tutor</h2>
+        </div>
+        <div class="tutor-header-actions">
+          <button id="tutorNewButton" type="button" aria-label="Start a new tutor conversation" title="New conversation">↻</button>
+          <button class="tutor-expand-button" id="tutorExpandButton" type="button" aria-label="Expand Tutor" title="Expand Tutor">↗</button>
+          <button id="tutorCloseButton" type="button" aria-label="Close Lattice Tutor">×</button>
+        </div>
+      </header>
+
+      <section class="tutor-control-bar" aria-label="Tutor settings">
+        <label class="tutor-select-control" for="tutorModelSelect"><span>Model</span>
+          <select id="tutorModelSelect" aria-label="Tutor model">
+            <option value="gpt-5.6-luna">Luna</option>
+            <option value="gpt-5.6-terra">Terra</option>
+            <option value="gpt-5.6-sol">Sol</option>
+          </select>
+        </label>
+        <label class="tutor-select-control" for="tutorEffortSelect"><span>Thinking</span>
+          <select id="tutorEffortSelect" aria-label="Tutor reasoning effort">
+            <option value="low">Light</option>
+            <option value="medium" selected>Balanced</option>
+            <option value="high">Deep</option>
+            <option value="xhigh">Very deep</option>
+            <option value="max">Max</option>
+          </select>
+        </label>
+        <button class="tutor-scope-control" id="tutorScopeButton" type="button" aria-haspopup="dialog">
+          <span>Sources</span><strong id="tutorScopeLabel">Whole library</strong><i aria-hidden="true">⌄</i>
+        </button>
+      </section>
+
+      <div class="tutor-runtime-status" id="tutorRuntimeStatus" data-status="checking" role="status" aria-live="polite">
+        <span aria-hidden="true"></span><p>Checking your Codex sign-in…</p>
+      </div>
+
+      <main class="tutor-conversation" id="tutorConversation" aria-live="polite">
+        <section class="tutor-welcome" id="tutorWelcome">
+          <div class="tutor-peek-welcome">
+            <span aria-hidden="true">✦</span>
+            <div><strong id="tutorPeekHeading">Ask about this source</strong><p id="tutorPeekNote">Your study view stays open while you talk.</p></div>
+          </div>
+          <div class="tutor-welcome-orbit" aria-hidden="true"><span>✦</span></div>
+          <p class="tutor-kicker">Your shelf, in conversation</p>
+          <h3>A guide when you want one.</h3>
+          <p>Ask for an explanation, a reading path, a comparison, or a gentle quiz. Tutor stays tucked away until invited and grounds its answers in the sources you choose.</p>
+          <div class="tutor-starters" aria-label="Suggested tutor questions">
+            <button type="button" data-tutor-prompt="Build me a focused study path from what is in this library.">Plan a study path</button>
+            <button type="button" data-tutor-prompt="Connect the main ideas across my selected sources and tell me what to learn first.">Connect these sources</button>
+            <button type="button" data-tutor-prompt="Quiz me on a foundational idea from these sources, one question at a time.">Start a gentle quiz</button>
+          </div>
+        </section>
+      </main>
+
+      <form class="tutor-composer" id="tutorForm">
+        <label for="tutorInput" class="sr-only">Ask Lattice Tutor</label>
+        <textarea id="tutorInput" rows="1" maxlength="12000" placeholder="Ask about your library…" enterkeyhint="send"></textarea>
+        <button id="tutorSendButton" type="submit" aria-label="Send to Lattice Tutor"><span aria-hidden="true">↑</span></button>
+        <p id="tutorPrivacyNote">When you ask, your question and relevant excerpts from the chosen sources are processed through your signed-in Codex account. Credentials are never copied. Video sources provide catalog metadata, not transcripts.</p>
+      </form>
+
+      <section class="tutor-source-sheet" id="tutorSourceSheet" role="dialog" aria-modal="true" aria-labelledby="tutorSourceTitle" aria-hidden="true" hidden>
+        <header>
+          <div><span>Grounding</span><h3 id="tutorSourceTitle">Choose Tutor sources</h3></div>
+          <button id="tutorSourceClose" type="button" aria-label="Close source picker">×</button>
+        </header>
+        <div class="tutor-source-body">
+          <fieldset class="tutor-scope-options">
+            <legend>Reference range</legend>
+            <label><input type="radio" name="tutorScopeMode" value="all" checked><span><strong>Whole library</strong><small>Every eligible local work plus all video-course metadata</small></span></label>
+            <label><input type="radio" name="tutorScopeMode" value="selected"><span><strong>Selected sources</strong><small>Only the books, papers, notes, or courses you check</small></span></label>
+          </fieldset>
+          <div class="tutor-scope-disclosure"><span aria-hidden="true">◇</span><p>Human-study-only and personalized editions stay excluded. Whole-library mode still respects those source terms.</p></div>
+          <label class="tutor-source-search" for="tutorSourceSearch"><span aria-hidden="true">⌕</span><input id="tutorSourceSearch" type="search" autocomplete="off" placeholder="Find a book, paper, or video course…"></label>
+          <div class="tutor-source-summary"><strong id="tutorSelectedCount">0 selected</strong><button id="tutorClearSources" type="button">Clear</button></div>
+          <div class="tutor-source-list" id="tutorSourceList"></div>
+        </div>
+        <footer>
+          <button class="button button-quiet" id="tutorSourceCancel" type="button">Cancel</button>
+          <button class="button button-primary" id="tutorSourceApply" type="button">Use these sources</button>
+        </footer>
+      </section>
+    </aside>
+
     <div class="toast-region" id="toastRegion" aria-live="polite"></div>
     <script src="/videos.js?v=lattice-20260821" defer></script>
-    <script src="/app.js?v=lattice-20260821" defer></script>
+    <script src="/tutor.js?v=lattice-20260823" defer></script>
+    <script src="/app.js?v=lattice-20260823" defer></script>
   </body>
 </html>

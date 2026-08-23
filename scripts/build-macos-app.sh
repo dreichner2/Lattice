@@ -8,6 +8,8 @@ app_path="$library_root/Lattice.app"
 native_root="$library_root/native"
 ui_root="$library_root/ui"
 server_source="$library_root/scripts/library_ui.py"
+tutor_source="$library_root/scripts/lattice_tutor.py"
+tutor_vendor_root="$library_root/scripts/vendor"
 storage_source="$library_root/scripts/move_library.py"
 build_root=$(/usr/bin/mktemp -d "${TMPDIR:-/tmp}/cs-library-app.XXXXXX")
 staged_app="$build_root/Lattice.app"
@@ -46,11 +48,18 @@ for resource in \
   "$native_root/ImmersiveEPUB.js" \
   "$native_root/LibraryWorkspace.js" \
   "$native_root/Info.plist" \
+  "$library_root/THIRD_PARTY_NOTICES.md" \
   "$server_source" \
+  "$tutor_source" \
+  "$tutor_vendor_root/README.md" \
+  "$tutor_vendor_root/pypdf-LICENSE" \
+  "$tutor_vendor_root/pypdf/__init__.py" \
   "$storage_source" \
   "$ui_root/index.html" \
   "$ui_root/app.js" \
+  "$ui_root/tutor.js" \
   "$ui_root/styles.css" \
+  "$ui_root/tutor-styles.css" \
   "$ui_root/pdf-reader.html" \
   "$ui_root/pdf-reader.css" \
   "$ui_root/pdf-reader.js" \
@@ -70,9 +79,14 @@ done
 /bin/cp "$native_root/Info.plist" "$staged_app/Contents/Info.plist"
 /bin/cp -R "$ui_root" "$staged_app/Contents/Resources/ui"
 /bin/cp "$server_source" "$staged_app/Contents/Resources/server/library_ui.py"
+/bin/cp "$tutor_source" "$staged_app/Contents/Resources/server/lattice_tutor.py"
+/bin/cp -R "$tutor_vendor_root" "$staged_app/Contents/Resources/server/vendor"
+/usr/bin/find "$staged_app/Contents/Resources/server/vendor" -type f -name '*.pyc' -delete
+/usr/bin/find "$staged_app/Contents/Resources/server/vendor" -type d -name '__pycache__' -empty -delete
 /bin/cp "$storage_source" "$staged_app/Contents/Resources/server/move_library.py"
 /bin/cp "$native_root/ImmersiveEPUB.js" "$staged_app/Contents/Resources/ImmersiveEPUB.js"
 /bin/cp "$native_root/LibraryWorkspace.js" "$staged_app/Contents/Resources/LibraryWorkspace.js"
+/bin/cp "$library_root/THIRD_PARTY_NOTICES.md" "$staged_app/Contents/Resources/THIRD_PARTY_NOTICES.md"
 
 target_arch=$(/usr/bin/uname -m)
 /usr/bin/swiftc \
@@ -126,14 +140,20 @@ for bundled in \
   "$staged_app/Contents/MacOS/Lattice" \
   "$staged_app/Contents/Resources/ui/index.html" \
   "$staged_app/Contents/Resources/ui/app.js" \
+  "$staged_app/Contents/Resources/ui/tutor.js" \
+  "$staged_app/Contents/Resources/ui/tutor-styles.css" \
   "$staged_app/Contents/Resources/ui/pdf-reader.html" \
   "$staged_app/Contents/Resources/ui/pdf-reader.js" \
   "$staged_app/Contents/Resources/ui/pdf-reader-lifecycle.mjs" \
   "$staged_app/Contents/Resources/ui/vendor/pdfjs/build/pdf.min.mjs" \
   "$staged_app/Contents/Resources/server/library_ui.py" \
+  "$staged_app/Contents/Resources/server/lattice_tutor.py" \
+  "$staged_app/Contents/Resources/server/vendor/pypdf/__init__.py" \
+  "$staged_app/Contents/Resources/server/vendor/pypdf-LICENSE" \
   "$staged_app/Contents/Resources/server/move_library.py" \
   "$staged_app/Contents/Resources/ImmersiveEPUB.js" \
-  "$staged_app/Contents/Resources/LibraryWorkspace.js"; do
+  "$staged_app/Contents/Resources/LibraryWorkspace.js" \
+  "$staged_app/Contents/Resources/THIRD_PARTY_NOTICES.md"; do
   [[ -f "$bundled" ]] || { print -u2 "Staged app is incomplete: $bundled"; exit 1; }
 done
 

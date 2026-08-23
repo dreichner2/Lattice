@@ -328,6 +328,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, WKNavigationDelegate, 
 
             let process = Process()
             process.executableURL = URL(fileURLWithPath: python)
+            process.environment = Self.pythonProcessEnvironment()
             process.arguments = [
                 serverScript.path,
                 "--root", libraryRoot.path,
@@ -370,6 +371,12 @@ final class AppDelegate: NSObject, NSApplicationDelegate, WKNavigationDelegate, 
             "/usr/local/bin/python3",
             "/usr/bin/python3"
         ].first(where: FileManager.default.isExecutableFile(atPath:))
+    }
+
+    private static func pythonProcessEnvironment() -> [String: String] {
+        var environment = ProcessInfo.processInfo.environment
+        environment["PYTHONDONTWRITEBYTECODE"] = "1"
+        return environment
     }
 
     private func bundledUIRoot() -> URL? {
@@ -620,6 +627,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, WKNavigationDelegate, 
             let output = Pipe()
             let errors = Pipe()
             process.executableURL = URL(fileURLWithPath: python)
+            process.environment = Self.pythonProcessEnvironment()
             process.arguments = [
                 helper.path,
                 "--source", source.path,
@@ -736,6 +744,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, WKNavigationDelegate, 
             let output = Pipe()
             let errors = Pipe()
             process.executableURL = URL(fileURLWithPath: python)
+            process.environment = Self.pythonProcessEnvironment()
             var arguments = [
                 helper.path,
                 "--operation", operation,

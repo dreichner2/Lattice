@@ -19,6 +19,7 @@ and can be synchronized through Syncthing.
 │                                                                          │
 │ WKWebView                                                                 │
 │  ├─ shared shelf interface (`ui/`)                                        │
+│  ├─ optional source-scoped Tutor drawer (`tutor.js`)                       │
 │  ├─ EPUB renderer                                                        │
 │  ├─ native EPUB enhancement (`ImmersiveEPUB.js`)                          │
 │  └─ unified notebook/search workspace (`LibraryWorkspace.js`)             │
@@ -33,6 +34,8 @@ and can be synchronized through Syncthing.
 │  ├─ builds the catalog payload and watches local files                     │
 │  ├─ validates imports and writes collision-safe payloads and sidecars      │
 │  ├─ optionally asks local Codex for metadata-only classification           │
+│  ├─ brokers source-scoped Tutor turns (`lattice_tutor.py`)                 │
+│  ├─ extracts PDF/EPUB/text into a private per-device Tutor index           │
 │  ├─ serves bundled or repository UI resources                             │
 │  ├─ serves byte-ranged PDF/TXT payloads                                   │
 │  ├─ parses and securely serves EPUB resources                             │
@@ -94,7 +97,8 @@ contain an opaque operation ID. The candidate writes its token-bound health
 marker only after the local service and shared shelf finish loading. A missing
 marker or early exit restores and relaunches the previous bundle; the library
 folder, Syncthing configuration, and reader database are outside this
-transaction.
+transaction. Once the candidate is healthy, the transient previous bundle is
+deleted; successful updates do not retain application rollback copies.
 
 ## Product identity and compatibility IDs
 
@@ -133,6 +137,36 @@ publication metadata, and allowed subject list are included in the
 classification prompt; document bytes and full text are not.
 The process runs in a temporary context with read-only sandboxing, and import
 completion never depends on model availability or valid model output.
+
+## Lattice Tutor
+
+Tutor is a separate, optional path from the shelf and reader. The UI sends a
+token-protected request containing the chosen Luna/Terra/Sol model, reasoning
+effort, scope, selected work/course IDs, and one question. Conversation history
+is bounded and retained only in the local service's memory.
+
+Reader launches use a compact presentation scoped to the open work. It has no
+scrim, leaves the reading surface interactive, and keeps model/source controls
+behind an explicit expand action. The immersive PDF reader exposes the same
+path through a small edge control because its host toolbar is intentionally
+hidden.
+
+`lattice_tutor.py` resolves source IDs against the current server-built catalog;
+the client cannot submit arbitrary paths. Eligible PDF, EPUB, archive, and text
+sources are extracted incrementally into a SQLite/FTS cache outside both the
+library and reader database. `pypdf` 6.15.0 is vendored for consistent PDF text
+extraction on macOS, Windows, and source checkouts. Human-study-only and
+personalized/private works are never admitted and are pruned if eligibility
+changes. Video sources contribute catalog and lecture-title metadata only.
+
+Each turn invokes the same installed, authenticated Codex CLI used by import
+enrichment, but as a fresh ephemeral run that ignores user configuration and
+repository rules. The child environment is allowlisted, model tools have no
+network access, apps/plugins/browser/computer-use/multi-agent features are
+disabled, and filesystem permission entries grant read access only to the exact
+eligible files in the active scope. Source text is labeled as untrusted data.
+The structured response schema and every returned citation are validated
+against that same scope before the browser can display or open them.
 
 ## Native reader data
 

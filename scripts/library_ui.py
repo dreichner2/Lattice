@@ -22,6 +22,7 @@ import re
 import secrets
 import shutil
 import signal
+import sqlite3
 import subprocess
 import sys
 import tempfile
@@ -38,6 +39,8 @@ from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from pathlib import Path, PurePosixPath
 from typing import Any
 from xml.etree import ElementTree
+
+import lattice_tutor
 
 
 REPO_ROOT = Path(__file__).resolve().parents[1]
@@ -126,6 +129,13 @@ LECTURE_SOURCE_ALIASES = {
     "Harvard University": ("harvard", "Harvard"),
     "Carnegie Mellon University": ("carnegie-mellon", "Carnegie Mellon"),
 }
+
+TUTOR_RESTRICTED_LICENSE_MARKERS = (
+    "prohibits llm",
+    "generative-ai ingestion",
+    "generative ai ingestion",
+    "may not be used for llm",
+)
 
 DEFAULT_SUBJECTS = (
     {"id": "computer-science", "name": "Computer Science"},
@@ -762,13 +772,21 @@ def _file_record(root: Path, path: str, metadata: dict[str, Any]) -> dict[str, A
     exists = payload.is_file()
     suffix = payload.suffix.lower().lstrip(".") or "file"
     stat = payload.stat() if exists else None
+    license_note = str(metadata.get("license") or "Not recorded")
+    privacy_note = str(metadata.get("privacy_note") or "")
+    normalized_policy = f"{license_note} {privacy_note}".casefold()
+    tutor_restriction = ""
+    if privacy_note:
+        tutor_restriction = "This personalized or private edition stays on this device."
+    elif any(marker in normalized_policy for marker in TUTOR_RESTRICTED_LICENSE_MARKERS):
+        tutor_restriction = "Publisher terms reserve this work for human study."
     return {
         "title": metadata.get("title") or _display_title(path),
         "path": path,
         "format": suffix.upper(),
         "bytes": stat.st_size if stat else int(metadata.get("bytes") or 0),
         "sha256": metadata.get("sha256") or "",
-        "license": metadata.get("license") or "Not recorded",
+        "license": license_note,
         "sourceUrl": metadata.get("source_url") or metadata.get("page_url") or "",
         "fileUrl": metadata.get("file_url") or metadata.get("download_url") or "",
         "version": metadata.get("version") or metadata.get("edition") or "",
@@ -776,6 +794,8 @@ def _file_record(root: Path, path: str, metadata: dict[str, Any]) -> dict[str, A
         "exists": exists,
         "cataloged": bool(metadata),
         "modifiedNs": stat.st_mtime_ns if stat else 0,
+        "tutorEligible": not tutor_restriction,
+        "tutorRestriction": tutor_restriction,
     }
 
 
@@ -1010,6 +1030,17 @@ def build_library(
         files = [_file_record(root, path, metadata.get(path, {})) for path in file_paths]
         formats = sorted({file["format"] for file in files})
         material_type = _classify_work(work_id, local_path)
+        access_restricts_tutor = "human study" in access.casefold()
+        tutor_restriction = next(
+            (
+                str(file.get("tutorRestriction") or "")
+                for file in files
+                if file.get("tutorEligible") is False
+            ),
+            "Publisher terms reserve this work for human study."
+            if access_restricts_tutor
+            else "",
+        )
         works.append(
             {
                 "id": work_id,
@@ -1032,6 +1063,8 @@ def build_library(
                 "isAvailable": all(file["exists"] for file in files),
                 "availableFileCount": sum(1 for file in files if file["exists"]),
                 "cataloged": True,
+                "tutorEligible": not tutor_restriction,
+                "tutorRestriction": tutor_restriction,
             }
         )
 
@@ -1077,6 +1110,7 @@ def build_library(
                 _subject_record(taxonomy, str(subject_id))
                 for subject_id in requested_subjects
             ]
+            tutor_restriction = str(file.get("tutorRestriction") or "")
             works.append(
                 {
                     "id": work_id,
@@ -1107,6 +1141,8 @@ def build_library(
                     "availableFileCount": 1,
                     "cataloged": False,
                     "editableMetadata": editable_metadata,
+                    "tutorEligible": not tutor_restriction,
+                    "tutorRestriction": tutor_restriction,
                 }
             )
 
@@ -2419,6 +2455,15 @@ class LibraryHTTPServer(ThreadingHTTPServer):
         self._state_condition = threading.Condition(threading.RLock())
         self._watcher_stop = threading.Event()
         super().__init__(address, LibraryRequestHandler)
+        self.tutor = lattice_tutor.TutorManager(
+            self.root,
+            self.library_id,
+            command_builder=lambda arguments: _codex_executable_command(
+                arguments,
+                library_root=self.root,
+            ),
+            login_status=lambda: self.ai_status(),
+        )
         self._ai_worker = threading.Thread(
             target=self._enrichment_worker,
             name="lattice-ai-worker",
@@ -2451,6 +2496,18 @@ class LibraryHTTPServer(ThreadingHTTPServer):
         with self._job_lock:
             self._ai_status_cache = (now, dict(status))
         return status
+
+    def tutor_status(self) -> dict[str, Any]:
+        with self._state_condition:
+            library = self.library
+            lecture_catalog = self.lecture_catalog
+        return self.tutor.status(library, lecture_catalog)
+
+    def tutor_chat(self, value: dict[str, Any]) -> dict[str, Any]:
+        with self._state_condition:
+            library = self.library
+            lecture_catalog = self.lecture_catalog
+        return self.tutor.chat(value, library, lecture_catalog)
 
     def import_status(self, job_id: str) -> dict[str, Any] | None:
         with self._job_lock:
@@ -3073,6 +3130,9 @@ class LibraryHTTPServer(ThreadingHTTPServer):
 
     def server_close(self) -> None:
         self._watcher_stop.set()
+        tutor = getattr(self, "tutor", None)
+        if tutor is not None:
+            tutor.close()
         with self._job_lock:
             self._ai_worker_stop.set()
         self._fallback_queued_enrichment_on_shutdown()
@@ -3083,12 +3143,15 @@ class LibraryHTTPServer(ThreadingHTTPServer):
         with self._state_condition:
             self._state_condition.notify_all()
         super().server_close()
-        if self._watcher.is_alive() and threading.current_thread() is not self._watcher:
-            self._watcher.join(timeout=2)
-        if self._parent_watcher and self._parent_watcher.is_alive() and threading.current_thread() is not self._parent_watcher:
-            self._parent_watcher.join(timeout=2)
-        if self._ai_worker.is_alive() and threading.current_thread() is not self._ai_worker:
-            self._ai_worker.join(timeout=2)
+        watcher = getattr(self, "_watcher", None)
+        parent_watcher = getattr(self, "_parent_watcher", None)
+        ai_worker = getattr(self, "_ai_worker", None)
+        if watcher and watcher.is_alive() and threading.current_thread() is not watcher:
+            watcher.join(timeout=2)
+        if parent_watcher and parent_watcher.is_alive() and threading.current_thread() is not parent_watcher:
+            parent_watcher.join(timeout=2)
+        if ai_worker and ai_worker.is_alive() and threading.current_thread() is not ai_worker:
+            ai_worker.join(timeout=2)
 
     def handle_error(self, request: Any, client_address: Any) -> None:
         """Ignore routine disconnects from closed tabs and native app windows."""
@@ -3218,6 +3281,18 @@ class LibraryRequestHandler(BaseHTTPRequestHandler):
         if request_path == "/api/ai/status":
             self._send_json(HTTPStatus.OK, self.server.ai_status(), head_only=head_only)
             return
+        if request_path == "/api/tutor/status":
+            try:
+                status = self.server.tutor_status()
+            except (OSError, sqlite3.Error, subprocess.SubprocessError):
+                status = {
+                    "available": False,
+                    "authenticated": False,
+                    "ready": False,
+                    "message": "Tutor status is temporarily unavailable.",
+                }
+            self._send_json(HTTPStatus.OK, status, head_only=head_only)
+            return
         if request_path == "/api/import-status":
             query = urllib.parse.parse_qs(urllib.parse.urlsplit(self.path).query)
             job_id = query.get("id", [""])[0]
@@ -3294,7 +3369,9 @@ class LibraryRequestHandler(BaseHTTPRequestHandler):
             "/index.html": ("index.html", "text/html; charset=utf-8", False),
             "/styles.css": ("styles.css", "text/css; charset=utf-8", False),
             "/video-styles.css": ("video-styles.css", "text/css; charset=utf-8", False),
+            "/tutor-styles.css": ("tutor-styles.css", "text/css; charset=utf-8", False),
             "/videos.js": ("videos.js", "text/javascript; charset=utf-8", False),
+            "/tutor.js": ("tutor.js", "text/javascript; charset=utf-8", False),
             "/app.js": ("app.js", "text/javascript; charset=utf-8", False),
             "/pdf-reader.html": ("pdf-reader.html", "text/html; charset=utf-8", True),
             "/pdf-reader.css": ("pdf-reader.css", "text/css; charset=utf-8", False),
@@ -3527,6 +3604,41 @@ class LibraryRequestHandler(BaseHTTPRequestHandler):
         if self._reject_bad_host():
             return
         request_path = urllib.parse.urlsplit(self.path).path
+        if request_path == "/api/tutor/chat":
+            if not self._mutation_access_allowed():
+                return
+            try:
+                result = self.server.tutor_chat(self._read_json_request(256 * 1024))
+            except lattice_tutor.TutorRequestError as exc:
+                self._send_json(HTTPStatus.BAD_REQUEST, {"error": str(exc)})
+                return
+            except ValueError as exc:
+                self._send_json(HTTPStatus.BAD_REQUEST, {"error": str(exc)})
+                return
+            except (OSError, sqlite3.Error, subprocess.SubprocessError):
+                self._send_json(
+                    HTTPStatus.INTERNAL_SERVER_ERROR,
+                    {"error": "Tutor is temporarily unavailable."},
+                )
+                return
+            self._send_json(HTTPStatus.OK, result)
+            return
+        if request_path in {"/api/tutor/cancel", "/api/tutor/reset"}:
+            if not self._mutation_access_allowed():
+                return
+            try:
+                value = self._read_json_request(4096)
+                session_id = str(value.get("sessionId") or "")
+            except ValueError as exc:
+                self._send_json(HTTPStatus.BAD_REQUEST, {"error": str(exc)})
+                return
+            changed = (
+                self.server.tutor.cancel(session_id)
+                if request_path.endswith("/cancel")
+                else self.server.tutor.reset(session_id)
+            )
+            self._send_json(HTTPStatus.OK, {"ok": True, "changed": changed})
+            return
         if request_path == "/api/import":
             if not self._mutation_access_allowed():
                 return
