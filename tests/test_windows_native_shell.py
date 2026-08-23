@@ -23,6 +23,8 @@ UPDATE_CANDIDATE_CODE = WINDOWS / "UpdateCandidateSession.cs"
 UPDATE_MODELS_CODE = WINDOWS / "UpdateModels.cs"
 UPDATE_SERVICE_CODE = WINDOWS / "UpdateService.cs"
 LIBRARY_MOVE_CODE = WINDOWS / "LibraryMoveClient.cs"
+NATIVE_EJECT_CODE = WINDOWS / "NativeDriveEjector.cs"
+EXTERNAL_VOLUME_CODE = WINDOWS / "ExternalLibraryVolumeRecord.cs"
 WINDOWS_BUILD = ROOT / "windows" / "build-windows.ps1"
 WINDOWS_INSTALLER = ROOT / "windows" / "install.ps1"
 XAML_NAME = "{http://schemas.microsoft.com/winfx/2006/xaml}Name"
@@ -49,6 +51,8 @@ class WindowsNativeShellTests(unittest.TestCase):
         cls.update_models_code = UPDATE_MODELS_CODE.read_text(encoding="utf-8")
         cls.update_service_code = UPDATE_SERVICE_CODE.read_text(encoding="utf-8")
         cls.library_move_code = LIBRARY_MOVE_CODE.read_text(encoding="utf-8")
+        cls.native_eject_code = NATIVE_EJECT_CODE.read_text(encoding="utf-8")
+        cls.external_volume_code = EXTERNAL_VOLUME_CODE.read_text(encoding="utf-8")
         cls.windows_build = WINDOWS_BUILD.read_text(encoding="utf-8")
         cls.windows_installer = WINDOWS_INSTALLER.read_text(encoding="utf-8")
 
@@ -193,7 +197,71 @@ class WindowsNativeShellTests(unittest.TestCase):
         self.assertIn('"--shutdown-syncthing"', self.library_move_code)
         self.assertIn("SyncthingStopped", self.window_code)
         self.assertIn("outcome.FolderPaused", self.window_code)
-        self.assertIn("Resume this exact folder now?", self.window_code)
+        self.assertIn("Resume this exact folder, rescan it, and wait for Up to Date now?", self.window_code)
+        self.assertIn('"--previous-source"', self.library_move_code)
+
+    def test_external_drive_eject_uses_only_native_configuration_manager(self) -> None:
+        for contract in (
+            "CM_Request_Device_EjectW",
+            "CM_Get_Parent",
+            "IOCTL_STORAGE_GET_DEVICE_NUMBER",
+            "53F56307-B6BF-11D0-94F2-00A0C91EFB8B",
+            "PNP_VetoOutstandingOpen",
+            "Veto type:",
+            "Veto name:",
+            "Configuration Manager result:",
+        ):
+            self.assertIn(contract, self.native_eject_code)
+
+        native_sources = "\n".join(
+            path.read_text(encoding="utf-8")
+            for path in WINDOWS.glob("*.cs")
+        )
+        for forbidden in (
+            "FSCTL_LOCK_VOLUME",
+            "FSCTL_DISMOUNT_VOLUME",
+            "IOCTL_VOLUME_OFFLINE",
+            "DeleteVolumeMountPoint",
+            "SetVolumeMountPoint",
+        ):
+            self.assertNotIn(forbidden, native_sources)
+
+        disconnect = self.window_code[
+            self.window_code.index("private async void DisconnectLibrary_Click") :
+            self.window_code.index("private async void ReconnectLibrary_Click")
+        ]
+        self.assertLess(
+            disconnect.index("LibraryMoveClient.DisconnectAsync"),
+            disconnect.index("StopOwnedServerForEject"),
+        )
+        self.assertLess(
+            disconnect.index("Browser.Dispose()"),
+            disconnect.index("NativeDriveEjector.RequestEject"),
+        )
+        self.assertIn('"Ejecting…"', disconnect)
+        self.assertIn("await Task.Run(() => NativeDriveEjector.RequestEject", disconnect)
+        veto_branch = disconnect.index("if (!ejectResult.Success)")
+        safe_to_unplug = disconnect.rindex('"Safe to unplug"')
+        self.assertLess(veto_branch, safe_to_unplug)
+
+    def test_external_volume_record_drives_automatic_verified_reconnect(self) -> None:
+        for contract in (
+            "VolumeName",
+            "RelativeLibraryPath",
+            "DeviceInstanceId",
+            "SyncthingManaged",
+            "Directory.GetLogicalDrives()",
+            "NativeDriveEjector.GetVolumeName",
+        ):
+            self.assertIn(contract, self.external_volume_code)
+        for contract in (
+            "ExternalLibraryVolumeRecord.TryResolveLibraryRoot",
+            "ReconnectLibrarySyncAsync",
+            "previousSource: externalVolume?.OriginalLibraryRoot",
+            "Restarting Syncthing, rescanning the folder, and waiting for Up to Date",
+            "ExternalLibraryVolumeRecord.Delete",
+        ):
+            self.assertIn(contract, self.window_code)
 
     def test_bounded_packaged_smoke_mode_emits_proof_contract(self) -> None:
         for option in ("--smoke-test", "--library-root", "--smoke-output", "--smoke-pdf"):

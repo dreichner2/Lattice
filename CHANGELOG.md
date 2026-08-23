@@ -1,5 +1,28 @@
 # Changelog
 
+## 2.2.7 — 2026-08-22
+
+### Added
+
+- **Disconnect library drive** on Windows now resolves the external disk's
+  parent USB device and awaits the native Configuration Manager eject request.
+  The app shows **Ejecting…** during the request and **Safe to unplug** only
+  after Windows returns success.
+- Native eject failures now show the exact Windows veto type, veto name, and
+  Configuration Manager result while leaving the library disconnected.
+- Reconnecting an ejected library resolves its saved volume identity even if
+  Windows assigns a different drive letter, restores the same Syncthing folder
+  path, rescans it, and waits for Up to Date before reporting success.
+
+### Fixed
+
+- Windows ejection uses no manual volume lock, dismount, offline, or mount-point
+  operations, avoiding the remount race observed with the same SSD.
+- Disconnect verifies that an already-paused Syncthing folder has no pending
+  items or errors before stopping the dedicated process.
+- Reconnect now rescans and verifies an already-unpaused folder instead of
+  treating process availability alone as synchronization success.
+
 ## 2.2.6 — 2026-08-22
 
 ### Fixed

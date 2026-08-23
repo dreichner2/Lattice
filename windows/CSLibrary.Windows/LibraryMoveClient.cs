@@ -43,7 +43,7 @@ internal static class LibraryMoveClient
         destination = Path.GetFullPath(destination);
         var completed = await RunStorageHelperAsync(
             "move", source, destination, stateFile: null, startIfNeeded: false,
-            resumeExistingPause: false, progress: progress);
+            resumeExistingPause: false, previousSource: null, progress: progress);
         var completedDestination = RequiredString(completed, "destination");
         if (!string.Equals(
                 Path.TrimEndingDirectorySeparator(Path.GetFullPath(completedDestination)),
@@ -72,6 +72,7 @@ internal static class LibraryMoveClient
             stateFile: Path.GetFullPath(stateFile),
             startIfNeeded: false,
             resumeExistingPause: false,
+            previousSource: null,
             progress: progress);
         return new LibraryDisconnectOutcome(
             RequiredBoolean(completed, "syncthingManaged"),
@@ -85,6 +86,7 @@ internal static class LibraryMoveClient
         string stateFile,
         bool startIfNeeded,
         bool resumeExistingPause = false,
+        string? previousSource = null,
         IProgress<LibraryMoveProgress>? progress = null)
     {
         var completed = await RunStorageHelperAsync(
@@ -94,6 +96,7 @@ internal static class LibraryMoveClient
             stateFile: Path.GetFullPath(stateFile),
             startIfNeeded: startIfNeeded,
             resumeExistingPause: resumeExistingPause,
+            previousSource: previousSource,
             progress: progress);
         return new LibraryReconnectOutcome(
             RequiredBoolean(completed, "syncthingManaged"),
@@ -111,10 +114,17 @@ internal static class LibraryMoveClient
         string? stateFile,
         bool startIfNeeded,
         bool resumeExistingPause,
+        string? previousSource,
         IProgress<LibraryMoveProgress>? progress)
     {
         var start = CreateStartInfo(
-            operation, source, destination, stateFile, startIfNeeded, resumeExistingPause);
+            operation,
+            source,
+            destination,
+            stateFile,
+            startIfNeeded,
+            resumeExistingPause,
+            previousSource);
         using var process = new Process { StartInfo = start };
         if (!process.Start())
             throw new InvalidOperationException("The Lattice storage helper did not start.");
@@ -183,7 +193,8 @@ internal static class LibraryMoveClient
         string? destination,
         string? stateFile,
         bool startIfNeeded,
-        bool resumeExistingPause)
+        bool resumeExistingPause,
+        string? previousSource)
     {
         var packagedHelper = Path.Combine(AppContext.BaseDirectory, "Tools", "LatticeStorage.exe");
         ProcessStartInfo start;
@@ -228,6 +239,11 @@ internal static class LibraryMoveClient
         }
         if (startIfNeeded) start.ArgumentList.Add("--start-if-needed");
         if (resumeExistingPause) start.ArgumentList.Add("--resume-existing-pause");
+        if (!string.IsNullOrWhiteSpace(previousSource))
+        {
+            start.ArgumentList.Add("--previous-source");
+            start.ArgumentList.Add(Path.GetFullPath(previousSource));
+        }
         if (string.Equals(operation, "disconnect", StringComparison.Ordinal))
             start.ArgumentList.Add("--shutdown-syncthing");
         start.ArgumentList.Add("--folder-id");

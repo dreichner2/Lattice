@@ -288,6 +288,65 @@ class MoveLibraryTests(unittest.TestCase):
                 self.assertFalse(fixture.state.folder["paused"])
                 self.assertGreaterEqual(fixture.state.scans, 1)
 
+    def test_reconnect_rescans_and_waits_when_folder_was_already_unpaused(self) -> None:
+        with tempfile.TemporaryDirectory() as temporary:
+            base = Path(temporary)
+            source = base / "external" / "Lattice"
+            state_file = base / "local-state" / "external-drive.json"
+            config = base / "syncthing" / "config.xml"
+            source.parent.mkdir()
+            make_library(source, synced=True)
+            with running_syncthing(source) as fixture:
+                write_syncthing_config(config, fixture.port, source)
+                reconnected = move_library.reconnect_library(
+                    source,
+                    state_file,
+                    syncthing_config=config,
+                    sync_timeout=1,
+                )
+                self.assertTrue(reconnected.syncthing_managed)
+                self.assertTrue(reconnected.syncthing_running)
+                self.assertFalse(reconnected.folder_paused)
+                self.assertGreaterEqual(fixture.state.scans, 1)
+
+    def test_reconnect_updates_syncthing_after_windows_changes_drive_path(self) -> None:
+        with tempfile.TemporaryDirectory() as temporary:
+            base = Path(temporary)
+            previous = base / "old-drive" / "Lattice"
+            source = base / "new-drive" / "Lattice"
+            state_file = base / "local-state" / "external-drive.json"
+            config = base / "syncthing" / "config.xml"
+            source.parent.mkdir()
+            make_library(source, synced=True)
+            state_file.parent.mkdir()
+            state_file.write_text(
+                json.dumps(
+                    {
+                        "schemaVersion": 1,
+                        "folderId": FOLDER_ID,
+                        "libraryRoot": str(previous),
+                        "resumeRequired": True,
+                    }
+                ),
+                encoding="utf-8",
+            )
+            with running_syncthing(source) as fixture:
+                fixture.state.folder["path"] = str(previous)
+                fixture.state.folder["paused"] = True
+                write_syncthing_config(config, fixture.port, previous)
+                reconnected = move_library.reconnect_library(
+                    source,
+                    state_file,
+                    syncthing_config=config,
+                    previous_source=previous,
+                    sync_timeout=1,
+                )
+                self.assertTrue(reconnected.resumed_by_lattice)
+                self.assertFalse(reconnected.folder_paused)
+                self.assertTrue(move_library._same_path(fixture.state.folder["path"], source))
+                self.assertGreaterEqual(fixture.state.scans, 1)
+                self.assertFalse(state_file.exists())
+
     def test_disconnect_accepts_syncthing_v2_empty_state_after_confirmed_pause(self) -> None:
         with tempfile.TemporaryDirectory() as temporary:
             base = Path(temporary)
@@ -426,7 +485,7 @@ class MoveLibraryTests(unittest.TestCase):
             with self.assertRaisesRegex(move_library.LibraryMoveError, "still running"):
                 move_library._wait_for_syncthing_shutdown(client, timeout=0.001)
 
-    def test_disconnect_accepts_verified_stopped_syncthing_as_already_released(self) -> None:
+    def test_disconnect_requires_running_syncthing_to_verify_up_to_date(self) -> None:
         with tempfile.TemporaryDirectory() as temporary:
             base = Path(temporary)
             source = base / "external" / "Lattice"
@@ -441,15 +500,13 @@ class MoveLibraryTests(unittest.TestCase):
                 "_syncthing_process_may_be_running",
                 return_value=False,
             ):
-                disconnected = move_library.prepare_library_disconnect(
-                    source,
-                    state_file,
-                    syncthing_config=config,
-                    sync_timeout=0.1,
-                )
-            self.assertTrue(disconnected.syncthing_managed)
-            self.assertFalse(disconnected.syncthing_running)
-            self.assertFalse(disconnected.paused_by_lattice)
+                with self.assertRaisesRegex(move_library.LibraryMoveError, "verify.*Up to Date"):
+                    move_library.prepare_library_disconnect(
+                        source,
+                        state_file,
+                        syncthing_config=config,
+                        sync_timeout=0.1,
+                    )
             self.assertFalse(state_file.exists())
 
     def test_disconnect_never_calls_an_unreachable_api_safe_while_syncthing_runs(self) -> None:

@@ -1,8 +1,8 @@
 #!/usr/bin/env python3
 """Safely relocate a Lattice library and its Syncthing folder binding.
 
-The desktop shells invoke this helper only after stopping their local library
-service.  It deliberately uses Syncthing's loopback API rather than editing
+The desktop shells use this helper only from a local working directory outside
+the library. It deliberately uses Syncthing's loopback API rather than editing
 ``config.xml`` and never prints or persists the API key.
 """
 
@@ -996,8 +996,13 @@ def prepare_library_disconnect(
                 "Syncthing's local API is unavailable, but a Syncthing process is still running. "
                 "Restart Syncthing, wait for Lattice to show Live sync, and try disconnecting again."
             )
-        # A proven-stopped process has no watcher or filesystem handle to release.
-        return DisconnectResult(True, False, False, True)
+        if existing_state is not None and existing_state["resumeRequired"]:
+            # This state is written only after an earlier Up-to-Date check and
+            # confirmed Lattice-owned pause. The stopped process has no handle.
+            return DisconnectResult(True, False, False, True)
+        raise LibraryMoveError(
+            "Start Syncthing so Lattice can verify that the folder is Up to Date before ejecting its drive."
+        )
 
     assert discovery.client is not None and discovery.folder is not None
     client = discovery.client
@@ -1008,7 +1013,12 @@ def prepare_library_disconnect(
         raise LibraryMoveError("Syncthing has a pending restart. Restart it, then try disconnecting again.")
     original_paused = bool(folder.get("paused", False))
     paused_by_lattice = False
-    if not original_paused:
+    if original_paused:
+        if not _validate_syncthing_status(client.status(folder_id), allow_paused=True):
+            raise LibraryMoveError(
+                "The paused Lattice folder is not fully synchronized. Resume it and wait for Up to Date before ejecting its drive."
+            )
+    else:
         initial_status = client.status(folder_id)
         if not _validate_syncthing_status(initial_status, allow_paused=False):
             raise LibraryMoveError(
@@ -1060,6 +1070,7 @@ def reconnect_library(
     syncthing_config: Path | str | None = None,
     start_if_needed: bool = False,
     resume_existing_pause: bool = False,
+    previous_source: Path | str | None = None,
     sync_timeout: float = 120.0,
 ) -> ReconnectResult:
     source_input = Path(source_value).expanduser()
@@ -1067,23 +1078,53 @@ def reconnect_library(
         raise LibraryMoveError("The current library root cannot be a symbolic link.")
     source = source_input.resolve(strict=True)
     _validate_library_root(source, folder_id)
+    previous = (
+        Path(previous_source).expanduser().resolve(strict=False)
+        if previous_source is not None
+        else None
+    )
     state = _read_disconnect_state(source, state_file)
     if state is not None and (
         state["folderId"] != folder_id
-        or not _same_path(state["libraryRoot"], source)
+        or (
+            not _same_path(state["libraryRoot"], source)
+            and (previous is None or not _same_path(state["libraryRoot"], previous))
+        )
     ):
         raise LibraryMoveError(
             "The saved reconnect record belongs to another library path. Reconnect that drive before changing this folder."
         )
 
-    discovery = _discover_syncthing(source, folder_id, syncthing_config)
+    discovery_error: LibraryMoveError | None = None
+    try:
+        discovery = _discover_syncthing(source, folder_id, syncthing_config)
+    except LibraryMoveError as error:
+        discovery_error = error
+        discovery = SyncthingDiscovery(None, None, None, False, False)
+    discovery_source = source
+    if (
+        not discovery.managed
+        and previous is not None
+        and not _same_path(previous, source)
+    ):
+        try:
+            previous_discovery = _discover_syncthing(previous, folder_id, syncthing_config)
+        except LibraryMoveError:
+            if discovery_error is not None:
+                raise discovery_error
+            raise
+        if previous_discovery.managed:
+            discovery = previous_discovery
+            discovery_source = previous
+    if not discovery.managed and discovery_error is not None:
+        raise discovery_error
     started = False
     if discovery.managed and not discovery.running and start_if_needed:
         if discovery.config_path is None:
             raise LibraryMoveError("Lattice could not locate Syncthing's configuration for this library.")
         process = _start_windows_syncthing(discovery.config_path)
         discovery = _wait_for_started_syncthing(
-            source,
+            discovery_source,
             folder_id,
             discovery.config_path,
             process,
@@ -1104,6 +1145,19 @@ def reconnect_library(
         raise LibraryMoveError("The Lattice Syncthing folder must be Send & Receive before reconnecting.")
     if client.restart_required():
         raise LibraryMoveError("Syncthing has a pending restart. Restart it, then reconnect the library.")
+    if not _same_path(str(folder.get("path", "")), source):
+        if previous is None or not _same_path(str(folder.get("path", "")), previous):
+            raise LibraryMoveError(
+                "Syncthing's saved Lattice folder points to an unexpected path. No sync setting was changed."
+            )
+        if not bool(folder.get("paused", False)):
+            raise LibraryMoveError(
+                "Syncthing's saved Lattice folder is not paused, so Lattice will not change its drive path."
+            )
+        client.patch_folder(folder_id, {"path": str(source), "paused": True})
+        folder = client.folder(folder_id)
+        if not _same_path(str(folder.get("path", "")), source):
+            raise LibraryMoveError("Syncthing did not accept the reconnected library drive path.")
     resumed = False
     resumed_existing_pause = False
     if state is not None and state["resumeRequired"]:
@@ -1112,18 +1166,19 @@ def reconnect_library(
             if bool(client.folder(folder_id).get("paused", True)):
                 raise LibraryMoveError("Syncthing did not resume the Lattice folder.")
             resumed = True
-        client.scan(folder_id)
-        _wait_for_syncthing(client, folder_id, allow_paused=False, timeout=sync_timeout)
-        _delete_disconnect_state(source, state_file)
     elif bool(folder.get("paused", False)) and resume_existing_pause:
         client.patch_folder(folder_id, {"paused": False})
         if bool(client.folder(folder_id).get("paused", True)):
             raise LibraryMoveError("Syncthing did not resume the Lattice folder.")
         resumed_existing_pause = True
-        client.scan(folder_id)
-        _wait_for_syncthing(client, folder_id, allow_paused=False, timeout=sync_timeout)
 
     folder_paused = bool(client.folder(folder_id).get("paused", False))
+    if not folder_paused:
+        client.scan(folder_id)
+        _wait_for_syncthing(client, folder_id, allow_paused=False, timeout=sync_timeout)
+        if state is not None:
+            _delete_disconnect_state(source, state_file)
+
     return ReconnectResult(
         True,
         True,
@@ -1288,6 +1343,7 @@ def _parser() -> argparse.ArgumentParser:
     parser.add_argument("--state-file", help="Local reconnect record outside the library")
     parser.add_argument("--start-if-needed", action="store_true", help=argparse.SUPPRESS)
     parser.add_argument("--resume-existing-pause", action="store_true", help=argparse.SUPPRESS)
+    parser.add_argument("--previous-source", help=argparse.SUPPRESS)
     parser.add_argument("--shutdown-syncthing", action="store_true", help=argparse.SUPPRESS)
     parser.add_argument("--folder-id", default=DEFAULT_FOLDER_ID)
     parser.add_argument("--protected-path", action="append", default=[])
@@ -1337,11 +1393,11 @@ def main(argv: list[str] | None = None) -> int:
                 pausedByLattice=disconnected.paused_by_lattice,
                 syncthingStopped=disconnected.syncthing_stopped,
                 message=(
-                    "The dedicated Lattice Syncthing instance is stopped. Close Lattice before ejecting the drive."
+                    "The dedicated Lattice Syncthing instance is stopped and released the library drive."
                     if disconnected.syncthing_stopped
-                    else "Syncthing released the Lattice folder. Close Lattice before ejecting the drive."
+                    else "Syncthing released the Lattice folder."
                     if disconnected.syncthing_running
-                    else "Syncthing is already stopped. Close Lattice before ejecting the drive."
+                    else "Syncthing is already stopped and has no library-drive handle."
                 ),
             )
         else:
@@ -1354,6 +1410,7 @@ def main(argv: list[str] | None = None) -> int:
                 syncthing_config=arguments.syncthing_config,
                 start_if_needed=arguments.start_if_needed,
                 resume_existing_pause=arguments.resume_existing_pause,
+                previous_source=arguments.previous_source,
             )
             reporter(
                 "complete",

@@ -25,6 +25,9 @@ public partial class MainWindow : Window
     private static readonly string LibraryDisconnectStatePath = Path.Combine(
         SettingsRoot,
         "external-library-reconnect.json");
+    private static readonly string ExternalLibraryVolumeStatePath = Path.Combine(
+        SettingsRoot,
+        "external-library-volume.json");
     private const string NativeBridgeBootstrapScript = """
         (() => {
           if (window.top !== window || window.csLibraryNativeCall || !window.chrome?.webview) return;
@@ -69,12 +72,14 @@ public partial class MainWindow : Window
     private string? _libraryRoot;
     private string? _readerStateScriptId;
     private bool _webViewConfigured;
+    private bool _browserDisposed;
     private bool _openingLibrary;
     private bool _smokeCompleted;
     private bool _backgroundUpdateCheckStarted;
     private bool _updateOperationInProgress;
     private bool _libraryMoveInProgress;
     private bool _libraryDriveOperationInProgress;
+    private bool _releasingLibraryWebView;
     private bool _candidateLaunched;
     private bool _candidatePromoted;
     private bool _candidateErrorNotified;
@@ -94,6 +99,7 @@ public partial class MainWindow : Window
     private DesktopUpdateCheck? _availableUpdate;
     private StagedDesktopUpdate? _stagedUpdate;
     private Task<DesktopUpdateCheck>? _updateCheckTask;
+    private ExternalLibraryVolumeState? _pendingExternalLibraryVolume;
 
     private string DisplayVersion => _updateCandidate?.CandidateVersion
         ?? _updateService.InstalledVersion
@@ -165,6 +171,20 @@ public partial class MainWindow : Window
             Application.Current.Shutdown();
             return;
         }
+        if (_pendingExternalLibraryVolume is not null)
+        {
+            _libraryRoot = Path.GetFullPath(root);
+            SetLoading(
+                "Reconnecting the library drive…",
+                "Restarting Syncthing, rescanning the folder, and waiting for Up to Date",
+                chooseFolder: false,
+                busy: true);
+            _ = await ReconnectLibrarySyncAsync(
+                root,
+                _pendingExternalLibraryVolume,
+                automatic: true);
+            _pendingExternalLibraryVolume = null;
+        }
         await OpenLibraryAsync(root);
     }
 
@@ -199,13 +219,31 @@ public partial class MainWindow : Window
 
         try
         {
+            var externalVolume = ExternalLibraryVolumeRecord.Read(ExternalLibraryVolumeStatePath);
+            if (externalVolume is not null)
+            {
+                if (ExternalLibraryVolumeRecord.TryResolveLibraryRoot(
+                        externalVolume,
+                        out var reconnectedRoot)
+                    && IsLibrary(reconnectedRoot))
+                {
+                    _pendingExternalLibraryVolume = externalVolume;
+                    Directory.CreateDirectory(SettingsRoot);
+                    File.WriteAllText(SavedLibraryPath, reconnectedRoot + Environment.NewLine);
+                    return Path.GetFullPath(reconnectedRoot);
+                }
+                return null;
+            }
             if (File.Exists(SavedLibraryPath))
             {
                 var saved = File.ReadAllText(SavedLibraryPath).Trim();
                 if (IsLibrary(saved)) return Path.GetFullPath(saved);
             }
         }
-        catch (IOException)
+        catch (Exception error) when (error is IOException
+                                      or UnauthorizedAccessException
+                                      or InvalidDataException
+                                      or ArgumentException)
         {
             // The chooser below is the safe fallback for an unreadable setting.
         }
@@ -533,7 +571,7 @@ public partial class MainWindow : Window
             };
             Browser.CoreWebView2.ProcessFailed += (_, eventArgs) =>
             {
-                if (_lifetime.IsCancellationRequested) return;
+                if (_lifetime.IsCancellationRequested || _libraryDriveOperationInProgress) return;
                 _openingLibrary = false;
                 SetBrowserControlsEnabled(false);
                 SetLibrarySwitchingEnabled(true);
@@ -730,10 +768,11 @@ public partial class MainWindow : Window
 
     private void PostNativeStatus()
     {
-        if (Browser.CoreWebView2 is null
-            || !IsOwnedServerUri(Browser.CoreWebView2.Source)) return;
+        if (_browserDisposed) return;
         try
         {
+            if (Browser.CoreWebView2 is null
+                || !IsOwnedServerUri(Browser.CoreWebView2.Source)) return;
             Browser.CoreWebView2.PostWebMessageAsJson(
                 JsonSerializer.Serialize(NativeStatusPayload()));
         }
@@ -745,6 +784,8 @@ public partial class MainWindow : Window
 
     private void NavigationStarting(object? sender, CoreWebView2NavigationStartingEventArgs e)
     {
+        if (_releasingLibraryWebView
+            && string.Equals(e.Uri, "about:blank", StringComparison.OrdinalIgnoreCase)) return;
         if (IsOwnedServerUri(e.Uri))
         {
             SetShellStatus("Loading", ShellStatus.Loading);
@@ -762,6 +803,7 @@ public partial class MainWindow : Window
     private async void NavigationCompleted(object? sender, CoreWebView2NavigationCompletedEventArgs e)
     {
         if (_lifetime.IsCancellationRequested) return;
+        if (_releasingLibraryWebView) return;
         if (!e.IsSuccess)
         {
             _openingLibrary = false;
@@ -1579,6 +1621,58 @@ public partial class MainWindow : Window
         }
     }
 
+    private void StopOwnedServerForEject()
+    {
+        var process = _serverProcess;
+        if (process is null) return;
+        if (!process.HasExited)
+        {
+            process.Kill(entireProcessTree: true);
+            if (!process.WaitForExit(10_000))
+            {
+                throw new InvalidOperationException(
+                    "LatticeServer did not release the library drive within ten seconds.");
+            }
+        }
+        StopOwnedServer();
+    }
+
+    private async Task ReleaseLibraryWebViewAsync()
+    {
+        var webView = Browser.CoreWebView2;
+        if (webView is null) return;
+        var completed = new TaskCompletionSource<bool>(
+            TaskCreationOptions.RunContinuationsAsynchronously);
+        EventHandler<CoreWebView2NavigationCompletedEventArgs>? handler = null;
+        handler = (_, eventArgs) => completed.TrySetResult(eventArgs.IsSuccess);
+        webView.NavigationCompleted += handler;
+        _releasingLibraryWebView = true;
+        try
+        {
+            Browser.IsEnabled = false;
+            Browser.Visibility = Visibility.Hidden;
+            webView.Stop();
+            webView.Navigate("about:blank");
+            var blankLoaded = await completed.Task.WaitAsync(
+                TimeSpan.FromSeconds(5),
+                _lifetime.Token);
+            if (!blankLoaded)
+                throw new InvalidOperationException(
+                    "The reading window did not release the library page.");
+        }
+        catch (TimeoutException error)
+        {
+            throw new InvalidOperationException(
+                "The reading window did not release the library page within five seconds.",
+                error);
+        }
+        finally
+        {
+            _releasingLibraryWebView = false;
+            webView.NavigationCompleted -= handler;
+        }
+    }
+
     private void Back_Click(object sender, RoutedEventArgs e)
     {
         if (Browser.CanGoBack) Browser.GoBack();
@@ -1920,12 +2014,11 @@ public partial class MainWindow : Window
         var source = Path.GetFullPath(_libraryRoot);
         var consent = MessageBox.Show(
             this,
-            "Prepare this library drive for safe eject?\n\n"
-            + "Lattice will stop its private local service, require Syncthing to be Up to Date, pause the Lattice "
-            + "folder, and shut down its dedicated Syncthing instance. This window will close only after both "
-            + "processes have released the drive. "
-            + "Then use Eject in Windows.\n\n"
-            + "When the drive is connected again, open Lattice and choose Reconnect library sync.",
+            "Safely eject this library drive?\n\n"
+            + "Lattice will require Syncthing to be Up to Date, stop Syncthing and LatticeServer, "
+            + "release the reading window, and ask Windows to eject the parent USB device. "
+            + "Keep the drive connected while Ejecting… is shown.\n\n"
+            + "Lattice will say Safe to unplug only after Windows accepts the eject request.",
             "Disconnect library drive",
             MessageBoxButton.YesNo,
             MessageBoxImage.Information,
@@ -1937,13 +2030,38 @@ public partial class MainWindow : Window
         SetBrowserControlsEnabled(false);
         SetLibrarySwitchingEnabled(false);
         SetLoading(
+            "Checking the library drive…",
+            "Resolving the physical disk and its parent USB device",
+            chooseFolder: false,
+            busy: true);
+        SetShellStatus("Preparing to eject", ShellStatus.Loading);
+
+        NativeEjectTarget ejectTarget;
+        try
+        {
+            ejectTarget = await Task.Run(() => NativeDriveEjector.ResolveTarget(source));
+            await ReleaseLibraryWebViewAsync();
+        }
+        catch (Exception error)
+        {
+            _libraryDriveOperationInProgress = false;
+            _openingLibrary = false;
+            MessageBox.Show(
+                this,
+                "Lattice did not disconnect or eject the drive. " + error.Message,
+                "Drive eject stopped",
+                MessageBoxButton.OK,
+                MessageBoxImage.Warning);
+            if (IsLibrary(source)) await OpenLibraryAsync(source);
+            return;
+        }
+
+        SetLoading(
             "Releasing the library drive…",
-            "Stopping Lattice's local service and dedicated Syncthing instance",
+            "Verifying Syncthing is Up to Date and stopping its dedicated process",
             chooseFolder: false,
             busy: true);
         SetShellStatus("Releasing library drive", ShellStatus.Loading);
-        StopOwnedServer();
-        _serverUrl = null;
 
         LibraryDisconnectOutcome? outcome = null;
         Exception? failure = null;
@@ -1988,17 +2106,109 @@ public partial class MainWindow : Window
             }
             return;
         }
+        if (outcome.SyncthingManaged && !outcome.SyncthingStopped)
+        {
+            _libraryDriveOperationInProgress = false;
+            _openingLibrary = false;
+            MessageBox.Show(
+                this,
+                "Syncthing did not confirm that its dedicated process stopped. The drive was not ejected.",
+                "Drive still connected",
+                MessageBoxButton.OK,
+                MessageBoxImage.Warning);
+            if (IsLibrary(source)) await OpenLibraryAsync(source);
+            return;
+        }
 
-        var detail = outcome.SyncthingManaged
-            ? (outcome.SyncthingStopped
-                ? "The dedicated Lattice Syncthing instance and Lattice's local service are stopped."
-                : "Syncthing was already stopped, and Lattice's local service is now stopped.")
-            : "Lattice's local service is stopped. This library is not managed by Syncthing.";
-        detail += "\n\nAfter this window closes, eject the drive from Windows before unplugging it.";
+        try
+        {
+            StopOwnedServerForEject();
+            _serverUrl = null;
+            Browser.Dispose();
+            _browserDisposed = true;
+            ExternalLibraryVolumeRecord.Save(
+                ExternalLibraryVolumeStatePath,
+                ejectTarget,
+                outcome.SyncthingManaged);
+        }
+        catch (Exception error)
+        {
+            SetLoading(
+                "The library is disconnected, but the drive was not ejected",
+                error.Message,
+                chooseFolder: false,
+                busy: false);
+            SetShellStatus("Drive disconnected", ShellStatus.Attention);
+            _libraryDriveOperationInProgress = false;
+            _openingLibrary = false;
+            MessageBox.Show(
+                this,
+                "The eject sequence stopped after Syncthing disconnected. Windows was not asked to eject "
+                + "the drive, and Lattice will close to release any remaining local handles.\n\n" + error.Message,
+                "Drive disconnected — not ejected",
+                MessageBoxButton.OK,
+                MessageBoxImage.Warning);
+            Application.Current.Shutdown();
+            return;
+        }
+
+        SetLoading(
+            "Ejecting…",
+            $"Waiting for Windows to safely remove {ejectTarget.DeviceInstanceId}",
+            chooseFolder: false,
+            busy: true);
+        SetShellStatus("Ejecting…", ShellStatus.Loading);
+
+        NativeEjectResult ejectResult;
+        try
+        {
+            ejectResult = await Task.Run(() => NativeDriveEjector.RequestEject(ejectTarget));
+        }
+        catch (Exception error)
+        {
+            SetLoading(
+                "The library is disconnected, but Windows did not eject the drive",
+                error.Message,
+                chooseFolder: false,
+                busy: false);
+            SetShellStatus("Eject failed", ShellStatus.Attention);
+            _libraryDriveOperationInProgress = false;
+            _openingLibrary = false;
+            MessageBox.Show(
+                this,
+                "The library remains disconnected and the drive was not ejected.\n\n" + error.Message,
+                "Windows eject failed",
+                MessageBoxButton.OK,
+                MessageBoxImage.Warning);
+            Application.Current.Shutdown();
+            return;
+        }
+
+        if (!ejectResult.Success)
+        {
+            SetLoading(
+                "The library is disconnected, but Windows did not eject the drive",
+                ejectResult.FailureDetail,
+                chooseFolder: false,
+                busy: false);
+            SetShellStatus("Eject vetoed", ShellStatus.Attention);
+            _libraryDriveOperationInProgress = false;
+            _openingLibrary = false;
+            MessageBox.Show(
+                this,
+                "Windows vetoed the native eject request. The library remains disconnected and the drive "
+                + "was not ejected.\n\n" + ejectResult.FailureDetail,
+                "Windows blocked eject",
+                MessageBoxButton.OK,
+                MessageBoxImage.Warning);
+            Application.Current.Shutdown();
+            return;
+        }
+
         MessageBox.Show(
             this,
-            detail,
-            "Library drive is ready",
+            "Windows accepted the native eject request and removed the USB storage device.\n\nSafe to unplug.",
+            "Safe to unplug",
             MessageBoxButton.OK,
             MessageBoxImage.Information);
         _libraryDriveOperationInProgress = false;
@@ -2023,41 +2233,96 @@ public partial class MainWindow : Window
             return;
         }
 
+        ExternalLibraryVolumeState? externalVolume = null;
+        try
+        {
+            externalVolume = ExternalLibraryVolumeRecord.Read(ExternalLibraryVolumeStatePath);
+        }
+        catch (Exception error)
+        {
+            MessageBox.Show(
+                this,
+                "Lattice could not read the saved external-drive record. " + error.Message,
+                "Reconnect library sync",
+                MessageBoxButton.OK,
+                MessageBoxImage.Warning);
+            return;
+        }
+
+        _ = await ReconnectLibrarySyncAsync(
+            _libraryRoot,
+            externalVolume,
+            automatic: false);
+    }
+
+    private async Task<bool> ReconnectLibrarySyncAsync(
+        string libraryRoot,
+        ExternalLibraryVolumeState? externalVolume,
+        bool automatic)
+    {
+        if (_libraryDriveOperationInProgress) return false;
         _libraryDriveOperationInProgress = true;
         SetLibrarySwitchingEnabled(false);
         SetShellStatus("Reconnecting library sync", ShellStatus.Loading);
+        if (automatic)
+        {
+            SetLoading(
+                "Reconnecting the library drive…",
+                "Restarting Syncthing, rescanning the folder, and waiting for Up to Date",
+                chooseFolder: false,
+                busy: true);
+        }
+
         try
         {
+            var progress = new Progress<LibraryMoveProgress>(update =>
+            {
+                if (automatic) LoadingDetail.Text = update.Message;
+            });
             var outcome = await LibraryMoveClient.ReconnectAsync(
-                _libraryRoot,
+                libraryRoot,
                 LibraryDisconnectStatePath,
-                startIfNeeded: true);
+                startIfNeeded: true,
+                previousSource: externalVolume?.OriginalLibraryRoot,
+                progress: progress);
+            if (externalVolume?.SyncthingManaged == true && !outcome.SyncthingManaged)
+            {
+                throw new InvalidOperationException(
+                    "The saved drive was managed by Syncthing, but Lattice could not verify that exact folder binding.");
+            }
             if (outcome.SyncthingManaged && outcome.FolderPaused)
             {
                 var resume = MessageBox.Show(
                     this,
-                    "Syncthing is running, but the Lattice folder is still paused. "
-                    + "Resume this exact folder now?",
+                    "Syncthing is running, but the Lattice folder was already paused before disconnect. "
+                    + "Resume this exact folder, rescan it, and wait for Up to Date now?",
                     "Library sync is paused",
                     MessageBoxButton.YesNo,
                     MessageBoxImage.Question);
                 if (resume == MessageBoxResult.Yes)
                 {
-                    SetShellStatus("Resuming library sync", ShellStatus.Loading);
+                    SetShellStatus("Resuming and rescanning library sync", ShellStatus.Loading);
                     outcome = await LibraryMoveClient.ReconnectAsync(
-                        _libraryRoot,
+                        libraryRoot,
                         LibraryDisconnectStatePath,
                         startIfNeeded: true,
-                        resumeExistingPause: true);
+                        resumeExistingPause: true,
+                        previousSource: externalVolume?.OriginalLibraryRoot,
+                        progress: progress);
                 }
             }
+
+            var healthy = outcome.SyncthingManaged
+                ? outcome.SyncthingRunning && !outcome.FolderPaused
+                : externalVolume?.SyncthingManaged != true;
+            if (healthy && externalVolume is not null)
+                ExternalLibraryVolumeRecord.Delete(ExternalLibraryVolumeStatePath);
+
             var detail = !outcome.SyncthingManaged
                 ? "This library is not managed by Syncthing. No sync setting was changed."
                 : outcome.FolderPaused
-                    ? "Syncthing is running, but the Lattice folder remains paused. No library files are syncing."
-                    : outcome.ResumedByLattice || outcome.ResumedExistingPause
-                        ? "Lattice resumed the exact library folder and verified that synchronization is active again."
-                        : "Syncthing is online and the Lattice library is synchronized.";
+                    ? "Syncthing is online, but the existing pause was preserved. The library was not reported Up to Date."
+                    : "Syncthing is online, the exact Lattice folder was rescanned, and its status is Up to Date.";
             MessageBox.Show(
                 this,
                 detail,
@@ -2065,18 +2330,20 @@ public partial class MainWindow : Window
                     ? "Library sync is unavailable"
                     : outcome.FolderPaused
                         ? "Library sync remains paused"
-                        : "Library sync connected",
+                        : "Library drive reconnected",
                 MessageBoxButton.OK,
                 outcome.FolderPaused ? MessageBoxImage.Warning : MessageBoxImage.Information);
+            return healthy;
         }
         catch (Exception error)
         {
             MessageBox.Show(
                 this,
-                "Lattice could not reconnect Syncthing. " + error.Message,
+                "Lattice could not reconnect and verify Syncthing. " + error.Message,
                 "Reconnect library sync",
                 MessageBoxButton.OK,
                 MessageBoxImage.Warning);
+            return false;
         }
         finally
         {
@@ -2112,7 +2379,7 @@ public partial class MainWindow : Window
         SaveWindowBounds();
         _lifetime.Cancel();
         StopOwnedServer();
-        Browser.Dispose();
+        if (!_browserDisposed) Browser.Dispose();
         _lifetime.Dispose();
     }
 
