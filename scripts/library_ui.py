@@ -2013,11 +2013,66 @@ def _windows_command_processor(*, forbidden_root: Path) -> str | None:
     return None
 
 
+def _windows_batch_argument(value: str) -> str | None:
+    """Quote one argument for a single, raw cmd.exe /c command string.
+
+    Python's list-to-command-line conversion follows the Microsoft C runtime
+    rules, not cmd.exe's /c rules. Passing an already-assembled batch command
+    as the final item of another argv list therefore escapes its quotes a
+    second time. Build the /c payload once and hand it to CreateProcess as a
+    string instead. Percent expansion cannot be disabled by quoting, so fail
+    closed for that uncommon filename character rather than changing a Tutor
+    filesystem grant.
+    """
+    if any(character in value for character in ("\x00", "\r", "\n", "%")):
+        return None
+    encoded = ['"']
+    backslashes = 0
+    for character in value:
+        if character == "\\":
+            backslashes += 1
+            continue
+        if character == '"':
+            encoded.append("\\" * (backslashes * 2 + 1))
+            encoded.append('"')
+            backslashes = 0
+            continue
+        if backslashes:
+            encoded.append("\\" * backslashes)
+            backslashes = 0
+        encoded.append(character)
+    if backslashes:
+        encoded.append("\\" * (backslashes * 2))
+    encoded.append('"')
+    return "".join(encoded)
+
+
+def _windows_batch_command(
+    command_processor: str,
+    executable: str,
+    arguments: list[str],
+) -> str | None:
+    """Return a raw cmd.exe command line that preserves nested TOML quotes."""
+    processor = _windows_batch_argument(command_processor)
+    if processor is None:
+        return None
+    encoded: list[str] = []
+    for value in (executable, *arguments):
+        argument = _windows_batch_argument(value)
+        if argument is None:
+            return None
+        encoded.append(argument)
+    payload = " ".join(encoded)
+    # With /s, cmd.exe removes only this first/last pair and leaves the inner
+    # command unchanged. /v:off also prevents delayed !variable! expansion.
+    return f'{processor} /d /s /v:off /c "{payload}"'
+
+
 def _codex_executable_command(
     arguments: list[str],
     *,
     library_root: Path = REPO_ROOT,
-) -> list[str] | None:
+) -> list[str] | str | None:
     windows = _is_windows_platform()
     names = (
         ["codex.exe", "codex.cmd", "codex.bat", "codex"]
@@ -2058,8 +2113,11 @@ def _codex_executable_command(
         command_processor = _windows_command_processor(forbidden_root=forbidden_root)
         if command_processor is None:
             return None
-        command_line = subprocess.list2cmdline(command)
-        return [command_processor, "/d", "/s", "/c", command_line]
+        return _windows_batch_command(
+            command_processor,
+            executable_string,
+            arguments,
+        )
     return command
 
 

@@ -83,6 +83,7 @@ MAX_ANSWER_CHARS = 40_000
 MAX_CONTEXT_CHARS = 38_000
 MAX_CONTEXT_CHUNKS = 12
 MAX_CHUNKS_PER_SOURCE = 4
+MAX_CODEX_STDERR_CHARS = 64 * 1024
 MAX_SOURCE_TEXT_CHARS = 32 * 1024 * 1024
 MAX_ARCHIVE_MEMBER_BYTES = 4 * 1024 * 1024
 MAX_ARCHIVE_MEMBERS = 20_000
@@ -1042,7 +1043,7 @@ class TutorManager:
         root: Path,
         library_id: str,
         *,
-        command_builder: Callable[[list[str]], list[str] | None],
+        command_builder: Callable[[list[str]], list[str] | str | None],
         login_status: Callable[[], dict[str, Any]],
         cache_root: Path | None = None,
     ) -> None:
@@ -1057,6 +1058,8 @@ class TutorManager:
         self._sessions: dict[str, dict[str, Any]] = {}
         self._sessions_lock = threading.RLock()
         self._execution_slots = threading.BoundedSemaphore(2)
+        self._diagnostic_lock = threading.Lock()
+        self.diagnostic_log_path = self.index.cache_root / "last-codex-stderr.log"
 
     def status(
         self,
@@ -1430,6 +1433,63 @@ CURRENT USER QUESTION
 
 Answer as a tutor. Source-dependent claims need numbered citations. A citation source must be an exact SOURCE KEY shown above or an exact path in the active manifest. Video source keys use video:<course-id>; the video metadata does not establish what was said inside a recording."""
 
+    def _save_codex_stderr(
+        self,
+        value: str | bytes | None,
+        *,
+        returncode: int | None,
+        outcome: str,
+    ) -> Path | None:
+        """Persist the latest bounded Codex diagnostic outside the library."""
+        if isinstance(value, bytes):
+            stderr = value.decode("utf-8", errors="replace")
+        else:
+            stderr = str(value or "")
+        stderr = stderr.replace("\x00", "").replace("\r\n", "\n").strip()
+        if not stderr:
+            return None
+        if len(stderr) > MAX_CODEX_STDERR_CHARS:
+            stderr = (
+                "[earlier Codex stderr truncated by Lattice]\n"
+                + stderr[-MAX_CODEX_STDERR_CHARS:]
+            )
+        content = "\n".join(
+            (
+                "Lattice Tutor Codex diagnostic",
+                f"RecordedUtc: {time.strftime('%Y-%m-%dT%H:%M:%SZ', time.gmtime())}",
+                f"Outcome: {outcome}",
+                f"ExitCode: {returncode if returncode is not None else 'unknown'}",
+                "",
+                stderr,
+                "",
+            )
+        )
+        temporary_path: Path | None = None
+        try:
+            with self._diagnostic_lock:
+                self.diagnostic_log_path.parent.mkdir(parents=True, exist_ok=True)
+                temporary_path = self.diagnostic_log_path.with_name(
+                    f".{self.diagnostic_log_path.name}.{secrets.token_hex(8)}.tmp"
+                )
+                temporary_path.write_text(content, encoding="utf-8")
+                try:
+                    temporary_path.chmod(0o600)
+                except OSError:
+                    pass
+                os.replace(temporary_path, self.diagnostic_log_path)
+            return self.diagnostic_log_path
+        except OSError:
+            if temporary_path is not None:
+                try:
+                    temporary_path.unlink(missing_ok=True)
+                except OSError:
+                    pass
+            logging.getLogger(__name__).warning(
+                "Could not save the local Lattice Tutor Codex diagnostic",
+                exc_info=True,
+            )
+            return None
+
     def _run_codex(
         self,
         *,
@@ -1509,7 +1569,7 @@ Answer as a tutor. Source-dependent claims need numbered citations. A citation s
                     command,
                     stdin=subprocess.PIPE,
                     stdout=subprocess.PIPE,
-                    stderr=subprocess.DEVNULL,
+                    stderr=subprocess.PIPE,
                     text=True,
                     encoding="utf-8",
                     errors="replace",
@@ -1520,17 +1580,36 @@ Answer as a tutor. Source-dependent claims need numbered citations. A citation s
             except OSError as exc:
                 raise TutorRequestError("Codex could not start on this computer") from exc
             session["process"] = process
+            diagnostic_path: Path | None = None
             try:
-                stdout, _stderr = process.communicate(prompt, timeout=TUTOR_TIMEOUT_SECONDS)
+                stdout, stderr = process.communicate(prompt, timeout=TUTOR_TIMEOUT_SECONDS)
             except subprocess.TimeoutExpired as exc:
                 _terminate_process(process)
+                try:
+                    _stdout, stderr = process.communicate(timeout=2)
+                except (OSError, ValueError, subprocess.SubprocessError):
+                    stderr = exc.stderr
+                self._save_codex_stderr(
+                    stderr or exc.stderr,
+                    returncode=process.returncode,
+                    outcome="timeout",
+                )
                 raise TutorRequestError("Tutor took too long; try a smaller source scope") from exc
             finally:
                 session["process"] = None
+            diagnostic_path = self._save_codex_stderr(
+                stderr,
+                returncode=process.returncode,
+                outcome="completed" if process.returncode == 0 else "failed",
+            )
             if process.returncode != 0:
-                raise TutorRequestError(
-                    "Codex could not complete this tutor turn. Check your sign-in and model access."
+                message = (
+                    f"Codex exited with code {process.returncode} "
+                    "before completing the Tutor turn."
                 )
+                if diagnostic_path is not None:
+                    message += f" Details were saved to {diagnostic_path}."
+                raise TutorRequestError(message)
             messages: list[str] = []
             for line in stdout.splitlines():
                 try:
@@ -1549,7 +1628,10 @@ Answer as a tutor. Source-dependent claims need numbered citations. A citation s
                     continue
                 if isinstance(value, dict) and isinstance(value.get("answer"), str):
                     return value
-            raise TutorRequestError("Tutor returned an unreadable response; please try again")
+            message = "Tutor returned an unreadable response; please try again."
+            if diagnostic_path is not None:
+                message += f" Codex details were saved to {diagnostic_path}."
+            raise TutorRequestError(message)
 
     @staticmethod
     def _validate_citations(

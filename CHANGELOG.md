@@ -1,5 +1,18 @@
 # Changelog
 
+## 2.3.1 — 2026-08-23
+
+### Fixed
+
+- Windows Tutor now launches `codex.cmd` through one explicit `cmd.exe`
+  quoting boundary, preserving the quoted TOML filesystem-permission values
+  that Codex requires even when paths contain spaces, command metacharacters,
+  or trailing backslashes.
+- Tutor now preserves the latest bounded Codex stderr output in its private
+  per-device cache and reports the Codex exit code plus diagnostic-log path,
+  instead of hiding the underlying failure behind a generic sign-in or model
+  access message.
+
 ## 2.3.0 — 2026-08-23
 
 ### Added

@@ -306,6 +306,43 @@ class TutorManagerTests(unittest.TestCase):
         self.assertNotIn("HTTPS_PROXY", environment)
         self.assertEqual(environment["PATH"], "/usr/bin")
 
+    def test_codex_stderr_is_preserved_and_failure_is_not_misreported_as_auth(self) -> None:
+        child = (
+            "import sys; sys.stdin.read(); "
+            "sys.stderr.write('error: invalid filesystem permission map; expected quoted keys\\n'); "
+            "raise SystemExit(17)"
+        )
+        cache = Path(self.temporary.name) / "stderr-cache"
+        manager = lattice_tutor.TutorManager(
+            self.root,
+            "stderr",
+            command_builder=lambda _arguments: [sys.executable, "-c", child],
+            login_status=lambda: {"ready": True},
+            cache_root=cache,
+        )
+        try:
+            with self.assertRaises(lattice_tutor.TutorRequestError) as raised:
+                manager._run_codex(
+                    model="gpt-5.6-luna",
+                    effort="low",
+                    prompt="fixture",
+                    allowed_paths=[self.source.resolve()],
+                    denied_paths=[],
+                    session={"process": None},
+                )
+        finally:
+            manager.close()
+        message = str(raised.exception)
+        self.assertIn("Codex exited with code 17", message)
+        self.assertNotIn("sign-in", message.casefold())
+        self.assertNotIn("model access", message.casefold())
+        diagnostic = cache / "last-codex-stderr.log"
+        self.assertTrue(diagnostic.is_file())
+        content = diagnostic.read_text(encoding="utf-8")
+        self.assertIn("Outcome: failed", content)
+        self.assertIn("ExitCode: 17", content)
+        self.assertIn("invalid filesystem permission map", content)
+
 
 if __name__ == "__main__":
     unittest.main()

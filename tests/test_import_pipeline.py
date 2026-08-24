@@ -4,6 +4,8 @@ import hashlib
 import http.client
 import io
 import json
+import os
+import shutil
 import subprocess
 import sys
 import tempfile
@@ -1219,17 +1221,81 @@ class CodexCommandResolutionTests(unittest.TestCase):
                     return_value=[official],
                 ):
                     command = library_ui._codex_executable_command(
-                        ["exec", "book title"],
+                        [
+                            "exec",
+                            "book title",
+                            "-c",
+                            'permissions.lattice-tutor.filesystem={"C:\\\\Library Books\\\\book.pdf"="read"}',
+                        ],
                         library_root=root,
                     )
                 self.assertIsNotNone(command)
                 assert command is not None
-                self.assertEqual(
-                    command[:4],
-                    [str(command_processor.resolve()), "/d", "/s", "/c"],
+                self.assertIsInstance(command, str)
+                assert isinstance(command, str)
+                self.assertTrue(
+                    command.startswith(
+                        f'"{str(command_processor.resolve())}" /d /s /v:off /c '
+                    )
                 )
-                self.assertIn(str(executable.resolve()), command[4])
-                self.assertIn('"book title"', command[4])
+                self.assertIn(f'"{str(executable.resolve())}"', command)
+                self.assertIn('"book title"', command)
+                self.assertIn(
+                    r'permissions.lattice-tutor.filesystem={\"C:\\Library Books\\book.pdf\"=\"read\"}',
+                    command,
+                )
+                self.assertNotIn(r'{\\\"C:', command)
+
+    @unittest.skipUnless(os.name == "nt", "requires the Windows command processor")
+    def test_windows_cmd_runtime_preserves_toml_quotes(self) -> None:
+        node = shutil.which("node")
+        if not node:
+            self.skipTest("Node.js is unavailable")
+        with tempfile.TemporaryDirectory() as temporary_name:
+            temporary = Path(temporary_name)
+            root = temporary / "library"
+            official = temporary / "Codex Wrapper With Spaces"
+            capture_script = temporary / "capture-arguments.js"
+            capture_path = temporary / "captured.json"
+            root.mkdir()
+            official.mkdir()
+            capture_script.write_text(
+                "require('fs').writeFileSync(process.env.LATTICE_CAPTURE_PATH, "
+                "JSON.stringify(process.argv.slice(2)));\n",
+                encoding="utf-8",
+            )
+            wrapper = official / "codex.cmd"
+            wrapper.write_text(
+                f'@echo off\r\n"{node}" "{capture_script}" %*\r\n',
+                encoding="utf-8",
+            )
+            arguments = [
+                "exec",
+                "-c",
+                'permissions.lattice-tutor.filesystem={"C:\\\\Library Books\\\\book.pdf"="read"}',
+                "-c",
+                'developer_instructions="Teach with care"',
+                "chapter&appendix",
+                "C:\\path-ending-in-backslash\\",
+            ]
+            with mock.patch.object(
+                library_ui,
+                "_safe_codex_path_directories",
+                return_value=[Path(node).parent],
+            ), mock.patch.object(
+                library_ui,
+                "_codex_explicit_directories",
+                return_value=[official],
+            ):
+                command = library_ui._codex_executable_command(
+                    arguments,
+                    library_root=root,
+                )
+            self.assertIsInstance(command, str)
+            environment = dict(os.environ)
+            environment["LATTICE_CAPTURE_PATH"] = str(capture_path)
+            subprocess.run(command, check=True, env=environment)
+            self.assertEqual(json.loads(capture_path.read_text(encoding="utf-8")), arguments)
 
     def test_windows_library_cmd_is_rejected(self) -> None:
         with tempfile.TemporaryDirectory() as temporary_name:
