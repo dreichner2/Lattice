@@ -141,9 +141,16 @@ memory and disappear when reset or when the local service exits. Extracted
 source text is indexed only in a private per-device cache under
 `~/Library/Caches/Lattice/Tutor/` on macOS or
 `%LOCALAPPDATA%\Lattice\Tutor\` on Windows; it is outside the Syncthing folder.
+On Windows, Lattice retrieves the allowed excerpts itself and copies only the
+bounded turn context into one disposable read-only workspace under `%TEMP%`.
+Codex receives no direct filesystem grant to the library, so books can remain
+on an external SSD or another drive letter without creating split sandbox
+roots. The temporary workspace is removed when that Tutor turn ends.
 When Codex emits diagnostics, Lattice keeps the latest bounded stderr report as
 `last-codex-stderr.log` in that same private cache and includes its location in
-the Tutor error. Keep that report private because it can contain local paths.
+the Tutor error. A Codex launch or sandbox failure does not mean the in-memory
+Tutor session is corrupt, and clearing the conversation cannot repair it. Keep
+the diagnostic private because it can contain local paths.
 
 Video grounding includes course descriptions and lecture titles, not video,
 audio, captions, or transcripts, so Tutor never claims to have watched a
@@ -250,7 +257,7 @@ cd "$HOME\Lattice"
 & ".\windows\setup\Install Lattice and Connect.cmd"
 ```
 
-The setup downloads and installs the pinned Lattice `v2.3.1` release for the
+The setup downloads and installs the pinned Lattice `v2.3.2` release for the
 current user, installs official Syncthing `2.1.3` through WinGet when needed,
 selects this clone as the library, configures the Mac mini hub and shared folder
 on the Windows side, starts both apps, and copies the Windows Syncthing Device ID.

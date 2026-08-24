@@ -8,6 +8,7 @@ import sqlite3
 import sys
 import tempfile
 import threading
+import tomllib
 import unittest
 from unittest import mock
 
@@ -229,6 +230,39 @@ class TutorManagerTests(unittest.TestCase):
         self.assertEqual(context[0]["source"], "video:course-one")
         self.assertIn("Lecture 1: Shortest paths", context[0]["text"])
 
+    def test_windows_rejects_citations_for_sources_not_in_staged_context(self) -> None:
+        response = {
+            "answer": "The source might discuss Dijkstra. [1]",
+            "citations": [
+                {"source": "books/algorithms.txt", "locator": "document"},
+            ],
+        }
+        with mock.patch.object(
+            lattice_tutor,
+            "_uses_native_windows_sandbox",
+            return_value=True,
+        ), mock.patch.object(
+            self.manager.index,
+            "search",
+            return_value=[],
+        ), mock.patch.object(
+            self.manager,
+            "_run_codex",
+            return_value=response,
+        ):
+            result = self.manager.chat(
+                {
+                    "sessionId": "windows-grounding-0123456789",
+                    "message": "Explain Dijkstra's choice.",
+                    "scope": "selected",
+                    "workIds": ["eligible-work"],
+                },
+                self.library,
+                self.catalog,
+            )
+        self.assertEqual(result["citations"], [])
+        self.assertFalse(result["grounded"])
+
     def test_whole_library_scope_still_grants_only_eligible_exact_files(self) -> None:
         with mock.patch.object(
             self.manager,
@@ -270,14 +304,15 @@ class TutorManagerTests(unittest.TestCase):
             cache_root=Path(self.temporary.name) / "invocation-cache",
         )
         try:
-            result = manager._run_codex(
-                model="gpt-5.6-sol",
-                effort="max",
-                prompt="fixture",
-                allowed_paths=[self.source.resolve()],
-                denied_paths=[],
-                session={"process": None},
-            )
+            with mock.patch.object(lattice_tutor, "_uses_native_windows_sandbox", return_value=False):
+                result = manager._run_codex(
+                    model="gpt-5.6-sol",
+                    effort="max",
+                    prompt="fixture",
+                    allowed_paths=[self.source.resolve()],
+                    denied_paths=[],
+                    session={"process": None},
+                )
         finally:
             manager.close()
         self.assertEqual(result["answer"], "Grounded answer [1]")
@@ -290,6 +325,65 @@ class TutorManagerTests(unittest.TestCase):
         parent_grant = f"{lattice_tutor._toml_string(str(self.root / 'books'))}=\"read\""
         self.assertIn(source_grant, permission)
         self.assertNotIn(parent_grant, permission)
+
+    def test_windows_uses_one_disposable_read_only_excerpt_workspace(self) -> None:
+        captured: list[str] = []
+        observed: dict[str, object] = {}
+        response = json.dumps({"answer": "Grounded answer [1]", "citations": []})
+        child = (
+            "import json,sys; sys.stdin.read(); "
+            f"print(json.dumps({{'type':'item.completed','item':{{'type':'agent_message','text':{response!r}}}}}))"
+        )
+        prompt = "SELECTED EXCERPT: Dijkstra settles the nearest vertex."
+        external_source = Path(r"E:\Lattice Library\books\algorithms.pdf")
+
+        def command_builder(arguments: list[str]) -> list[str]:
+            captured.extend(arguments)
+            workspace = Path(arguments[arguments.index("-C") + 1])
+            context_path = workspace / "turn-context.txt"
+            schema_path = Path(arguments[arguments.index("--output-schema") + 1])
+            observed["workspace"] = workspace
+            observed["context"] = context_path.read_text(encoding="utf-8")
+            observed["schema_parent"] = schema_path.parent
+            return [sys.executable, "-c", child]
+
+        manager = lattice_tutor.TutorManager(
+            self.root,
+            "windows-workspace",
+            command_builder=command_builder,
+            login_status=lambda: {"ready": True},
+            cache_root=Path(self.temporary.name) / "windows-workspace-cache",
+        )
+        try:
+            with mock.patch.object(lattice_tutor, "_uses_native_windows_sandbox", return_value=True):
+                result = manager._run_codex(
+                    model="gpt-5.6-luna",
+                    effort="low",
+                    prompt=prompt,
+                    allowed_paths=[external_source],
+                    denied_paths=[],
+                    session={"process": None},
+                )
+        finally:
+            manager.close()
+
+        workspace = observed["workspace"]
+        self.assertIsInstance(workspace, Path)
+        self.assertEqual(result["answer"], "Grounded answer [1]")
+        self.assertEqual(observed["context"], prompt)
+        self.assertEqual(observed["schema_parent"], workspace)
+        self.assertNotEqual(workspace, self.root)
+        self.assertFalse(workspace.exists())
+        permission = next(
+            value for value in captured if value.startswith("permissions.lattice-tutor.filesystem=")
+        )
+        profile = tomllib.loads(f"value={permission.split('=', 1)[1]}")["value"]
+        self.assertEqual(
+            profile,
+            {":minimal": "read", ":workspace_roots": {".": "read"}},
+        )
+        self.assertNotIn(str(self.root), "\n".join(captured))
+        self.assertNotIn(str(external_source), permission)
 
     def test_child_environment_drops_api_keys_and_proxy_credentials(self) -> None:
         with mock.patch.dict(

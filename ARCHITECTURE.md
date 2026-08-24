@@ -163,10 +163,13 @@ Each turn invokes the same installed, authenticated Codex CLI used by import
 enrichment, but as a fresh ephemeral run that ignores user configuration and
 repository rules. The child environment is allowlisted, model tools have no
 network access, apps/plugins/browser/computer-use/multi-agent features are
-disabled, and filesystem permission entries grant read access only to the exact
-eligible files in the active scope. Source text is labeled as untrusted data.
-The structured response schema and every returned citation are validated
-against that same scope before the browser can display or open them.
+disabled, and filesystem permissions stay read-only. macOS grants only the
+exact eligible files in the active scope. Windows stages the bounded turn
+context in a single disposable workspace and grants only that root, so the
+native sandbox never needs split permissions or access to an external library
+volume. Source text is labeled as untrusted data. The structured response
+schema and every returned citation are validated against that same scope before
+the browser can display or open them.
 
 ## Native reader data
 

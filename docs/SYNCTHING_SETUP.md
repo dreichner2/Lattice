@@ -22,7 +22,7 @@ cd "$HOME\Lattice"
 & ".\windows\setup\Install Lattice and Connect.cmd"
 ```
 
-The script validates the existing scaffold, installs the pinned Lattice `v2.3.1`
+The script validates the existing scaffold, installs the pinned Lattice `v2.3.2`
 package for the current user, installs official Syncthing `2.1.3` through
 WinGet when needed, saves the clone as Lattice's library, and configures this
 exact Syncthing folder on the Windows side:

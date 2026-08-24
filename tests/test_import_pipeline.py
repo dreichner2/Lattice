@@ -1225,7 +1225,7 @@ class CodexCommandResolutionTests(unittest.TestCase):
                             "exec",
                             "book title",
                             "-c",
-                            'permissions.lattice-tutor.filesystem={"C:\\\\Library Books\\\\book.pdf"="read"}',
+                            'permissions.lattice-tutor.filesystem={":minimal"="read",":workspace_roots"={"."="read"}}',
                         ],
                         library_root=root,
                     )
@@ -1241,10 +1241,10 @@ class CodexCommandResolutionTests(unittest.TestCase):
                 self.assertIn(f'"{str(executable.resolve())}"', command)
                 self.assertIn('"book title"', command)
                 self.assertIn(
-                    r'permissions.lattice-tutor.filesystem={\"C:\\Library Books\\book.pdf\"=\"read\"}',
+                    r'permissions.lattice-tutor.filesystem={\":minimal\"=\"read\",\":workspace_roots\"={\".\"=\"read\"}}',
                     command,
                 )
-                self.assertNotIn(r'{\\\"C:', command)
+                self.assertNotIn(r'{\\\":minimal', command)
 
     @unittest.skipUnless(os.name == "nt", "requires the Windows command processor")
     def test_windows_cmd_runtime_preserves_toml_quotes(self) -> None:
@@ -1272,7 +1272,7 @@ class CodexCommandResolutionTests(unittest.TestCase):
             arguments = [
                 "exec",
                 "-c",
-                'permissions.lattice-tutor.filesystem={"C:\\\\Library Books\\\\book.pdf"="read"}',
+                'permissions.lattice-tutor.filesystem={":minimal"="read",":workspace_roots"={"."="read"}}',
                 "-c",
                 'developer_instructions="Teach with care"',
                 "chapter&appendix",

@@ -39,7 +39,7 @@ malicious document is required.
 
 ### Windows installer and updater
 
-- The one-click bootstrap downloads the pinned `v2.3.1` Windows release and
+- The one-click bootstrap downloads the pinned `v2.3.2` Windows release and
   compares it with its published SHA-256 companion before installation. It does
   not use a mutable GitHub Actions artifact or require a GitHub token.
 - Automatic updates are supported only from the per-user versioned installation
@@ -249,9 +249,13 @@ possibly compromised key to authorize its own replacement.
   workspace-dependency, memory, hook, and multi-agent capabilities are disabled.
   Model-tool network access is disabled.
 - The child process receives an allowlisted environment without API keys or
-  proxy credentials. Its custom filesystem profile is read-only and grants only
-  the exact eligible files in the active source scope; unrelated library files,
-  sidecars, credential storage, and restricted editions remain denied.
+  proxy credentials. On macOS, its custom read-only filesystem profile grants
+  only the exact eligible files in the active source scope. On Windows, Lattice
+  instead writes the bounded, scope-filtered turn context to one disposable
+  workspace under the system temporary directory and makes that the only
+  granted Lattice content root. The original library, including external-drive
+  sources, unrelated sidecars, credential storage, restricted editions, and
+  the private Tutor index remain outside the Windows Codex filesystem scope.
 - PDFs, EPUBs, supported source archives, and plain text are extracted under
   bounded file, member, and text limits. The private SQLite/FTS cache is created
   outside the synchronized library with user-only directory/file modes where

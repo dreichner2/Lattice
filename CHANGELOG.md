@@ -1,5 +1,27 @@
 # Changelog
 
+## 2.3.2 — 2026-08-23
+
+### Fixed
+
+- Windows Tutor no longer asks Codex to enforce separate read grants for every
+  selected library file. Lattice now resolves and extracts the chosen material
+  itself, stages only the bounded turn context in one disposable read-only
+  workspace, and keeps the original library outside Codex's filesystem scope.
+  This also avoids direct sandbox grants to books stored on an external SSD or
+  another drive letter.
+- The supported single-workspace profile retains the `codex.cmd` quoting fix
+  from 2.3.1. Codex launch failures continue to report the real exit code and
+  preserve bounded stderr; they are not presented as corrupt Tutor sessions or
+  repaired by clearing a conversation.
+
+### Security
+
+- The Windows Codex child receives one isolated per-turn Lattice content root
+  under the system temporary directory. It receives no grant to the original
+  library root, selected source paths, unrelated volumes, or the private Tutor
+  index.
+
 ## 2.3.1 — 2026-08-23
 
 ### Fixed
