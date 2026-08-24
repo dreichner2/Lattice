@@ -92,6 +92,9 @@ jobs:
           $testAppData = Join-Path $env:RUNNER_TEMP "lattice-onboarding-appdata"
           $installDestination = Join-Path $testLocalAppData "Programs\Lattice"
           $package = (Resolve-Path "windows/build/package-win-x64").Path
+          $packageMetadata = Get-Content (Join-Path $package "update-package.json") -Raw |
+            ConvertFrom-Json
+          $expectedVersion = [string]$packageMetadata.version
           $entry = (Resolve-Path "windows/setup/Setup-LatticeWindows.ps1").Path
           $libraryRoot = (Resolve-Path ".").Path
           $expectedSyncthingSha256 = "c0b79cffa6ce5dad5ed41ede86454f3325d13ccac33447a528cb59d65fbc3a21"
@@ -153,7 +156,7 @@ jobs:
             $activePath = Join-Path $installDestination "active-version.json"
             if (-not (Test-Path $activePath)) { throw "Onboarding did not install Lattice." }
             $active = Get-Content $activePath -Raw | ConvertFrom-Json
-            if ($active.version -ne "2.3.1") { throw "Onboarding selected the wrong Lattice version." }
+            if ($active.version -ne $expectedVersion) { throw "Onboarding selected the wrong Lattice version." }
             $startupShortcut = Join-Path $testAppData "Microsoft\Windows\Start Menu\Programs\Startup\Lattice Syncthing.lnk"
             if (-not (Test-Path $startupShortcut)) { throw "Onboarding did not create the Syncthing startup shortcut." }
             [xml]$configured = Get-Content $configPath -Raw
@@ -345,6 +348,9 @@ jobs:
         shell: pwsh
         run: |
           $package = (Resolve-Path "windows/build/package-win-x64").Path
+          $packageMetadata = Get-Content (Join-Path $package "update-package.json") -Raw |
+            ConvertFrom-Json
+          $expectedVersion = [string]$packageMetadata.version
           $destination = Join-Path $env:RUNNER_TEMP "lattice-installer-smoke"
           $testAppData = Join-Path $env:RUNNER_TEMP "lattice-installer-appdata"
           $installer = Join-Path $package "Install Lattice.ps1"
@@ -362,7 +368,7 @@ jobs:
             $activePath = Join-Path $destination "active-version.json"
             if (-not (Test-Path $activePath)) { throw "Installer did not write active-version.json" }
             $active = Get-Content $activePath -Raw | ConvertFrom-Json
-            if ($active.schemaVersion -ne 1 -or $active.version -ne "2.3.1") {
+            if ($active.schemaVersion -ne 1 -or $active.version -ne $expectedVersion) {
               throw "Installer selected an unexpected active version: $($active.version)"
             }
             $versionRoot = Join-Path (Join-Path $destination "versions") ([string]$active.version)
@@ -394,6 +400,9 @@ jobs:
           $testAppData = Join-Path $env:RUNNER_TEMP "lattice-update-appdata"
           $installDestination = Join-Path $testLocalAppData "Programs\Lattice"
           $currentPackage = (Resolve-Path "windows/build/package-win-x64").Path
+          $packageMetadata = Get-Content (Join-Path $currentPackage "update-package.json") -Raw |
+            ConvertFrom-Json
+          $candidateVersion = [string]$packageMetadata.version
           $libraryRoot = (Resolve-Path ".").Path
           $previousLocalAppData = $env:LOCALAPPDATA
           $previousAppData = $env:APPDATA
@@ -426,7 +435,7 @@ jobs:
             if ($LASTEXITCODE -ne 0) { throw "The pinned 2.0.1 package did not install." }
 
             $legacyExecutable = Join-Path $installDestination "versions\2.0.1\Lattice.exe"
-            $candidateDirectory = Join-Path $installDestination "versions\2.3.1"
+            $candidateDirectory = Join-Path $installDestination "versions\$candidateVersion"
             New-Item $candidateDirectory -ItemType Directory -Force | Out-Null
             Get-ChildItem $currentPackage -Force |
               Copy-Item -Destination $candidateDirectory -Recurse -Force
@@ -464,7 +473,7 @@ jobs:
               tokenSha256 = $tokenHash
               createdAt = [DateTimeOffset]::UtcNow.ToString("O")
               previousVersion = "2.0.1"
-              candidateVersion = "2.3.1"
+              candidateVersion = $candidateVersion
               candidateDirectory = $candidateDirectory
             } | ConvertTo-Json -Compress |
               Set-Content (Join-Path $pendingRoot "$activationId.json") -Encoding utf8
@@ -484,18 +493,18 @@ jobs:
               Start-Sleep -Milliseconds 250
               $candidate.Refresh()
               if ($candidate.HasExited) {
-                throw "The 2.3.1 update candidate exited before promotion."
+                throw "The $candidateVersion update candidate exited before promotion."
               }
               $activePath = Join-Path $installDestination "active-version.json"
               if (Test-Path $activePath) {
                 $activeVersion = (Get-Content $activePath -Raw | ConvertFrom-Json).version
               }
             } while (
-              $activeVersion -ne "2.3.1" -and
+              $activeVersion -ne $candidateVersion -and
               [DateTimeOffset]::UtcNow -lt $promotionDeadline
             )
-            if ($activeVersion -ne "2.3.1") {
-              throw "The 2.3.1 candidate did not become active."
+            if ($activeVersion -ne $candidateVersion) {
+              throw "The $candidateVersion candidate did not become active."
             }
             if (-not $legacy.WaitForExit(20000)) {
               throw "The superseded 2.0.1 Lattice window remained open after verified promotion."

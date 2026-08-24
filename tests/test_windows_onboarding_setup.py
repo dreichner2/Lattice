@@ -123,6 +123,15 @@ class WindowsOnboardingSetupTests(unittest.TestCase):
         self.assertIn("$resumed.resumedExistingPause -ne $true", self.workflow)
         self.assertIn("The dedicated Lattice Syncthing process still exists", self.workflow)
 
+    def test_windows_ci_derives_current_version_from_built_package(self) -> None:
+        pinned = re.search(r'\$LatticeVersion\s*=\s*"v([0-9.]+)"', self.entry)
+        self.assertIsNotNone(pinned)
+        assert pinned is not None
+        self.assertNotIn(f'"{pinned.group(1)}"', self.workflow)
+        self.assertGreaterEqual(self.workflow.count('"update-package.json"'), 3)
+        self.assertIn("$active.version -ne $expectedVersion", self.workflow)
+        self.assertIn("$activeVersion -ne $candidateVersion", self.workflow)
+
     def test_no_obvious_hard_coded_secret_assignment(self) -> None:
         secret_assignment = re.compile(
             r"(?im)^\s*\$(?:password|api_?key|token)\s*=\s*['\"][^$'\"]+['\"]"
