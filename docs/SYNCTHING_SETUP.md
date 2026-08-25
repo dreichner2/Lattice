@@ -87,8 +87,8 @@ interpret that as deletion. On a Windows or macOS client, use Lattice's native
 **Move Library** command instead:
 
 1. connect the destination drive and wait for Syncthing to show **Up to Date**;
-2. in Windows, open the library-options menu and choose **Move library to
-   another drive…**; on macOS choose **File → Move Library to External
+2. in Windows, open the library-options menu and choose **Move reading
+   library**; on macOS choose **File → Move Reading Library to External
    Storage…**;
 3. select the drive or a destination folder and keep it connected until Lattice
    reports success; and
@@ -103,6 +103,12 @@ library. If any preflight, copy, verification, configuration, or post-scan gate
 fails, the original remains intact. Lattice restores Syncthing's old path and
 pause state when its API remains reachable. If restoration cannot be confirmed,
 both copies are retained and the error identifies the path that needs checking.
+
+The installed Lattice app never moves with this command. The executable,
+updater, WebView profile, private reader data, Tutor cache, and bundled runtimes
+stay on internal storage. The lightweight Git checkout travels with the reading
+payloads because it supplies the catalog, stable relative paths, import rules,
+and the root-level Syncthing allowlist.
 
 An unplugged drive makes `.stfolder` unavailable, so Syncthing stops the folder
 instead of treating the whole library as deleted. On Windows, Lattice saves the

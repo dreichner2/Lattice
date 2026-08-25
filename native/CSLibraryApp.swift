@@ -535,11 +535,11 @@ final class AppDelegate: NSObject, NSApplicationDelegate, WKNavigationDelegate, 
 
         let confirmation = NSAlert()
         confirmation.alertStyle = .informational
-        confirmation.messageText = "Move the complete Lattice library?"
+        confirmation.messageText = "Move the Lattice reading library?"
         confirmation.informativeText = """
         Destination: \(destination.path)
 
-        Lattice will require Syncthing to be Up to Date, pause it, copy and verify every file, redirect the same folder ID, and only then remove the old copy. Keep the drive connected until Lattice reopens.
+        The installed app, updater, and private reader data stay on this Mac. Lattice will move the selected library checkout, including its publications and adjacent metadata. It will require Syncthing to be Up to Date, pause it, copy and verify every file, redirect the same folder ID, and only then remove the old copy. Keep the drive connected until Lattice reopens.
         """
         confirmation.addButton(withTitle: "Move Library")
         confirmation.addButton(withTitle: "Cancel")
@@ -1470,7 +1470,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, WKNavigationDelegate, 
         let fileMenu = NSMenu(title: "File")
         addMenuItem(fileMenu, "Add Materials…", #selector(addBooks(_:)), "o", [.command, .shift])
         addMenuItem(fileMenu, "Choose Library Folder…", #selector(chooseLibraryFolder(_:)))
-        addMenuItem(fileMenu, "Move Library to External Storage…", #selector(moveLibrary(_:)))
+        addMenuItem(fileMenu, "Move Reading Library to External Storage…", #selector(moveLibrary(_:)))
         addMenuItem(fileMenu, "Disconnect Library Drive…", #selector(disconnectLibraryDrive(_:)))
         addMenuItem(fileMenu, "Reconnect Library Sync…", #selector(reconnectLibrarySync(_:)))
         fileMenu.addItem(.separator())

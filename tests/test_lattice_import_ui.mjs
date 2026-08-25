@@ -70,8 +70,10 @@ test("macOS queues file-open imports until the local service is ready", () => {
   assert.match(MAC_APP, /let duplicate = payload\?\["duplicate"\] as\? Bool == true/);
 });
 
-test("macOS Move Library delegates to the verified shared storage helper", () => {
-  assert.match(MAC_APP, /Move Library to External Storage…/);
+test("Move Library keeps the installed app and private state local", () => {
+  assert.match(HTML, /<strong>Move reading library<\/strong><small>Keep the app local; relocate publications<\/small>/);
+  assert.match(MAC_APP, /Move Reading Library to External Storage…/);
+  assert.match(MAC_APP, /The installed app, updater, and private reader data stay on this Mac/);
   assert.match(MAC_APP, /#selector\(moveLibrary\(_:\)\)/);
   assert.match(MAC_APP, /--folder-id", "cs-library-3b8290f24f15"/);
   assert.match(MAC_APP, /--protected-path", Bundle\.main\.bundleURL\.path/);

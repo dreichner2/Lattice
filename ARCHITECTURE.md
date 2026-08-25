@@ -57,6 +57,12 @@ The native Windows and macOS shells expose Move Library, backed by the bundled
 `scripts/move_library.py` helper (a standalone `LatticeStorage.exe` in the
 Windows package). The helper treats relocation as a gated transaction:
 
+Move Library relocates the selected reading-library checkout, not the installed
+application or private reader state. Executables, update infrastructure, WebView
+profiles, Tutor data, and language runtimes remain on internal storage. Keeping
+the small catalog/scaffold beside the payload roots preserves stable relative
+paths, adjacent sidecars, library identity, and the established Syncthing root.
+
 1. validate the complete library and reject linked or special filesystem
    entries, nested destinations, insufficient capacity, and an app running from
    inside the library;
