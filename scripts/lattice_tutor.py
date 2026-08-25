@@ -1401,18 +1401,6 @@ class TutorManager:
         )
         return f"permissions.lattice-tutor.filesystem={{{body}}}"
 
-    @staticmethod
-    def _isolated_workspace_permission_config() -> str:
-        # Native Windows refuses permission profiles with disjoint read roots.
-        # The turn runs from one temporary workspace, so this is the only
-        # Lattice content root Codex receives on that platform.
-        return (
-            'permissions.lattice-tutor.filesystem={'
-            '":minimal"="read",'
-            '":workspace_roots"={"."="read"}'
-            '}'
-        )
-
     def _codex_prompt(
         self,
         message: str,
@@ -1526,15 +1514,14 @@ Answer as a tutor. Source-dependent claims need numbered citations. A citation s
             )
             isolated_windows_workspace = _uses_native_windows_sandbox()
             if isolated_windows_workspace:
-                # Do not expose multiple library paths to the native Windows
-                # sandbox. The locally retrieved, scope-filtered excerpts are
-                # copied into this single disposable root for the duration of
-                # one turn; the original library remains outside its reach.
+                # Native Windows cannot enforce a custom profile that splits
+                # readable filesystem roots. Keep the original library outside
+                # Codex entirely: stage only the locally retrieved excerpts in
+                # this disposable root, use Codex's standard read-only sandbox,
+                # and remove every local-content tool from the turn.
                 context_path = temporary_root / "turn-context.txt"
                 context_path.write_text(prompt, encoding="utf-8")
                 working_directory = temporary_root
-                permission_config = self._isolated_workspace_permission_config()
-                permission_description = "Read-only isolated Lattice Tutor excerpts"
             else:
                 working_directory = self.root
                 permission_config = self._permission_config(allowed_paths, denied_paths)
@@ -1560,6 +1547,13 @@ Answer as a tutor. Source-dependent claims need numbered citations. A citation s
                 "recommended_plugins",
                 "shell_snapshot",
             )
+            if isolated_windows_workspace:
+                feature_disables = (
+                    *feature_disables,
+                    "shell_tool",
+                    "unified_exec",
+                    "code_mode",
+                )
             arguments = [
                 "exec",
                 "--ephemeral",
@@ -1576,17 +1570,28 @@ Answer as a tutor. Source-dependent claims need numbered citations. A citation s
                 "model_reasoning_summary=\"none\"",
                 "-c",
                 "model_verbosity=\"medium\"",
-                "-c",
-                "default_permissions=\"lattice-tutor\"",
-                "-c",
-                f"permissions.lattice-tutor.description={_toml_string(permission_description)}",
-                "-c",
-                permission_config,
-                "-c",
-                "permissions.lattice-tutor.network.enabled=false",
-                "-c",
-                f"developer_instructions={_toml_string(TUTOR_DEVELOPER_INSTRUCTIONS)}",
             ]
+            if isolated_windows_workspace:
+                arguments.extend(("--sandbox", "read-only"))
+            else:
+                arguments.extend(
+                    (
+                        "-c",
+                        "default_permissions=\"lattice-tutor\"",
+                        "-c",
+                        f"permissions.lattice-tutor.description={_toml_string(permission_description)}",
+                        "-c",
+                        permission_config,
+                        "-c",
+                        "permissions.lattice-tutor.network.enabled=false",
+                    )
+                )
+            arguments.extend(
+                (
+                    "-c",
+                    f"developer_instructions={_toml_string(TUTOR_DEVELOPER_INSTRUCTIONS)}",
+                )
+            )
             for feature in feature_disables:
                 arguments.extend(("--disable", feature))
             arguments.extend(("--output-schema", str(schema_path), "--json", "-"))
