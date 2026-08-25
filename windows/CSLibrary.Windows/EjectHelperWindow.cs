@@ -1,6 +1,8 @@
 using System.Diagnostics;
 using System.Globalization;
 using System.IO;
+using System.Reflection;
+using System.Runtime.InteropServices;
 using System.Windows;
 using System.Windows.Controls;
 using System.Windows.Media;
@@ -171,11 +173,13 @@ internal sealed record EjectHelperOptions(
 
 internal sealed class EjectHelperWindow : Window
 {
-    private const int MaximumEjectAttempts = 8;
+    private const int MaximumEjectAttempts = 4;
     private static readonly TimeSpan TrackedProcessExitTimeout = TimeSpan.FromSeconds(45);
+    private static readonly TimeSpan ExplorerWindowExitTimeout = TimeSpan.FromSeconds(45);
     private static readonly TimeSpan HandleDrainDelay = TimeSpan.FromSeconds(2);
-    private static readonly TimeSpan RetryDelay = TimeSpan.FromMilliseconds(1500);
+    private static readonly TimeSpan RetryDelay = TimeSpan.FromSeconds(30);
     private static readonly TimeSpan ProcessPollDelay = TimeSpan.FromMilliseconds(150);
+    private static readonly TimeSpan ExplorerWindowPollDelay = TimeSpan.FromMilliseconds(500);
     private static readonly string DiagnosticPath = Path.Combine(
         MainWindow.LocalSettingsRoot,
         "last-eject-diagnostic.txt");
@@ -264,6 +268,7 @@ internal sealed class EjectHelperWindow : Window
             var trackedProcessCount = await WaitForTrackedProcessesExitAsync(_options);
             diagnostic.Add($"TrackedProcessTreeExitedMilliseconds={elapsed.Elapsed.TotalMilliseconds:F3}");
             diagnostic.Add($"TrackedProcessCount={trackedProcessCount}");
+            await WaitForExplorerWindowsToReleaseAsync(_options.DriveRoot, diagnostic, elapsed);
             _detail.Text = "Every tracked Lattice process is closed. Waiting for final Windows handles to clear…";
             await Task.Delay(HandleDrainDelay);
             diagnostic.Add($"HandleDrainCompleteMilliseconds={elapsed.Elapsed.TotalMilliseconds:F3}");
@@ -285,6 +290,10 @@ internal sealed class EjectHelperWindow : Window
                 if (result.Success) break;
                 if (!NativeDriveEjector.IsTransientCloseVeto(result)
                     || attempt == MaximumEjectAttempts) break;
+                _detail.Text = $"Windows still has a closing volume handle. Waiting 30 seconds before "
+                    + $"the next safe-eject request ({attempt + 1}/{MaximumEjectAttempts})…";
+                diagnostic.Add(
+                    $"Attempt={attempt} QuietRetryStartedMilliseconds={elapsed.Elapsed.TotalMilliseconds:F3}");
                 await Task.Delay(RetryDelay);
             }
 
@@ -403,6 +412,141 @@ internal sealed class EjectHelperWindow : Window
             {
                 return false;
             }
+        }
+    }
+
+    private async Task WaitForExplorerWindowsToReleaseAsync(
+        string driveRoot,
+        ICollection<string> diagnostic,
+        Stopwatch totalElapsed)
+    {
+        var locations = FindExplorerLocationsOnDrive(driveRoot);
+        if (locations.Count == 0)
+        {
+            diagnostic.Add("ExplorerWindowCount=0");
+            return;
+        }
+
+        diagnostic.Add($"ExplorerWindowCount={locations.Count}");
+        diagnostic.Add($"ExplorerWindowLocations={string.Join('|', locations)}");
+        var elapsed = Stopwatch.StartNew();
+        while (locations.Count > 0)
+        {
+            _detail.Text = $"File Explorer is still using {driveRoot}. Close every Explorer window or tab "
+                + "showing this drive; Lattice will continue automatically.";
+            if (elapsed.Elapsed >= ExplorerWindowExitTimeout)
+            {
+                diagnostic.Add($"ExplorerWindowWaitTimedOutMilliseconds={totalElapsed.Elapsed.TotalMilliseconds:F3}");
+                throw new TaskCanceledException(
+                    $"File Explorer is still open on {driveRoot}. Close every File Explorer window or tab "
+                    + "showing this drive, then choose Disconnect library drive again.");
+            }
+            await Task.Delay(ExplorerWindowPollDelay);
+            locations = FindExplorerLocationsOnDrive(driveRoot);
+        }
+        diagnostic.Add($"ExplorerWindowsReleasedMilliseconds={totalElapsed.Elapsed.TotalMilliseconds:F3}");
+    }
+
+    private static IReadOnlyList<string> FindExplorerLocationsOnDrive(string driveRoot)
+    {
+        var locations = new List<string>();
+        object? shell = null;
+        object? windows = null;
+        try
+        {
+            var shellType = Type.GetTypeFromProgID("Shell.Application");
+            if (shellType is null) return locations;
+            shell = Activator.CreateInstance(shellType);
+            if (shell is null) return locations;
+            windows = shellType.InvokeMember(
+                "Windows",
+                BindingFlags.InvokeMethod,
+                binder: null,
+                target: shell,
+                args: null,
+                culture: CultureInfo.InvariantCulture);
+            if (windows is null) return locations;
+
+            var windowsType = windows.GetType();
+            var countValue = windowsType.InvokeMember(
+                "Count",
+                BindingFlags.GetProperty,
+                binder: null,
+                target: windows,
+                args: null,
+                culture: CultureInfo.InvariantCulture);
+            var count = Convert.ToInt32(countValue, CultureInfo.InvariantCulture);
+            for (var index = 0; index < count; index++)
+            {
+                object? window = null;
+                try
+                {
+                    window = windowsType.InvokeMember(
+                        "Item",
+                        BindingFlags.InvokeMethod,
+                        binder: null,
+                        target: windows,
+                        args: new object[] { index },
+                        culture: CultureInfo.InvariantCulture);
+                    if (window is null) continue;
+                    var locationUrl = window.GetType().InvokeMember(
+                        "LocationURL",
+                        BindingFlags.GetProperty,
+                        binder: null,
+                        target: window,
+                        args: null,
+                        culture: CultureInfo.InvariantCulture) as string;
+                    if (!Uri.TryCreate(locationUrl, UriKind.Absolute, out var uri) || !uri.IsFile) continue;
+                    var location = Path.GetFullPath(uri.LocalPath);
+                    if (!string.Equals(
+                            Path.GetPathRoot(location),
+                            driveRoot,
+                            StringComparison.OrdinalIgnoreCase)) continue;
+                    locations.Add(location);
+                }
+                catch (Exception error) when (error is COMException
+                                              or TargetInvocationException
+                                              or InvalidOperationException
+                                              or ArgumentException
+                                              or UnauthorizedAccessException)
+                {
+                    // A shell window can disappear while it is being enumerated.
+                }
+                finally
+                {
+                    ReleaseComObject(window);
+                }
+            }
+        }
+        catch (Exception error) when (error is COMException
+                                      or TargetInvocationException
+                                      or InvalidOperationException
+                                      or ArgumentException
+                                      or UnauthorizedAccessException)
+        {
+            // Explorer inspection is advisory. Native eject remains authoritative.
+        }
+        finally
+        {
+            ReleaseComObject(windows);
+            ReleaseComObject(shell);
+        }
+        return locations
+            .Distinct(StringComparer.OrdinalIgnoreCase)
+            .OrderBy(location => location, StringComparer.OrdinalIgnoreCase)
+            .ToArray();
+    }
+
+    private static void ReleaseComObject(object? value)
+    {
+        if (value is null || !Marshal.IsComObject(value)) return;
+        try
+        {
+            Marshal.FinalReleaseComObject(value);
+        }
+        catch (InvalidComObjectException)
+        {
+            // Another released automation wrapper already disconnected this RCW.
         }
     }
 

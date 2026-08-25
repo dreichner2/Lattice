@@ -1,5 +1,17 @@
 # Changelog
 
+## 2.3.3 — 2026-08-24
+
+### Fixed
+
+- Windows external-drive eject now identifies visible File Explorer windows or
+  tabs on the library drive and waits for the user to close them without
+  force-closing Explorer.
+- Transient pending-close and outstanding-open vetoes now use fewer native
+  eject requests with a quiet 30-second drain interval, allowing delayed
+  filesystem and filter-driver handles to release after Lattice and Syncthing
+  exit.
+
 ## 2.3.2 — 2026-08-23
 
 ### Fixed
