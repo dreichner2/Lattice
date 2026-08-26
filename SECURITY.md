@@ -244,6 +244,10 @@ possibly compromised key to authorize its own replacement.
 - Requests identify catalog work/course IDs, not paths. The server resolves
   those IDs against a fresh library snapshot, limits selection and message
   sizes, and rejects unknown or restricted works.
+- Eligible file and library-document paths must resolve to regular files inside
+  the selected library. Lattice repeats canonical containment immediately
+  before indexing, prompt construction, and non-Windows Codex read grants so a
+  swapped or cataloged external symlink is excluded.
 - Every Codex turn is ephemeral and ignores user configuration and repository
   instruction files. Apps, plugins, browser, computer-use, image, skill,
   workspace-dependency, memory, hook, and multi-agent capabilities are disabled.
@@ -288,6 +292,10 @@ possibly compromised key to authorize its own replacement.
   cross-platform Syncthing glob metacharacters. Copies are named from full
   path and payload SHA-256 values so equal bytes at different paths never share
   destructive lifecycle state.
+- Payload paths preserve lexical identity and reject symbolic links, junctions,
+  and other Windows reparse points in the payload or any existing parent.
+  Verification, journal identity, exact ignores, and deletion therefore refer
+  to the same non-linked synchronized path.
 - Check out, release, and restore verify SHA-256 at each authority transition.
   Release re-verifies the current local payload, preserves its metadata sidecar,
   journals first, installs the rooted ignore before every broader pattern, and

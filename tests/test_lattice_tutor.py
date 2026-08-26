@@ -283,6 +283,72 @@ class TutorManagerTests(unittest.TestCase):
         self.assertEqual(run.call_args.kwargs["allowed_paths"], [self.source.resolve()])
         self.assertNotIn(self.root / "books" / "restricted.pdf", run.call_args.kwargs["allowed_paths"])
 
+    def test_external_symlink_is_excluded_from_tutor_scope(self) -> None:
+        outside = Path(self.temporary.name) / "private-note.txt"
+        outside.write_text("private fixture", encoding="utf-8")
+        alias = self.root / "books" / "linked-note.txt"
+        try:
+            alias.symlink_to(outside)
+        except OSError as exc:
+            self.skipTest(f"file symlinks are unavailable: {exc}")
+        record = source_record(alias, self.root)
+        self.library["works"][0]["files"].append(
+            {**record, "exists": True, "tutorEligible": True}
+        )
+
+        scope = self.manager._resolve_scope(
+            {"scope": "selected", "workIds": ["eligible-work"]},
+            self.library,
+            self.catalog,
+        )
+
+        self.assertEqual(
+            [source["path"] for source in scope["sources"]],
+            ["books/algorithms.txt"],
+        )
+        self.assertEqual(
+            [source["path"] for source in scope["allEligibleSources"]],
+            ["books/algorithms.txt"],
+        )
+
+    def test_chat_revalidates_a_source_swapped_to_external_symlink(self) -> None:
+        outside = Path(self.temporary.name) / "private-note.txt"
+        outside.write_text("private fixture", encoding="utf-8")
+        original_resolve_scope = self.manager._resolve_scope
+
+        def resolve_then_swap(*args: object, **kwargs: object) -> dict[str, object]:
+            scope = original_resolve_scope(*args, **kwargs)
+            self.source.unlink()
+            try:
+                self.source.symlink_to(outside)
+            except OSError as exc:
+                self.skipTest(f"file symlinks are unavailable: {exc}")
+            return scope
+
+        with mock.patch.object(
+            self.manager,
+            "_resolve_scope",
+            side_effect=resolve_then_swap,
+        ), mock.patch.object(
+            self.manager,
+            "_run_codex",
+            return_value={"answer": "No safe local source is available.", "citations": []},
+        ) as run:
+            result = self.manager.chat(
+                {
+                    "sessionId": "symlink-race-0123456789",
+                    "message": "Read the selected source.",
+                    "scope": "selected",
+                    "workIds": ["eligible-work"],
+                },
+                self.library,
+                self.catalog,
+            )
+
+        self.assertEqual(run.call_args.kwargs["allowed_paths"], [])
+        self.assertNotIn(str(outside), run.call_args.kwargs["prompt"])
+        self.assertEqual(result["scope"]["files"], 0)
+
     def test_codex_invocation_is_ephemeral_read_only_and_config_independent(self) -> None:
         captured: list[str] = []
         response = json.dumps({"answer": "Grounded answer [1]", "citations": []})

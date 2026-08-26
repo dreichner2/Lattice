@@ -122,6 +122,14 @@ def _fsync_directory(path: Path) -> None:
         os.close(descriptor)
 
 
+def _is_link_or_reparse(details: os.stat_result) -> bool:
+    """Return whether an lstat result can redirect a lexical filesystem path."""
+    reparse_flag = getattr(stat, "FILE_ATTRIBUTE_REPARSE_POINT", 0x400)
+    return stat.S_ISLNK(details.st_mode) or bool(
+        getattr(details, "st_file_attributes", 0) & reparse_flag
+    )
+
+
 class BookVault:
     """Verified per-device checkout cache for one stable library identity."""
 
@@ -154,8 +162,29 @@ class BookVault:
         return self.root / copy_name
 
     def local_payload(self, relative: str) -> Path:
-        candidate = (self.library_root / _validate_relative(relative)).resolve()
-        if not candidate.is_relative_to(self.library_root):
+        clean = _validate_relative(relative)
+        parts = clean.split("/")
+        candidate = self.library_root.joinpath(*parts)
+        current = self.library_root
+        for index, part in enumerate(parts):
+            current /= part
+            try:
+                details = current.lstat()
+            except FileNotFoundError:
+                break
+            except OSError as exc:
+                raise VaultError(f"The local payload path cannot be inspected: {exc}") from exc
+            if _is_link_or_reparse(details):
+                raise VaultError(
+                    "Vault payload paths cannot contain a symbolic link or reparse point"
+                )
+            if index < len(parts) - 1 and not stat.S_ISDIR(details.st_mode):
+                raise VaultError("A vault payload parent is not a directory")
+        try:
+            resolved = candidate.resolve(strict=False)
+        except OSError as exc:
+            raise VaultError(f"The local payload path cannot be resolved: {exc}") from exc
+        if not resolved.is_relative_to(self.library_root):
             raise VaultError("Payload escapes the library root")
         return candidate
 
@@ -178,6 +207,13 @@ class BookVault:
             raise VaultError(f"The vault journal has an invalid size for {relative}")
         if "ignoreAdded" in entry and not isinstance(entry["ignoreAdded"], bool):
             raise VaultError(f"The vault journal has invalid ignore ownership for {relative}")
+        if entry.get("phase") != PHASE_LOCAL and not isinstance(
+            entry.get("ignoreAdded"), bool
+        ):
+            raise VaultError(f"The vault journal lacks ignore ownership for {relative}")
+        expected_copy = self._verified_copy_name(relative, digest, Path(relative))
+        if copy_name != expected_copy:
+            raise VaultError(f"The vault journal copy does not match {relative}")
 
     def _validate_state(self, raw: Any) -> dict[str, Any]:
         if not isinstance(raw, dict):
@@ -196,14 +232,15 @@ class BookVault:
         return raw
 
     def _load_state(self) -> dict[str, Any]:
-        if self.state_path.is_symlink():
-            raise VaultError("The vault journal cannot be a symbolic link")
         try:
-            size = self.state_path.stat().st_size
+            details = self.state_path.lstat()
         except FileNotFoundError:
             return self._empty_state()
         except OSError as exc:
             raise VaultError(f"The vault journal cannot be inspected: {exc}") from exc
+        if _is_link_or_reparse(details) or not stat.S_ISREG(details.st_mode):
+            raise VaultError("The vault journal must be a regular unlinked file")
+        size = details.st_size
         if size <= 0 or size > MAXIMUM_STATE_BYTES:
             raise VaultError("The vault journal has an invalid size")
         try:
@@ -214,7 +251,11 @@ class BookVault:
 
     def _ensure_private_root(self) -> None:
         self.root.mkdir(parents=True, exist_ok=True, mode=0o700)
-        if self.root.is_symlink() or not self.root.is_dir():
+        try:
+            details = self.root.lstat()
+        except OSError as exc:
+            raise VaultError(f"The vault root cannot be inspected: {exc}") from exc
+        if _is_link_or_reparse(details) or not stat.S_ISDIR(details.st_mode):
             raise VaultError("The vault root is not a private directory")
         try:
             self.root.chmod(0o700)
@@ -297,7 +338,7 @@ class BookVault:
             details = copy.lstat()
         except FileNotFoundError as exc:
             raise VaultError(f"The vault copy is missing: {copy_name}") from exc
-        if copy.is_symlink() or not stat.S_ISREG(details.st_mode):
+        if _is_link_or_reparse(details) or not stat.S_ISREG(details.st_mode):
             raise VaultError("The vault copy is not a regular file")
         if details.st_size != entry.get("bytes") or sha256_file(copy) != entry.get("sha256"):
             raise VaultError("The vault copy no longer matches the recorded checksum")
@@ -305,9 +346,13 @@ class BookVault:
 
     def _sidecar_digest(self, payload: Path) -> str | None:
         sidecar = payload.with_name(payload.name + SIDECAR_SUFFIX)
-        if not sidecar.exists():
+        try:
+            details = sidecar.lstat()
+        except FileNotFoundError:
             return None
-        if sidecar.is_symlink() or not sidecar.is_file():
+        except OSError as exc:
+            raise VaultError(f"The adjacent metadata sidecar cannot be inspected: {exc}") from exc
+        if _is_link_or_reparse(details) or not stat.S_ISREG(details.st_mode):
             raise VaultError("The adjacent metadata sidecar is not a regular file")
         try:
             record = json.loads(sidecar.read_text(encoding="utf-8"))
@@ -323,7 +368,7 @@ class BookVault:
             details = payload.lstat()
         except FileNotFoundError as exc:
             raise VaultError("The local payload is unavailable") from exc
-        if payload.is_symlink() or not stat.S_ISREG(details.st_mode):
+        if _is_link_or_reparse(details) or not stat.S_ISREG(details.st_mode):
             raise VaultError("The local payload is not a regular file")
         digest = sha256_file(payload)
         after = payload.lstat()
@@ -343,15 +388,17 @@ class BookVault:
 
     def _read_ignore_lines(self) -> list[str]:
         ignore_path = self.library_root / ".stignore"
-        if ignore_path.is_symlink():
-            raise VaultError(".stignore cannot be a symbolic link")
         try:
-            details = ignore_path.stat()
+            details = ignore_path.lstat()
         except FileNotFoundError:
             return []
         except OSError as exc:
             raise VaultError(f".stignore cannot be inspected: {exc}") from exc
-        if not stat.S_ISREG(details.st_mode) or details.st_size > MAXIMUM_IGNORE_BYTES:
+        if (
+            _is_link_or_reparse(details)
+            or not stat.S_ISREG(details.st_mode)
+            or details.st_size > MAXIMUM_IGNORE_BYTES
+        ):
             raise VaultError(".stignore is not a bounded regular file")
         try:
             return ignore_path.read_text(encoding="utf-8").splitlines()
@@ -493,6 +540,7 @@ class BookVault:
                 state = self._load_state()
                 state["entries"][clean]["ignoreAdded"] = ignore_added
                 self._write_state(state)
+            payload = self.local_payload(clean)
             self._verify_local_payload(payload, str(current["sha256"]))
         except (OSError, VaultError):
             self._revert_return(clean, ignore_added)
@@ -520,6 +568,7 @@ class BookVault:
     def _finish_restore(self, relative: str, entry: dict[str, Any], copy: Path) -> None:
         payload = self.local_payload(relative)
         payload.parent.mkdir(parents=True, exist_ok=True)
+        payload = self.local_payload(relative)
         expected = str(entry["sha256"])
         if payload.exists() or payload.is_symlink():
             self._verify_local_payload(payload, expected)
@@ -527,7 +576,14 @@ class BookVault:
             descriptor = -1
             created_identity: tuple[int, int] | None = None
             try:
-                descriptor = os.open(payload, os.O_WRONLY | os.O_CREAT | os.O_EXCL, 0o600)
+                descriptor = os.open(
+                    payload,
+                    os.O_WRONLY
+                    | os.O_CREAT
+                    | os.O_EXCL
+                    | getattr(os, "O_NOFOLLOW", 0),
+                    0o600,
+                )
                 opened = os.fstat(descriptor)
                 created_identity = (opened.st_dev, opened.st_ino)
                 with copy.open("rb") as reader, os.fdopen(descriptor, "wb") as writer:
@@ -683,13 +739,16 @@ class BookVault:
                     entry.pop("ignoreAdded", None)
                     report["revertedReturns"].append(relative)
                 else:
+                    if not self._verify_copy_quietly(entry):
+                        entry["recoveryError"] = (
+                            "The local payload and verified vault copy are unavailable"
+                        )
+                        report["unrecoverableEntries"].append(relative)
+                        continue
                     if not self._has_ignore_marker(relative):
                         entry["ignoreAdded"] = self._ensure_ignore(relative)
                     entry["phase"] = PHASE_AWAY
                     entry.pop("returnedAt", None)
-                    if not self._verify_copy_quietly(entry):
-                        entry["recoveryError"] = "Both local and vault copies are unavailable"
-                        report["unrecoverableEntries"].append(relative)
                     report["finalizedReturns"].append(relative)
             elif phase == PHASE_RESTORE_PENDING:
                 if self._verify_copy_quietly(entry):
@@ -707,15 +766,18 @@ class BookVault:
                     entry["recoveryError"] = "The verified vault copy is unavailable"
                     report["unrecoverableEntries"].append(relative)
             elif phase == PHASE_LOCAL and not payload.is_file():
+                if not self._verify_copy_quietly(entry):
+                    entry["recoveryError"] = (
+                        "The local payload and verified vault copy are unavailable"
+                    )
+                    report["unrecoverableEntries"].append(relative)
+                    continue
                 marker_existed = self._has_ignore_marker(relative)
                 newly_added = self._ensure_ignore(relative)
                 entry["ignoreAdded"] = (
                     bool(entry.get("ignoreAdded")) or newly_added or not marker_existed
                 )
                 entry["phase"] = PHASE_AWAY
-                if not self._verify_copy_quietly(entry):
-                    entry["recoveryError"] = "Both local and vault copies are unavailable"
-                    report["unrecoverableEntries"].append(relative)
                 report["selfHealedAway"].append(relative)
             elif phase == PHASE_AWAY and not self._has_ignore_marker(relative):
                 entry["ignoreAdded"] = self._ensure_ignore(relative)

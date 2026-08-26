@@ -179,6 +179,45 @@ class BookVaultTests(unittest.TestCase):
         self.assertNotIn("/books/sample-book.pdf", (self.library / ".stignore").read_text())
         self.assertEqual(self.entry()["phase"], "local")
 
+    def test_link_swapped_in_after_checkout_cannot_delete_its_target(self) -> None:
+        target = self.library / "books" / "target.pdf"
+        target.write_bytes(PAYLOAD_BYTES)
+        self.vault.check_out(self.relative)
+        self.payload.unlink()
+        try:
+            self.payload.symlink_to(target.name)
+        except OSError as exc:
+            self.skipTest(f"file symlinks are unavailable: {exc}")
+
+        with self.assertRaisesRegex(
+            library_vault.VaultError, "symbolic link or reparse point"
+        ):
+            self.vault.check_in(self.relative)
+
+        self.assertTrue(self.payload.is_symlink())
+        self.assertEqual(target.read_bytes(), PAYLOAD_BYTES)
+        self.assertEqual(self.entry()["phase"], "local")
+        self.assertNotIn("/books/sample-book.pdf", (self.library / ".stignore").read_text())
+
+    def test_linked_parent_directory_is_rejected_before_checkout(self) -> None:
+        outside = self.base / "outside-books"
+        outside.mkdir()
+        outside_payload = outside / "linked.pdf"
+        outside_payload.write_bytes(PAYLOAD_BYTES)
+        linked_parent = self.library / "linked-books"
+        try:
+            linked_parent.symlink_to(outside, target_is_directory=True)
+        except OSError as exc:
+            self.skipTest(f"directory links are unavailable: {exc}")
+
+        with self.assertRaisesRegex(
+            library_vault.VaultError, "symbolic link or reparse point"
+        ):
+            self.vault.check_out("linked-books/linked.pdf")
+
+        self.assertEqual(outside_payload.read_bytes(), PAYLOAD_BYTES)
+        self.assertFalse(self.vault.state_path.exists())
+
     def test_restore_conflict_never_overwrites_unexpected_local_payload(self) -> None:
         self.vault.check_out(self.relative)
         self.vault.check_in(self.relative)
@@ -304,6 +343,18 @@ class BookVaultTests(unittest.TestCase):
             (self.library / ".stignore").read_text().splitlines()[0],
             "/books/sample-book.pdf",
         )
+
+    def test_reconcile_does_not_ignore_missing_payload_without_verified_copy(self) -> None:
+        self.vault.check_out(self.relative)
+        self.payload.unlink()
+        self.copy_for().write_bytes(b"corrupt")
+
+        report = self.vault.reconcile()
+
+        self.assertIn(self.relative, report["unrecoverableEntries"])
+        self.assertNotIn(self.relative, report["selfHealedAway"])
+        self.assertEqual(self.entry()["phase"], "local")
+        self.assertNotIn("/books/sample-book.pdf", (self.library / ".stignore").read_text())
 
     def test_reconcile_prunes_managed_orphan_but_preserves_unknown_files(self) -> None:
         self.vault.check_out(self.relative)

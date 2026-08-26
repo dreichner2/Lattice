@@ -43,12 +43,20 @@
   outside the turn.
 - Tutor and optional import enrichment now explicitly disable Codex hosted web
   search, preserving Lattice's source-only and metadata-only model boundaries.
+- Tutor source paths are canonically revalidated immediately before indexing
+  and permission construction. A cataloged symlink can no longer grant Codex
+  access to a same-user-readable file outside the selected library.
 - Vault release and restore pause a live, healthy Syncthing folder around the
   filesystem transition. Release installs its exact-path ignore before broader
   include rules and before payload deletion; restore never overwrites an
   unexpected local file. Per-library private namespaces, fail-closed journals,
   full SHA-256 verification, unique path-bound copies, and crash recovery keep
-  one library or corrupt state from deleting another library's cache.
+  one library or corrupt state from deleting another library's cache. Recovery
+  no longer marks a missing local payload safely away or installs a new ignore
+  unless its private vault copy first passes full verification.
+- Vault payloads and every existing parent component must be regular,
+  non-linked filesystem objects. Symbolic links and Windows reparse points are
+  rejected before checkout, release, restore, ignore, or deletion state changes.
 
 ## 2.3.2 — 2026-08-23
 

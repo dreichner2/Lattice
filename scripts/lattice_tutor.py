@@ -21,6 +21,7 @@ import re
 import secrets
 import signal
 import sqlite3
+import stat
 import subprocess
 import sys
 import tarfile
@@ -506,6 +507,28 @@ def _query_terms(value: str, maximum: int = 12) -> list[str]:
     return terms
 
 
+def _contained_source_path(root: Path, relative: str) -> Path | None:
+    """Resolve one source without allowing its canonical target outside root."""
+    if not isinstance(relative, str) or not relative or "\x00" in relative or "\\" in relative:
+        return None
+    pure = PurePosixPath(relative)
+    if pure.is_absolute() or any(part in {"", ".", ".."} for part in pure.parts):
+        return None
+    try:
+        candidate = root.joinpath(*pure.parts).resolve(strict=True)
+    except (OSError, RuntimeError):
+        return None
+    if not candidate.is_relative_to(root):
+        return None
+    try:
+        details = candidate.stat()
+    except OSError:
+        return None
+    if not stat.S_ISREG(details.st_mode):
+        return None
+    return candidate
+
+
 class TutorSourceIndex:
     """A private, incremental full-text cache outside the synchronized library."""
 
@@ -547,12 +570,7 @@ class TutorSourceIndex:
         validated: dict[str, dict[str, Any]] = {}
         for source in sources:
             relative = str(source.get("path") or "")
-            candidate = (self.root / relative).resolve()
-            if (
-                not relative
-                or not candidate.is_file()
-                or not candidate.is_relative_to(self.root)
-            ):
+            if _contained_source_path(self.root, relative) is None:
                 continue
             validated[relative] = dict(source)
         with self._sources_lock:
@@ -711,9 +729,9 @@ class TutorSourceIndex:
         if self._stop.is_set():
             return
         relative = str(source["path"])
-        path = (self.root / relative).resolve()
         try:
-            if not path.is_file() or not path.is_relative_to(self.root):
+            path = _contained_source_path(self.root, relative)
+            if path is None:
                 raise RuntimeError("Source is unavailable")
             chunks = extract_source_chunks(path, self._stop)
             if self._stop.is_set():
@@ -1122,9 +1140,12 @@ class TutorManager:
             for file in work.get("files", []):
                 if not file.get("exists") or file.get("tutorEligible") is False:
                     continue
+                relative = str(file.get("path") or "")
+                if _contained_source_path(self.root, relative) is None:
+                    continue
                 sources.append(
                     {
-                        "path": str(file["path"]),
+                        "path": relative,
                         "workId": str(work["id"]),
                         "title": str(file.get("title") or work["title"]),
                         "workTitle": str(work["title"]),
@@ -1139,10 +1160,10 @@ class TutorManager:
                 )
         if include_documents:
             for relative, title in TUTOR_LIBRARY_DOCUMENTS.items():
-                path = self.root / relative
-                if not path.is_file():
+                path = _contained_source_path(self.root, relative)
+                if path is None:
                     continue
-                stat = path.stat()
+                details = path.stat()
                 sources.append(
                     {
                         "path": relative,
@@ -1151,8 +1172,8 @@ class TutorManager:
                         "workTitle": title,
                         "authors": "Lattice",
                         "format": "MD",
-                        "bytes": stat.st_size,
-                        "modifiedNs": stat.st_mtime_ns,
+                        "bytes": details.st_size,
+                        "modifiedNs": details.st_mtime_ns,
                         "sha256": "",
                         "kind": "document",
                         "searchText": f"{title} Lattice app library study guide catalog rules".casefold(),
@@ -1769,7 +1790,28 @@ Answer as a tutor. Source-dependent claims need numbered citations. A citation s
         )
         with session["lock"]:
             session["lastUsed"] = time.monotonic()
-            sources = scope["sources"]
+            # Eligibility can change after the catalog snapshot. Re-resolve every
+            # source immediately before indexing, prompting, and permission
+            # construction so a swapped symlink never becomes a Codex read grant.
+            safe_all_sources = [
+                source
+                for source in scope["allEligibleSources"]
+                if _contained_source_path(self.root, str(source.get("path") or ""))
+                is not None
+            ]
+            sources: list[dict[str, Any]] = []
+            allowed_paths: list[Path] = []
+            for source in scope["sources"]:
+                candidate = _contained_source_path(
+                    self.root, str(source.get("path") or "")
+                )
+                if candidate is None:
+                    continue
+                sources.append(source)
+                allowed_paths.append(candidate)
+            scope = dict(scope)
+            scope["sources"] = sources
+            scope["allEligibleSources"] = safe_all_sources
             self.index.refresh_sources(scope["allEligibleSources"])
             ranked = self._rank_sources(message, sources)
             candidate_count = min(len(ranked), 8 if scope["mode"] == "all" else 12)
@@ -1785,9 +1827,6 @@ Answer as a tutor. Source-dependent claims need numbered citations. A citation s
             # instead receives only the retrieved excerpts in a disposable
             # workspace, so external-drive and split-root libraries never need
             # direct Codex filesystem grants.
-            allowed_paths = [
-                (self.root / source["path"]).resolve() for source in sources
-            ]
             denied_paths: list[Path] = []
             with self._execution_slots:
                 raw = self._run_codex(
