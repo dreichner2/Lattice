@@ -1360,3 +1360,15 @@ body.import-open {
     grid-column: 1;
   }
 }
+
+.vault-note {
+  margin: 7px 0 0;
+  color: var(--muted);
+  font-size: 8.5px;
+  font-weight: 690;
+  letter-spacing: 0.02em;
+}
+
+.material-card.is-away .book-cover {
+  filter: saturate(0.45) brightness(0.92);
+}

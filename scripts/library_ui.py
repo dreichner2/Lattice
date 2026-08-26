@@ -41,6 +41,7 @@ from typing import Any
 from xml.etree import ElementTree
 
 import lattice_tutor
+import library_vault
 
 
 REPO_ROOT = Path(__file__).resolve().parents[1]
@@ -698,6 +699,8 @@ def _validate_synced_sidecar(
 def _read_synced_sidecars(
     root: Path,
     taxonomy: dict[str, Any] | None = None,
+    *,
+    away_paths: frozenset[str] = frozenset(),
 ) -> tuple[dict[str, dict[str, Any]], list[str]]:
     """Read validated payload-adjacent metadata and surface sync conflicts."""
     taxonomy = taxonomy or load_taxonomy(root)
@@ -724,6 +727,11 @@ def _read_synced_sidecars(
             relative_sidecar = path.relative_to(root).as_posix()
             if ".sync-conflict-" in path.name:
                 warnings.append(f"Resolve synchronized metadata conflict: {relative_sidecar}")
+                continue
+            payload_relative = relative_sidecar[: -len(SIDECAR_SUFFIX)]
+            if payload_relative in away_paths:
+                # The vault holds the verified copy; the local payload is
+                # intentionally absent and its sidecar stays for sync.
                 continue
             try:
                 record, record_warnings = _validate_synced_sidecar(root, path, taxonomy)
@@ -767,7 +775,13 @@ def _read_metadata(root: Path) -> dict[str, dict[str, Any]]:
     return records
 
 
-def _file_record(root: Path, path: str, metadata: dict[str, Any]) -> dict[str, Any]:
+def _file_record(
+    root: Path,
+    path: str,
+    metadata: dict[str, Any],
+    *,
+    away: bool = False,
+) -> dict[str, Any]:
     payload = root / path
     exists = payload.is_file()
     suffix = payload.suffix.lower().lstrip(".") or "file"
@@ -780,6 +794,12 @@ def _file_record(root: Path, path: str, metadata: dict[str, Any]) -> dict[str, A
         tutor_restriction = "This personalized or private edition stays on this device."
     elif any(marker in normalized_policy for marker in TUTOR_RESTRICTED_LICENSE_MARKERS):
         tutor_restriction = "Publisher terms reserve this work for human study."
+    if away and not exists:
+        availability = "away"
+    elif exists:
+        availability = "local"
+    else:
+        availability = "missing"
     return {
         "title": metadata.get("title") or _display_title(path),
         "path": path,
@@ -792,6 +812,7 @@ def _file_record(root: Path, path: str, metadata: dict[str, Any]) -> dict[str, A
         "version": metadata.get("version") or metadata.get("edition") or "",
         "downloadedAt": metadata.get("downloaded_at") or "",
         "exists": exists,
+        "availability": availability,
         "cataloged": bool(metadata),
         "modifiedNs": stat.st_mtime_ns if stat else 0,
         "tutorEligible": not tutor_restriction,
@@ -966,12 +987,18 @@ def build_library(
     root: Path = REPO_ROOT,
     *,
     taxonomy: dict[str, Any] | None = None,
+    vault: library_vault.BookVault | None = None,
 ) -> dict[str, Any]:
     """Build the curated catalog plus any readable files newly added on disk."""
     catalog_path = root / "CATALOG.md"
     taxonomy = taxonomy or load_taxonomy(root)
+    away_paths = vault.away_paths() if vault is not None else frozenset()
     tracked_metadata = _read_metadata(root)
-    synced_metadata, metadata_warnings = _read_synced_sidecars(root, taxonomy)
+    synced_metadata, metadata_warnings = _read_synced_sidecars(
+        root,
+        taxonomy,
+        away_paths=away_paths,
+    )
     # The checked-in record remains authoritative for curated catalog material.
     metadata = {**synced_metadata, **tracked_metadata}
     physical_paths = _discover_payload_paths(root)
@@ -1027,7 +1054,10 @@ def build_library(
         if not file_paths:
             raise ValueError(f"Catalog work has no matching metadata: {work_id}")
 
-        files = [_file_record(root, path, metadata.get(path, {})) for path in file_paths]
+        files = [
+            _file_record(root, path, metadata.get(path, {}), away=path in away_paths)
+            for path in file_paths
+        ]
         formats = sorted({file["format"] for file in files})
         material_type = _classify_work(work_id, local_path)
         access_restricts_tutor = "human study" in access.casefold()
@@ -1076,7 +1106,7 @@ def build_library(
         for path in new_arrival_paths:
             record = metadata.get(path, {})
             editable_metadata = path in synced_metadata and path not in tracked_metadata
-            file = _file_record(root, path, record)
+            file = _file_record(root, path, record, away=path in away_paths)
             digest = str(record.get("sha256") or "")
             work_id = str(
                 record.get("work_id")
@@ -1149,7 +1179,7 @@ def build_library(
     materials: list[dict[str, Any]] = []
     for work in works:
         for file in work["files"]:
-            if not file["exists"]:
+            if file.get("availability") == "missing":
                 continue
             materials.append(
                 {
@@ -1217,6 +1247,16 @@ def build_library(
         for topic in topics
     }
     topics = [{**topic, "count": topic_counts[topic["id"]]} for topic in topics]
+    vault_status: dict[str, Any] = {"available": False, "checkedOut": {}}
+    if vault is not None:
+        try:
+            vault_status = {
+                "available": True,
+                "vaultRoot": str(vault.root),
+                "checkedOut": vault.status()["checkedOut"],
+            }
+        except OSError:
+            vault_status = {"available": False, "checkedOut": {}}
     return {
         "name": "Lattice",
         "works": works,
@@ -1242,6 +1282,7 @@ def build_library(
             "missing": indexed_count - present_count,
             "newArrivals": len(new_arrival_paths),
         },
+        "vault": vault_status,
         "builtAt": datetime.now(timezone.utc).isoformat(),
     }
 
@@ -2483,7 +2524,22 @@ class LibraryHTTPServer(ThreadingHTTPServer):
         self.library_id = library_identity(self.root)
         self.parent_pid = parent_pid
         self.taxonomy = load_taxonomy(self.root, required=True)
-        self.library = build_library(self.root, taxonomy=self.taxonomy)
+        self.vault = library_vault.BookVault(
+            self.root,
+            self.library_id,
+            vault_root=(
+                Path(os.environ["LATTICE_VAULT_ROOT"])
+                if os.environ.get("LATTICE_VAULT_ROOT")
+                else None
+            ),
+        )
+        try:
+            self.vault.reconcile()
+        except (OSError, ValueError):
+            # A broken vault never blocks the library from opening; the
+            # reconcile report surfaces through /api/vault instead.
+            pass
+        self.library = build_library(self.root, taxonomy=self.taxonomy, vault=self.vault)
         self.lecture_catalog = load_lecture_catalog(self.root)
         self.allowed_paths = frozenset(file["path"] for file in self.library["materials"])
         self._epub_cache: dict[
@@ -3117,6 +3173,56 @@ class LibraryHTTPServer(ThreadingHTTPServer):
             payload["change"] = dict(self.last_change)
             return payload
 
+    def away_paths(self) -> frozenset[str]:
+        """Paths whose local payload has been released to the vault."""
+        return self.vault.away_paths()
+
+    def vault_payload(self) -> dict[str, Any]:
+        try:
+            status = self.vault.status()
+        except (OSError, ValueError) as exc:
+            return {"available": False, "error": str(exc), "checkedOut": {}}
+        return {
+            "available": True,
+            "vaultRoot": str(self.vault.root),
+            "checkedOut": status["checkedOut"],
+        }
+
+    def _vault_known_path(self, relative: str) -> bool:
+        """A path is actionable when present locally or managed as away."""
+        return relative in self.allowed_paths or relative in self.vault.away_paths()
+
+    def vault_check_out(self, value: dict[str, Any]) -> dict[str, Any]:
+        relative = str(value.get("path") or "")
+        if relative not in self.allowed_paths or not resolve_payload(
+            self.root, relative, {relative}
+        ).is_file():
+            raise ValueError("Only a cataloged local payload can be checked out")
+        with self._import_lock:
+            result = self.vault.check_out(relative)
+            self._snapshot = ()
+        return result
+
+    def vault_check_in(self, value: dict[str, Any]) -> dict[str, Any]:
+        relative = str(value.get("path") or "")
+        if not self._vault_known_path(relative):
+            raise ValueError("Unknown library path")
+        with self._import_lock:
+            result = self.vault.check_in(relative)
+            self._snapshot = ()
+        return result
+
+    def vault_restore(self, value: dict[str, Any]) -> dict[str, Any]:
+        relative = str(value.get("path") or "")
+        if "/" not in relative or relative.startswith(".") or ".." in relative.split("/"):
+            raise ValueError("Invalid library path")
+        if not self._vault_known_path(relative):
+            raise ValueError("Unknown library path")
+        with self._import_lock:
+            result = self.vault.restore(relative)
+            self._snapshot = ()
+        return result
+
     def health_payload(self) -> dict[str, Any]:
         with self._state_condition:
             return {
@@ -3151,7 +3257,11 @@ class LibraryHTTPServer(ThreadingHTTPServer):
                 continue
             try:
                 refreshed_taxonomy = load_taxonomy(self.root, required=True)
-                refreshed = build_library(self.root, taxonomy=refreshed_taxonomy)
+                refreshed = build_library(
+                    self.root,
+                    taxonomy=refreshed_taxonomy,
+                    vault=self.vault,
+                )
                 refreshed_lectures = load_lecture_catalog(self.root)
             except (OSError, TypeError, ValueError) as exc:
                 with self._state_condition:
@@ -3335,6 +3445,9 @@ class LibraryRequestHandler(BaseHTTPRequestHandler):
             return
         if request_path == "/api/library":
             self._send_json(HTTPStatus.OK, self.server.library_payload(), head_only=head_only)
+            return
+        if request_path == "/api/vault":
+            self._send_json(HTTPStatus.OK, self.server.vault_payload(), head_only=head_only)
             return
         if request_path == "/api/ai/status":
             self._send_json(HTTPStatus.OK, self.server.ai_status(), head_only=head_only)
@@ -3696,6 +3809,30 @@ class LibraryRequestHandler(BaseHTTPRequestHandler):
                 else self.server.tutor.reset(session_id)
             )
             self._send_json(HTTPStatus.OK, {"ok": True, "changed": changed})
+            return
+        if request_path in {"/api/vault/checkout", "/api/vault/checkin", "/api/vault/restore"}:
+            if not self._mutation_access_allowed():
+                return
+            handlers = {
+                "/api/vault/checkout": self.server.vault_check_out,
+                "/api/vault/checkin": self.server.vault_check_in,
+                "/api/vault/restore": self.server.vault_restore,
+            }
+            try:
+                result = handlers[request_path](self._read_json_request(4096))
+            except library_vault.VaultError as exc:
+                self._send_json(HTTPStatus.CONFLICT, {"error": str(exc)})
+                return
+            except ValueError as exc:
+                self._send_json(HTTPStatus.BAD_REQUEST, {"error": str(exc)})
+                return
+            except OSError as exc:
+                self._send_json(
+                    HTTPStatus.INTERNAL_SERVER_ERROR,
+                    {"error": f"Vault storage error: {exc}"},
+                )
+                return
+            self._send_json(HTTPStatus.OK, result)
             return
         if request_path == "/api/import":
             if not self._mutation_access_allowed():

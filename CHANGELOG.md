@@ -1,5 +1,18 @@
 # Changelog
 
+## Unreleased
+
+### Added
+
+- External-drive book vault: check out cataloged books to a verified per-device
+  cache, release the synchronized local copy (with an exact-path `.stignore`
+  entry so deletion never propagates), and restore byte-for-byte later. The
+  vault journal is updated before every destructive step and reconciled at
+  startup; away books stay visible on the shelf as "In the vault" with a
+  restore action. New endpoints `/api/vault`, `/api/vault/checkout`,
+  `/api/vault/checkin`, and `/api/vault/restore` are token-guarded like other
+  mutations.
+
 ## 2.3.2 — 2026-08-23
 
 ### Fixed
