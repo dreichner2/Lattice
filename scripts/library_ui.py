@@ -45,6 +45,7 @@ import lattice_tutor
 import library_vault
 import move_library
 import study_lab
+import study_python
 
 
 REPO_ROOT = Path(__file__).resolve().parents[1]
@@ -2611,6 +2612,7 @@ class LibraryHTTPServer(ThreadingHTTPServer):
             # A private-database failure must not keep the library from
             # opening; Study Lab endpoints report unavailability instead.
             self.study = None
+        self.study_runtime = study_python.StudyPythonRuntime()
         self._epub_cache: dict[
             str,
             tuple[tuple[int, int], dict[str, Any], dict[str, str]],
@@ -3483,7 +3485,11 @@ class LibraryHTTPServer(ThreadingHTTPServer):
         return self._require_study().rename_notebook(notebook_id, value)
 
     def study_delete_notebook(self, notebook_id: str, value: dict[str, Any]) -> dict[str, Any]:
-        return self._require_study().delete_notebook(notebook_id, value)
+        study = self._require_study()
+        return self.study_runtime.delete_notebook(
+            notebook_id,
+            lambda: study.delete_notebook(notebook_id, value),
+        )
 
     def study_set_link(self, notebook_id: str, value: dict[str, Any]) -> dict[str, Any]:
         return self._require_study().set_link(
@@ -3502,6 +3508,37 @@ class LibraryHTTPServer(ThreadingHTTPServer):
 
     def study_delete_cell(self, value: dict[str, Any]) -> dict[str, Any]:
         return self._require_study().delete_cell(value)
+
+    # --------------------------------------------------------- study kernel
+
+    def study_kernel_status(self) -> dict[str, Any]:
+        return self.study_runtime.status()
+
+    def study_kernel_run(self, value: dict[str, Any]) -> dict[str, Any]:
+        notebook_id = str(value.get("notebookId") or "")
+        source = value.get("source")
+        if not notebook_id or not isinstance(source, str) or not source.strip():
+            raise ValueError("Kernel runs need a notebookId and non-empty source")
+        if len(source) > study_lab.MAX_CELL_SOURCE_CHARS:
+            raise ValueError(
+                f"Cell source exceeds {study_lab.MAX_CELL_SOURCE_CHARS} characters"
+            )
+        study = self._require_study()
+        return self.study_runtime.run(
+            notebook_id,
+            source,
+            validate=lambda: study.get_notebook(notebook_id),
+        )
+
+    def study_kernel_restart(self, value: dict[str, Any]) -> dict[str, Any]:
+        notebook_id = str(value.get("notebookId") or "")
+        if not notebook_id:
+            raise ValueError("Kernel restarts need a notebookId")
+        study = self._require_study()
+        return self.study_runtime.restart(
+            notebook_id,
+            validate=lambda: study.get_notebook(notebook_id),
+        )
 
     def _watch_parent(self) -> None:
         assert self.parent_pid is not None
@@ -3573,6 +3610,9 @@ class LibraryHTTPServer(ThreadingHTTPServer):
         tutor = getattr(self, "tutor", None)
         if tutor is not None:
             tutor.close()
+        runtime = getattr(self, "study_runtime", None)
+        if runtime is not None:
+            runtime.stop_all()
         study = getattr(self, "study", None)
         if study is not None:
             study.close()
@@ -3610,7 +3650,8 @@ class LibraryRequestHandler(BaseHTTPRequestHandler):
     server_version = "CSLibrary/1.0"
 
     def log_message(self, _format: str, *_args: Any) -> None:
-        return
+        if os.environ.get("LATTICE_LOG_REQUESTS"):
+            sys.stderr.write("REQ " + (_format % _args) + "\n")
 
     def _valid_host(self) -> bool:
         host = self.headers.get("Host", "").rsplit(":", 1)[0].strip("[]").lower()
@@ -3778,6 +3819,11 @@ class LibraryRequestHandler(BaseHTTPRequestHandler):
                 self._send_json(HTTPStatus.SERVICE_UNAVAILABLE, {"error": str(exc)})
                 return
             self._send_json(HTTPStatus.OK, payload, head_only=head_only)
+            return
+        if request_path == "/api/study/kernel/status":
+            if not self._study_access_allowed():
+                return
+            self._send_json(HTTPStatus.OK, self.server.study_kernel_status(), head_only=head_only)
             return
         if request_path.startswith("/api/study/notebook/"):
             if not self._study_access_allowed():
@@ -4327,6 +4373,26 @@ class LibraryRequestHandler(BaseHTTPRequestHandler):
                 return
             except ValueError as exc:
                 self._send_json(HTTPStatus.SERVICE_UNAVAILABLE, {"error": str(exc)})
+                return
+            self._send_json(HTTPStatus.OK, result)
+            return
+        if request_path in {"/api/study/kernel/run", "/api/study/kernel/restart"}:
+            if not self._study_mutation_access_allowed():
+                return
+            try:
+                body = self._read_json_request(512 * 1024)
+                if request_path.endswith("/run"):
+                    result = self.server.study_kernel_run(body)
+                else:
+                    result = self.server.study_kernel_restart(body)
+            except study_python.KernelError as exc:
+                self._send_json(HTTPStatus.CONFLICT, {"error": str(exc)})
+                return
+            except study_python.KernelUnavailable as exc:
+                self._send_json(HTTPStatus.SERVICE_UNAVAILABLE, {"error": str(exc)})
+                return
+            except ValueError as exc:
+                self._send_json(HTTPStatus.BAD_REQUEST, {"error": str(exc)})
                 return
             self._send_json(HTTPStatus.OK, result)
             return

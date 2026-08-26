@@ -10,8 +10,22 @@ SCRIPTS = Path(__file__).resolve().parents[1] / "scripts"
 if str(SCRIPTS) not in sys.path:
     sys.path.insert(0, str(SCRIPTS))
 
-from cross_platform_server import main  # noqa: E402
+
+def bootstrap(argv: list[str] | None = None) -> int:
+    arguments = list(sys.argv[1:] if argv is None else argv)
+    if arguments == ["--study-kernel"]:
+        # PyInstaller's executable is also the only available Python runtime in
+        # the self-contained Windows package. This exact mode exposes only the
+        # newline-delimited kernel bridge on inherited stdio.
+        from study_kernel import serve
+
+        serve()
+        return 0
+
+    from cross_platform_server import main
+
+    return main(arguments)
 
 
 if __name__ == "__main__":
-    raise SystemExit(main())
+    raise SystemExit(bootstrap())

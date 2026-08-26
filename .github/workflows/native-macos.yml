@@ -20,7 +20,7 @@ jobs:
 
       - name: Validate Python service
         run: |
-          python3 -m py_compile scripts/library_ui.py scripts/library_vault.py scripts/lattice_tutor.py scripts/study_lab.py
+          python3 -m py_compile scripts/library_ui.py scripts/library_vault.py scripts/lattice_tutor.py scripts/study_lab.py scripts/study_python.py scripts/study_kernel.py
           python3 -m unittest discover -s tests -p 'test_*.py' -v
 
       - name: Validate reader JavaScript
@@ -84,10 +84,37 @@ jobs:
           test -f "Lattice.app/Contents/Resources/server/library_vault.py"
           test -f "Lattice.app/Contents/Resources/server/lattice_tutor.py"
           test -f "Lattice.app/Contents/Resources/server/study_lab.py"
+          test -f "Lattice.app/Contents/Resources/server/study_python.py"
+          test -f "Lattice.app/Contents/Resources/server/study_kernel.py"
           test -f "Lattice.app/Contents/Resources/server/vendor/pypdf/__init__.py"
           test -f "Lattice.app/Contents/Resources/server/move_library.py"
           test -f "Lattice.app/Contents/Resources/ImmersiveEPUB.js"
           test -f "Lattice.app/Contents/Resources/LibraryWorkspace.js"
+          app_python=""
+          for candidate in \
+            /opt/homebrew/bin/python3 \
+            /opt/homebrew/opt/python@3.14/bin/python3 \
+            /opt/homebrew/opt/python@3.13/bin/python3 \
+            /usr/local/bin/python3 \
+            /usr/bin/python3; do
+            if test -x "$candidate"; then app_python="$candidate"; break; fi
+          done
+          test -n "$app_python"
+          PYTHONDONTWRITEBYTECODE=1 \
+            PYTHONPATH="Lattice.app/Contents/Resources/server" \
+            "$app_python" - <<'PY'
+          import study_python
+
+          runtime = study_python.StudyPythonRuntime()
+          try:
+              runtime.run("packaged", "answer = 41")
+              result = runtime.run("packaged", "answer + 1")
+              output = next(item for item in result["outputs"] if item["type"] == "result")
+              if output["text"] != "42":
+                  raise SystemExit("packaged macOS Study kernel did not persist state")
+          finally:
+              runtime.stop_all()
+          PY
           /usr/bin/codesign --verify --deep --strict "Lattice.app"
           /usr/bin/plutil -lint "Lattice.app/Contents/Info.plist"
 

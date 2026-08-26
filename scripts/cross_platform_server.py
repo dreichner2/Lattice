@@ -412,7 +412,10 @@ def run_server(
     expected_library_id = library_ui.library_identity(root)
     # A desktop parent owns the child service lifetime. Never attach a second
     # app instance to a service that will exit when the first app closes.
-    if parent_pid is None:
+    # A browser launch needs this process's private Study capability. Never
+    # reuse an unrelated server whose per-launch capability is intentionally
+    # unavailable to us.
+    if parent_pid is None and not open_browser:
         for candidate in candidates:
             if candidate and (running_url := find_matching_server(candidate, expected_library_id)):
                 print(f"Lattice is already running at {running_url}", flush=True)
@@ -438,10 +441,11 @@ def run_server(
         return 1
 
     url = f"http://127.0.0.1:{int(server.server_address[1])}"
+    launch_url = f"{url}#access={server.private_token}" if open_browser else url
     print(f"Lattice is ready: {url}", flush=True)
     print(f"Library ID: {server.library_id}", flush=True)
     if open_browser:
-        threading.Timer(0.25, webbrowser.open, args=(url,)).start()
+        threading.Timer(0.25, webbrowser.open, args=(launch_url,)).start()
 
     def stop_server(_signum: int, _frame: Any) -> None:
         threading.Thread(target=server.shutdown, daemon=True).start()

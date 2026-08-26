@@ -208,6 +208,46 @@ class CrossPlatformServerTests(unittest.TestCase):
         self.assertTrue(fake.closed)
         self.assertEqual(create.call_args.kwargs["parent_pid"], 12345)
 
+    def test_browser_launch_owns_and_delivers_its_private_capability(self) -> None:
+        class FakeServer:
+            server_address = ("127.0.0.1", 8771)
+            library_id = "test-library"
+            private_token = "private-launch-token"
+
+            def serve_forever(self, poll_interval: float) -> None:
+                self.poll_interval = poll_interval
+
+            def server_close(self) -> None:
+                self.closed = True
+
+        fake = FakeServer()
+        with mock.patch.object(
+            cross_platform_server,
+            "find_matching_server",
+            side_effect=AssertionError("browser launch must own its server capability"),
+        ), mock.patch.object(
+            cross_platform_server,
+            "create_server",
+            return_value=fake,
+        ), mock.patch.object(
+            cross_platform_server.threading,
+            "Timer",
+        ) as timer, mock.patch("signal.signal"):
+            result = cross_platform_server.run_server(
+                8766,
+                root=self.root,
+                ui_root=self.ui,
+                state_database=self.database,
+                open_browser=True,
+            )
+        self.assertEqual(result, 0)
+        timer.assert_called_once_with(
+            0.25,
+            cross_platform_server.webbrowser.open,
+            args=("http://127.0.0.1:8771#access=private-launch-token",),
+        )
+        timer.return_value.start.assert_called_once_with()
+
 
 if __name__ == "__main__":
     unittest.main()

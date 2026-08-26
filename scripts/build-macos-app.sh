@@ -11,6 +11,8 @@ server_source="$library_root/scripts/library_ui.py"
 vault_source="$library_root/scripts/library_vault.py"
 tutor_source="$library_root/scripts/lattice_tutor.py"
 study_source="$library_root/scripts/study_lab.py"
+study_python_source="$library_root/scripts/study_python.py"
+study_kernel_source="$library_root/scripts/study_kernel.py"
 tutor_vendor_root="$library_root/scripts/vendor"
 storage_source="$library_root/scripts/move_library.py"
 build_root=$(/usr/bin/mktemp -d "${TMPDIR:-/tmp}/cs-library-app.XXXXXX")
@@ -55,6 +57,8 @@ for resource in \
   "$vault_source" \
   "$tutor_source" \
   "$study_source" \
+  "$study_python_source" \
+  "$study_kernel_source" \
   "$tutor_vendor_root/README.md" \
   "$tutor_vendor_root/pypdf-LICENSE" \
   "$tutor_vendor_root/pypdf/__init__.py" \
@@ -94,6 +98,8 @@ done
 /bin/cp "$vault_source" "$staged_app/Contents/Resources/server/library_vault.py"
 /bin/cp "$tutor_source" "$staged_app/Contents/Resources/server/lattice_tutor.py"
 /bin/cp "$study_source" "$staged_app/Contents/Resources/server/study_lab.py"
+/bin/cp "$study_python_source" "$staged_app/Contents/Resources/server/study_python.py"
+/bin/cp "$study_kernel_source" "$staged_app/Contents/Resources/server/study_kernel.py"
 /bin/cp -R "$tutor_vendor_root" "$staged_app/Contents/Resources/server/vendor"
 /usr/bin/find "$staged_app/Contents/Resources/server/vendor" -type f -name '*.pyc' -delete
 /usr/bin/find "$staged_app/Contents/Resources/server/vendor" -type d -name '__pycache__' -empty -delete
@@ -172,6 +178,8 @@ for bundled in \
   "$staged_app/Contents/Resources/server/library_vault.py" \
   "$staged_app/Contents/Resources/server/lattice_tutor.py" \
   "$staged_app/Contents/Resources/server/study_lab.py" \
+  "$staged_app/Contents/Resources/server/study_python.py" \
+  "$staged_app/Contents/Resources/server/study_kernel.py" \
   "$staged_app/Contents/Resources/server/vendor/pypdf/__init__.py" \
   "$staged_app/Contents/Resources/server/vendor/pypdf-LICENSE" \
   "$staged_app/Contents/Resources/server/move_library.py" \

@@ -60,6 +60,10 @@
       "linkSaveButton",
       "linkPathOptions",
       "deleteNotebookButton",
+      "newNotebookDialog",
+      "newNotebookTitleInput",
+      "deleteNotebookDialog",
+      "deleteNotebookName",
     ]) {
       elements[id] = document.getElementById(id);
     }
@@ -141,15 +145,18 @@
     }
   }
 
-  function renderPythonPreview(container, source) {
+  function renderPythonPreview(container, source, hasRun) {
     container.classList.add("cell-preview");
     container.innerHTML = "";
-    const note = document.createElement("p");
-    note.style.cssText = "color:var(--faint);font-size:10px;margin:0 0 8px;";
-    note.textContent = "Python cells are inert in this release; execution is unavailable.";
     const code = document.createElement("code");
-    code.textContent = source || "(empty python cell)";
-    container.append(note, code);
+    code.textContent = source && source.trim() ? source : "(empty python cell)";
+    container.append(code);
+    const note = document.createElement("p");
+    note.className = "cell-run-note";
+    note.textContent = hasRun
+      ? "Ran — no output was produced"
+      : "Press Run ▶ to execute this cell in the Python kernel";
+    container.append(note);
   }
 
   // ------------------------------------------------------------- rendering
@@ -181,15 +188,23 @@
     bar.append(chip);
     const actions = document.createElement("div");
     actions.className = "cell-actions";
+    actions.dataset.cellId = cell.id;
+
+    if (cell.kind === "python") {
+      const runButton = document.createElement("button");
+      runButton.type = "button";
+      runButton.className = "cell-action cell-run";
+      runButton.textContent = "Run ▶";
+      runButton.dataset.action = "run";
+      actions.append(runButton);
+    }
 
     const toggle = document.createElement("button");
     toggle.type = "button";
     toggle.className = "cell-action";
     toggle.textContent = cell.mode === "edit" ? "Preview" : "Edit";
-    toggle.addEventListener("click", () => {
-      cell.mode = cell.mode === "edit" ? "preview" : "edit";
-      renderCells();
-    });
+    toggle.dataset.action = "toggle";
+    actions.append(toggle);
 
     const up = document.createElement("button");
     up.type = "button";
@@ -197,7 +212,8 @@
     up.textContent = "↑";
     up.disabled = cell.position === 0;
     up.setAttribute("aria-label", "Move cell up");
-    up.addEventListener("click", () => void moveCell(cell.id, "up"));
+    up.dataset.action = "up";
+    actions.append(up);
 
     const down = document.createElement("button");
     down.type = "button";
@@ -205,15 +221,16 @@
     down.textContent = "↓";
     down.disabled = cell.position === state.cells.length - 1;
     down.setAttribute("aria-label", "Move cell down");
-    down.addEventListener("click", () => void moveCell(cell.id, "down"));
+    down.dataset.action = "down";
+    actions.append(down);
 
     const remove = document.createElement("button");
     remove.type = "button";
     remove.className = "cell-action";
     remove.textContent = "Delete";
-    remove.addEventListener("click", () => void deleteCell(cell.id));
+    remove.dataset.action = "delete";
+    actions.append(remove);
 
-    actions.append(toggle, up, down, remove);
     bar.append(actions);
     return bar;
   }
@@ -228,7 +245,7 @@
       editor.placeholder =
         cell.kind === "latex"
           ? "\\begin{equation} e^{i\\pi} + 1 = 0 \\end{equation}"
-          : "import numpy as np";
+          : "values = [1, 2, 3]\nsum(values)";
       editor.addEventListener("input", () => {
         cell.source = editor.value;
         scheduleSave(cell);
@@ -236,8 +253,12 @@
       body.append(editor);
     } else if (cell.kind === "latex") {
       renderLatex(body, cell.source);
+    } else if (cell.outputs && cell.outputs.length) {
+      renderOutputs(body, cell);
+    } else if (cell.hasRun) {
+      renderPythonPreview(body, "", true);
     } else {
-      renderPythonPreview(body, cell.source);
+      renderPythonPreview(body, cell.source, false);
     }
     return body;
   }
@@ -260,6 +281,12 @@
     const notebook = state.notebooks.find((item) => item.id === state.currentId);
     const link = notebook && notebook.workPath;
     elements.workLink.textContent = link ? `Linked: ${link} · change` : "Link a library work";
+  }
+
+  function refreshCurrentCellCount() {
+    const notebook = state.notebooks.find((item) => item.id === state.currentId);
+    if (notebook) notebook.cellCount = state.cells.length;
+    renderNotebookList();
   }
 
   async function openNotebook(notebookId) {
@@ -294,9 +321,16 @@
 
   // ------------------------------------------------------------ mutations
 
+  function showNewNotebookDialog() {
+    elements.newNotebookDialog.returnValue = "";
+    elements.newNotebookTitleInput.value = "Untitled notebook";
+    elements.newNotebookDialog.showModal();
+    elements.newNotebookTitleInput.select();
+  }
+
   async function createNotebook() {
     try {
-      const title = window.prompt("Notebook title", "Untitled notebook");
+      const title = elements.newNotebookTitleInput.value.trim();
       if (!title) return;
       await flushPendingSaves();
       const created = await enqueueMutation(() => api("/api/study/notebooks", {
@@ -389,6 +423,7 @@
       state.revision = result.notebookUpdatedAt;
       state.cells = state.cells.filter((cell) => cell.id !== cellId);
       state.cells.forEach((cell, position) => { cell.position = position; });
+      refreshCurrentCellCount();
       renderCells();
     } catch (error) {
       handleStudyError(error);
@@ -410,11 +445,131 @@
       }));
       state.revision = result.notebookUpdatedAt;
       state.cells.push({ ...result.cell, mode: "edit" });
+      refreshCurrentCellCount();
       renderCells();
       const editors = elements.cellStack.querySelectorAll("textarea");
       if (editors.length) editors[editors.length - 1].focus();
     } catch (error) {
       handleStudyError(error);
+    }
+  }
+
+  function renderOutputs(container, cell) {
+    container.innerHTML = "";
+    const outputs = cell.outputs || [];
+    if (!outputs.length) return;
+    const wrap = document.createElement("div");
+    wrap.className = "cell-outputs";
+    for (const output of outputs) {
+      if (output.type === "stream") {
+        const pre = document.createElement("pre");
+        pre.className = `cell-output stream-${output.name === "stderr" ? "stderr" : "stdout"}`;
+        pre.textContent = output.text;
+        wrap.append(pre);
+      } else if (output.type === "result") {
+        const pre = document.createElement("pre");
+        pre.className = "cell-output cell-result";
+        pre.textContent = output.text;
+        wrap.append(pre);
+      } else if (output.type === "error") {
+        const block = document.createElement("div");
+        block.className = "cell-output cell-error";
+        const name = document.createElement("strong");
+        name.textContent = `${output.name}: ${output.message}`;
+        const trace = document.createElement("pre");
+        trace.textContent = output.traceback || "";
+        block.append(name, trace);
+        wrap.append(block);
+      } else if (
+        output.type === "image"
+        && output.mime === "image/png"
+        && typeof output.data === "string"
+        && output.data.length <= 5_400_000
+        && /^[A-Za-z0-9+/]*={0,2}$/.test(output.data)
+      ) {
+        const image = document.createElement("img");
+        image.className = "cell-output cell-image";
+        image.alt = "Matplotlib figure";
+        image.src = `data:image/png;base64,${output.data}`;
+        wrap.append(image);
+      }
+    }
+    container.append(wrap);
+  }
+
+  async function runCell(cell, button) {
+    // If the page lost its notebook context (reload, stale state), reopen
+    // the first notebook instead of failing silently.
+    if (!state.currentId && state.notebooks.length) {
+      await openNotebook(state.notebooks[0].id);
+      const reopened = state.cells.find((item) => item.id === cell.id);
+      if (reopened) cell = reopened;
+    }
+    if (!state.currentId) {
+      announce("Open a notebook before running a cell", true);
+      return;
+    }
+    if (!cell.source.trim()) {
+      announce("That cell is empty — add some Python first", true);
+      return;
+    }
+    const notebookId = state.currentId;
+    button.disabled = true;
+    button.textContent = "Running…";
+    try {
+      // Save first so the executed source matches what is on disk.
+      await flushPendingSaves();
+      if (state.currentId !== notebookId) {
+        throw new Error("Notebook changed before the cell could run");
+      }
+      const source = cell.source;
+      const result = await api("/api/study/kernel/run", {
+        method: "POST",
+        mutate: true,
+        body: JSON.stringify({
+          notebookId,
+          source,
+        }),
+      });
+      const currentCell = state.currentId === notebookId
+        ? state.cells.find((item) => item.id === cell.id)
+        : null;
+      if (currentCell) {
+        currentCell.outputs = result.outputs;
+        currentCell.hasRun = true;
+        currentCell.mode = "preview";
+        renderCells();
+      }
+      announce(result.ok ? "Ran without errors" : "Cell raised an error", !result.ok);
+    } catch (error) {
+      announce(error.message, true);
+      elements.conflictFlag.hidden = false;
+      elements.conflictFlag.textContent = error.message;
+      setTimeout(() => { elements.conflictFlag.hidden = true; }, 6000);
+    } finally {
+      if (button.isConnected) {
+        button.disabled = false;
+        button.textContent = "Run ▶";
+      }
+    }
+  }
+
+  async function restartKernel() {
+    if (!state.currentId) return;
+    const notebookId = state.currentId;
+    try {
+      await api("/api/study/kernel/restart", {
+        method: "POST",
+        mutate: true,
+        body: JSON.stringify({ notebookId }),
+      });
+      if (state.currentId === notebookId) {
+        for (const cell of state.cells) delete cell.outputs;
+        renderCells();
+      }
+      announce("Kernel restarted — variables cleared");
+    } catch (error) {
+      announce(error.message, true);
     }
   }
 
@@ -449,10 +604,6 @@
 
   async function deleteNotebook() {
     if (!state.currentId) return;
-    const notebook = state.notebooks.find((item) => item.id === state.currentId);
-    if (!window.confirm(`Delete "${notebook?.title || "this notebook"}" and all of its cells?`)) {
-      return;
-    }
     try {
       await flushPendingSaves();
       await enqueueMutation(() => api(
@@ -491,10 +642,43 @@
   // ------------------------------------------------------------------ init
 
   function wireEvents() {
-    elements.newNotebookButton.addEventListener("click", () => void createNotebook());
-    elements.emptyNewButton.addEventListener("click", () => void createNotebook());
-    elements.deleteNotebookButton.addEventListener("click", () => void deleteNotebook());
+    elements.newNotebookButton.addEventListener("click", showNewNotebookDialog);
+    elements.emptyNewButton.addEventListener("click", showNewNotebookDialog);
+    elements.deleteNotebookButton.addEventListener("click", () => {
+      const notebook = state.notebooks.find((item) => item.id === state.currentId);
+      elements.deleteNotebookName.textContent = notebook?.title || "this notebook";
+      elements.deleteNotebookDialog.returnValue = "";
+      elements.deleteNotebookDialog.showModal();
+    });
+    elements.newNotebookDialog.addEventListener("close", () => {
+      if (elements.newNotebookDialog.returnValue === "confirm") void createNotebook();
+    });
+    elements.deleteNotebookDialog.addEventListener("close", () => {
+      if (elements.deleteNotebookDialog.returnValue === "confirm") void deleteNotebook();
+    });
     elements.notebookTitle.addEventListener("change", () => void saveTitle());
+    const restartButton = document.getElementById("restartKernelButton");
+    if (restartButton) restartButton.addEventListener("click", () => void restartKernel());
+
+    // Delegated handling for every cell action: buttons survive full list
+    // re-renders, and a click can never be silently swallowed.
+    elements.cellStack.addEventListener("click", (event) => {
+      const button = event.target.closest("button[data-action]");
+      if (!button || button.disabled) return;
+      const actions = button.closest("[data-cell-id]");
+      const cellId = actions ? actions.dataset.cellId : "";
+      const cell = state.cells.find((item) => item.id === cellId);
+      if (!cell) return;
+      const action = button.dataset.action;
+      if (action === "run") void runCell(cell, button);
+      else if (action === "toggle") {
+        cell.mode = cell.mode === "edit" ? "preview" : "edit";
+        renderCells();
+      } else if (action === "up") void moveCell(cell.id, "up");
+      else if (action === "down") void moveCell(cell.id, "down");
+      else if (action === "delete") void deleteCell(cell.id);
+    });
+
     document.querySelectorAll("[data-add-kind]").forEach((button) => {
       button.addEventListener("click", () => void addCell(button.dataset.addKind));
     });
@@ -526,6 +710,11 @@
       })();
     });
   }
+
+  window.onerror = function (message, source, line) {
+    const sub = document.getElementById("studySub");
+    if (sub) sub.textContent = "JS ERROR: " + message + " @" + line;
+  };
 
   async function init() {
     cacheElements();

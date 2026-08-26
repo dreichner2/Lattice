@@ -42,6 +42,34 @@ malicious document is required.
   payload and adjacent sidecar.
 - Exits when its desktop parent disappears when launched by either packaged app.
 
+### Study Lab Python kernel
+
+- Study Lab can execute Python cells through a persistent CPython process
+  owned by the local service. This is **trusted execution, not a sandbox**:
+  cells run locally with the user's full permissions, exactly like running a
+  script in a terminal.
+- Kernel reads and requests require the separate per-launch Study capability;
+  run and restart requests additionally require the ordinary action token. The
+  bridge process does not inherit the private Study capability.
+- The bridge permanently separates its private JSON control descriptors from
+  notebook standard I/O. Python `sys.stdout`/`sys.stderr` writes are retained
+  only up to their caps; direct native-descriptor and subprocess output is
+  discarded instead of entering the control channel. Tracebacks, result
+  rendering, bridge diagnostics, and PNG encoding are bounded while produced.
+- Interactive `input()` is blocked. A timeout, restart, deletion, idle
+  eviction, or app shutdown terminates the managed process tree (a kill-on-close
+  Job Object on Windows and a dedicated process group on POSIX), invalidates
+  in-flight results, and prevents later kernel admission after shutdown. This
+  is cleanup containment, not hostile-code isolation: trusted POSIX code can
+  deliberately leave its process group, just as it can alter or delete user
+  files with the user's permissions.
+- The Windows service is packaged as a directory bundle so the process that
+  hosts the embedded interpreter is assigned to its Job Object before notebook
+  code starts; the packaged Windows test verifies restart kills a child probe.
+- One kernel is retained per notebook, with at most eight managed kernel trees
+  at once. Notebook deletion/restart and execution admission share a generation
+  boundary so a result from an older kernel is never accepted as current.
+
 ### Windows installer and updater
 
 - The one-click bootstrap downloads the pinned `v2.3.3` Windows release and
@@ -297,7 +325,9 @@ possibly compromised key to authorize its own replacement.
   messages and top-level navigation to that server's exact scheme, host, and
   effective port, rather than trusting every loopback service.
 - LaTeX renders from the vendored KaTeX distribution with trust disabled.
-  Python cells are inert source text and never execute.
+  Python cells execute only after an explicit Run action and remain inert when
+  rendered. Output text is inserted as text, and plots accept only bounded PNG
+  data. Execution has the user's full local permissions and is not a sandbox.
 
 ### Device vault
 

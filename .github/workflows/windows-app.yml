@@ -615,13 +615,20 @@ jobs:
           $stdout = Join-Path $env:RUNNER_TEMP "lattice-server.stdout.log"
           $stderr = Join-Path $env:RUNNER_TEMP "lattice-server.stderr.log"
           $state = Join-Path $env:RUNNER_TEMP "lattice-reader-state.sqlite3"
+          $studyRoot = Join-Path $env:RUNNER_TEMP "lattice-study-smoke"
+          $privateToken = "bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb"
           $firstPort = 8766
           $parent = $null
           $server = $null
+          $descendantMarker = $null
+          $descendantReady = $null
           try {
+            Remove-Item $studyRoot -Recurse -Force -ErrorAction SilentlyContinue
             $parent = Start-Process powershell.exe `
               -ArgumentList @("-NoProfile", "-Command", "Start-Sleep -Seconds 120") `
               -PassThru
+            $env:LATTICE_STUDY_ROOT = $studyRoot
+            $env:LATTICE_PRIVATE_TOKEN = $privateToken
             $server = Start-Process (Join-Path $package "Server\LatticeServer.exe") `
               -ArgumentList @(
                 "--root", $libraryRoot,
@@ -676,7 +683,93 @@ jobs:
               [StringComparison]::OrdinalIgnoreCase
             )) { throw "Packaged server selected the wrong library root: $($health.root)" }
 
-            Start-Sleep -Seconds 4
+            # Exercise frozen parent -> child kernel re-entry through the real
+            # authenticated HTTP service, not only bridge mode in isolation.
+            $privateHeaders = @{ "X-Lattice-Private-Token" = $privateToken }
+            $library = Invoke-RestMethod "$url/api/library" -Headers $privateHeaders -TimeoutSec 5
+            $mutationHeaders = @{
+              "X-Lattice-Private-Token" = $privateToken
+              "X-Library-Token" = [string]$library.actionToken
+            }
+            $notebook = Invoke-RestMethod `
+              "$url/api/study/notebooks" `
+              -Method Post `
+              -Headers $mutationHeaders `
+              -ContentType "application/json" `
+              -Body '{"title":"Packaged kernel smoke"}' `
+              -TimeoutSec 10
+            $kernelResult = Invoke-RestMethod `
+              "$url/api/study/kernel/run" `
+              -Method Post `
+              -Headers $mutationHeaders `
+              -ContentType "application/json" `
+              -Body (@{
+                notebookId = [string]$notebook.notebook.id
+                source = "packaged_value = 41`npackaged_value + 1"
+              } | ConvertTo-Json -Compress) `
+              -TimeoutSec 30
+            $resultOutput = @($kernelResult.outputs | Where-Object { $_.type -eq "result" })
+            if (-not $kernelResult.ok -or
+                $resultOutput.Count -ne 1 -or
+                [string]$resultOutput[0].text -cne "42") {
+              throw "Packaged HTTP Study kernel did not execute through frozen re-entry"
+            }
+
+            # Prove that restart terminates descendants of the packaged bridge.
+            # The marker would be written only if the child escaped its Job.
+            $descendantMarker = Join-Path $env:RUNNER_TEMP "lattice-kernel-descendant.survived"
+            $descendantReady = Join-Path $env:RUNNER_TEMP "lattice-kernel-descendant.ready"
+            Remove-Item $descendantMarker -Force -ErrorAction SilentlyContinue
+            Remove-Item $descendantReady -Force -ErrorAction SilentlyContinue
+            $markerBase64 = [Convert]::ToBase64String(
+              [Text.Encoding]::UTF8.GetBytes($descendantMarker)
+            )
+            $readyBase64 = [Convert]::ToBase64String(
+              [Text.Encoding]::UTF8.GetBytes($descendantReady)
+            )
+            $descendantSource = @"
+          import base64, pathlib, subprocess, time
+          marker = base64.b64decode('$markerBase64').decode('utf-8')
+          ready = base64.b64decode('$readyBase64').decode('utf-8')
+          quote = lambda value: "'" + value.replace("'", "''") + "'"
+          child = "[IO.File]::WriteAllText(" + quote(ready) + ", 'ready'); Start-Sleep -Seconds 6; [IO.File]::WriteAllText(" + quote(marker) + ", 'survived')"
+          encoded = base64.b64encode(child.encode('utf-16le')).decode('ascii')
+          subprocess.Popen(['powershell.exe', '-NoProfile', '-NonInteractive', '-EncodedCommand', encoded])
+          deadline = time.monotonic() + 10
+          while not pathlib.Path(ready).exists() and time.monotonic() < deadline:
+              time.sleep(0.05)
+          pathlib.Path(ready).exists()
+          "@
+            $descendantResult = Invoke-RestMethod `
+              "$url/api/study/kernel/run" `
+              -Method Post `
+              -Headers $mutationHeaders `
+              -ContentType "application/json" `
+              -Body (@{
+                notebookId = [string]$notebook.notebook.id
+                source = $descendantSource
+              } | ConvertTo-Json -Compress) `
+              -TimeoutSec 30
+            $descendantOutput = @($descendantResult.outputs | Where-Object { $_.type -eq "result" })
+            if (-not $descendantResult.ok -or
+                $descendantOutput.Count -ne 1 -or
+                [string]$descendantOutput[0].text -cne "True" -or
+                -not (Test-Path $descendantReady)) {
+              throw "Packaged Study kernel did not launch its descendant cleanup probe"
+            }
+            $restartResult = Invoke-RestMethod `
+              "$url/api/study/kernel/restart" `
+              -Method Post `
+              -Headers $mutationHeaders `
+              -ContentType "application/json" `
+              -Body (@{ notebookId = [string]$notebook.notebook.id } | ConvertTo-Json -Compress) `
+              -TimeoutSec 30
+            if (-not $restartResult.ok) { throw "Packaged Study kernel restart failed" }
+            Start-Sleep -Seconds 7
+            if (Test-Path $descendantMarker) {
+              throw "Packaged Study kernel descendant survived restart"
+            }
+
             $parent.Refresh()
             $server.Refresh()
             if ($parent.HasExited) { throw "Parent liveness probe terminated its parent process" }
@@ -684,6 +777,10 @@ jobs:
           } finally {
             if ($server) { Stop-Process -Id $server.Id -Force -ErrorAction SilentlyContinue }
             if ($parent) { Stop-Process -Id $parent.Id -Force -ErrorAction SilentlyContinue }
+            if ($descendantMarker) { Remove-Item $descendantMarker -Force -ErrorAction SilentlyContinue }
+            if ($descendantReady) { Remove-Item $descendantReady -Force -ErrorAction SilentlyContinue }
+            Remove-Item Env:LATTICE_PRIVATE_TOKEN -ErrorAction SilentlyContinue
+            Remove-Item Env:LATTICE_STUDY_ROOT -ErrorAction SilentlyContinue
           }
 
       - name: Upload Windows app

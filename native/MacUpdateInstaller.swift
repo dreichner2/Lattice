@@ -44,6 +44,8 @@ enum MacUpdateInstaller {
         "Contents/Resources/server/lattice_tutor.py",
         "Contents/Resources/server/library_vault.py",
         "Contents/Resources/server/study_lab.py",
+        "Contents/Resources/server/study_python.py",
+        "Contents/Resources/server/study_kernel.py",
         "Contents/Resources/server/vendor/pypdf/__init__.py",
         "Contents/Resources/server/vendor/pypdf-LICENSE",
         "Contents/Resources/server/move_library.py",

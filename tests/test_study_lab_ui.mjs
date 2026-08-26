@@ -20,6 +20,10 @@ test("Study Lab bindings resolve and expose only explicit LaTeX and Python cells
   assert.match(HTML, /data-add-kind="latex"/);
   assert.match(HTML, /data-add-kind="python"/);
   assert.doesNotMatch(HTML, /data-add-kind="(?:text|mixed|markdown)"/);
+  assert.match(HTML, /id="newNotebookDialog"/);
+  assert.match(HTML, /id="deleteNotebookDialog"/);
+  assert.doesNotMatch(SCRIPT, /window\.(?:prompt|confirm)\s*\(/);
+  assert.doesNotMatch(SCRIPT, /import numpy/);
 });
 
 test("Study Lab serializes autosaves and sends revisions on every existing-notebook mutation", () => {
@@ -29,6 +33,7 @@ test("Study Lab serializes autosaves and sends revisions on every existing-noteb
   assert.match(SCRIPT, /await flushPendingSaves\(\);[\s\S]*?\/api\/study\/cell\/move/);
   assert.match(SCRIPT, /await flushPendingSaves\(\);[\s\S]*?\/api\/study\/cell\/delete/);
   assert.match(SCRIPT, /baseUpdatedAt:\s*state\.revision/g);
+  assert.match(SCRIPT, /function refreshCurrentCellCount\(/);
   assert.match(APP, /baseUpdatedAt:\s*notebook\.updatedAt/);
   assert.match(SCRIPT, /beforeunload/);
 });
@@ -43,10 +48,18 @@ test("Study Lab keeps the private launch capability out of request URLs", () => 
   assert.doesNotMatch(APP, /[?&]access=/);
 });
 
-test("Study Lab renders locally without executing Python", () => {
+test("Study Lab renders locally and runs Python only through the guarded kernel API", () => {
   assert.match(SCRIPT, /trust:\s*false/);
-  assert.match(SCRIPT, /execution is unavailable/);
-  assert.doesNotMatch(SCRIPT, /\beval\s*\(|new Function\s*\(|pyodide|\/execute\b/i);
+  assert.match(HTML, /Only run code you trust/);
+  assert.match(SCRIPT, /\/api\/study\/kernel\/run/);
+  assert.match(SCRIPT, /\/api\/study\/kernel\/restart/);
+  assert.match(SCRIPT, /await flushPendingSaves\(\);[\s\S]*?\/api\/study\/kernel\/run/);
+  assert.doesNotMatch(SCRIPT, /\bsaveCell\s*\(/);
+  assert.match(SCRIPT, /const notebookId = state\.currentId;[\s\S]*?JSON\.stringify\(\{[\s\S]*?notebookId,[\s\S]*?source,/);
+  assert.match(SCRIPT, /state\.currentId === notebookId[\s\S]*?state\.cells\.find/);
+  assert.match(SCRIPT, /output\.mime === "image\/png"/);
+  assert.match(SCRIPT, /\.textContent = output\.(?:text|traceback)/);
+  assert.doesNotMatch(SCRIPT, /\beval\s*\(|new Function\s*\(|pyodide/i);
   assert.match(KATEX, /version:"0\.18\.4"/);
   assert.match(NOTICES, /KaTeX 0\.18\.4/);
 });
@@ -54,6 +67,8 @@ test("Study Lab renders locally without executing Python", () => {
 test("both desktop packages require the Study module and offline renderer", () => {
   for (const source of [MAC_BUILD, WINDOWS_BUILD]) {
     assert.match(source, /study_lab\.py/);
+    assert.match(source, /study_python\.py/);
+    assert.match(source, /study_kernel\.py/);
     assert.match(source, /study-lab\.js/);
     assert.match(source, /vendor[\\/]katex[\\/]katex\.min\.js/);
     assert.match(source, /KaTeX_Main-Regular\.woff2/);

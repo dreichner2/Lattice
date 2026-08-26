@@ -7,6 +7,7 @@ import re
 import sys
 import tempfile
 import threading
+import time
 import unittest
 import urllib.error
 import urllib.request
@@ -19,6 +20,7 @@ sys.path.insert(0, str(ROOT / "scripts"))
 
 import library_ui  # noqa: E402
 import study_lab  # noqa: E402
+import study_python  # noqa: E402
 
 
 class StudyServerTests(unittest.TestCase):
@@ -307,6 +309,142 @@ class StudyServerTests(unittest.TestCase):
     def test_katex_vendor_rejects_traversal(self) -> None:
         status, _body = self.get("/vendor/katex/..%2F..%2F..%2Flibrary%2FCATALOG.md")
         self.assertEqual(status, 404)
+
+    def test_kernel_run_over_http(self) -> None:
+        status, created = self.post("/api/study/notebooks", {"title": "Kernel nb"})
+        notebook_id = created["notebook"]["id"]
+
+        status, status_payload = self.get("/api/study/kernel/status")
+        self.assertEqual(status, 200)
+        self.assertTrue(status_payload["available"])
+
+        status, run = self.post(
+            "/api/study/kernel/run",
+            {"notebookId": notebook_id, "source": "print('http')\n3 ** 2"},
+        )
+        self.assertEqual(status, 200)
+        self.assertTrue(run["ok"])
+        stream = next(o for o in run["outputs"] if o["type"] == "stream")
+        self.assertIn("http", stream["text"])
+        value = next(o for o in run["outputs"] if o["type"] == "result")
+        self.assertEqual(value["text"], "9")
+
+        status, restarted = self.post(
+            "/api/study/kernel/restart",
+            {"notebookId": notebook_id},
+        )
+        self.assertEqual(status, 200)
+
+        status, run = self.post(
+            "/api/study/kernel/run",
+            {"notebookId": notebook_id, "source": "print('again')"},
+        )
+        self.assertEqual(status, 200)
+        self.assertTrue(run["ok"])
+
+    def test_kernel_rejects_empty_source(self) -> None:
+        status, _body = self.post(
+            "/api/study/kernel/run",
+            {"notebookId": "nb", "source": "   "},
+        )
+        self.assertEqual(status, 400)
+
+    def test_kernel_rejects_unknown_notebooks_and_oversized_source(self) -> None:
+        status, _body = self.post(
+            "/api/study/kernel/run",
+            {"notebookId": "missing", "source": "40 + 2"},
+        )
+        self.assertEqual(status, 400)
+
+        status, created = self.post("/api/study/notebooks", {"title": "Bounded"})
+        self.assertEqual(status, 201)
+        status, _body = self.post(
+            "/api/study/kernel/run",
+            {
+                "notebookId": created["notebook"]["id"],
+                "source": "x" * (study_lab.MAX_CELL_SOURCE_CHARS + 1),
+            },
+        )
+        self.assertEqual(status, 400)
+
+    def test_deleting_notebook_stops_its_kernel(self) -> None:
+        status, created = self.post("/api/study/notebooks", {"title": "Disposable"})
+        self.assertEqual(status, 201)
+        notebook = created["notebook"]
+        status, _run = self.post(
+            "/api/study/kernel/run",
+            {"notebookId": notebook["id"], "source": "kept = 42"},
+        )
+        self.assertEqual(status, 200)
+        self.assertIn(notebook["id"], self.server.study_runtime._kernels)
+
+        status, _deleted = self.post(
+            f"/api/study/notebook/{notebook['id']}/delete",
+            {"baseUpdatedAt": notebook["updatedAt"]},
+        )
+        self.assertEqual(status, 200)
+        self.assertNotIn(notebook["id"], self.server.study_runtime._kernels)
+
+    def test_delete_invalidates_an_inflight_run_without_waiting_for_timeout(self) -> None:
+        created = self.server.study_create_notebook({"title": "Delete race"})
+        notebook = created["notebook"]
+        errors: list[BaseException] = []
+
+        def run_cell() -> None:
+            try:
+                self.server.study_kernel_run({
+                    "notebookId": notebook["id"],
+                    "source": "import time\ntime.sleep(30)\n42",
+                })
+            except BaseException as exc:
+                errors.append(exc)
+
+        runner = threading.Thread(target=run_cell)
+        runner.start()
+        deadline = time.monotonic() + 5
+        while time.monotonic() < deadline:
+            kernel = self.server.study_runtime._kernels.get(notebook["id"])
+            if kernel is not None and kernel.busy:
+                break
+            time.sleep(0.01)
+        else:
+            self.fail("the kernel did not begin the controlled run")
+
+        started = time.monotonic()
+        self.server.study_delete_notebook(
+            notebook["id"],
+            {"baseUpdatedAt": notebook["updatedAt"]},
+        )
+        runner.join(timeout=5)
+        self.assertFalse(runner.is_alive())
+        self.assertLess(time.monotonic() - started, 3)
+        self.assertEqual(len(errors), 1)
+        self.assertIsInstance(errors[0], study_python.KernelUnavailable)
+        self.assertNotIn(notebook["id"], self.server.study_runtime._kernels)
+
+    def test_kernel_endpoints_require_private_launch_capability(self) -> None:
+        status, _body = self.get(
+            "/api/study/kernel/status",
+            private_token=None,
+        )
+        self.assertEqual(status, 403)
+
+        status, created = self.post("/api/study/notebooks", {"title": "Private kernel"})
+        self.assertEqual(status, 201)
+        notebook_id = created["notebook"]["id"]
+        for route, body in (
+            (
+                "/api/study/kernel/run",
+                {"notebookId": notebook_id, "source": "40 + 2"},
+            ),
+            (
+                "/api/study/kernel/restart",
+                {"notebookId": notebook_id},
+            ),
+        ):
+            with self.subTest(route=route):
+                status, _body = self.post(route, body, private_token=None)
+                self.assertEqual(status, 403)
 
     def test_mutations_require_token(self) -> None:
         request = urllib.request.Request(

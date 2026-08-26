@@ -19,6 +19,11 @@
   New endpoints live under `/api/study/*`; every read and mutation requires an
   unguessable per-launch private capability, and mutations also require the
   ordinary action token. Protocol version is 4.
+- Study Lab Python kernel: persistent per-notebook CPython processes ported
+  from Lunaris. Python cells gain Run controls with captured stdout/stderr,
+  result values, matplotlib PNG figures when available (Agg backend), per-cell timeouts,
+  and Restart-kernel semantics. This is trusted local execution, documented in
+  `SECURITY.md`, not a sandbox.
 
 ### Changed
 
@@ -43,6 +48,18 @@
   exact owned server origin, including port.
 - macOS and Windows update validation now requires the Study Lab, KaTeX, and
   private-storage runtime files introduced in 2.3.3.
+- Study Lab kernels now ship in the macOS bundle and re-enter the packaged
+  Windows service's embedded CPython runtime; the Windows build runs a real
+  persistence smoke test before packaging.
+- Study Lab kernel lifecycle is now race-safe: restart, notebook deletion, idle
+  eviction, timeout, and app shutdown invalidate stale results and terminate
+  the managed descendant tree through a Windows Job Object or POSIX process
+  group. Kernel control descriptors are isolated from notebook standard I/O,
+  and text, traceback, result, diagnostic, and plot limits are enforced while
+  output is produced rather than after unbounded buffering.
+- The packaged Windows service now uses a directory bundle, ensuring its
+  interpreter-hosting process is assigned to the kernel Job Object before any
+  notebook code can run; packaged CI proves restart removes a spawned child.
 - Windows external-drive eject now identifies visible File Explorer windows or
   tabs on the library drive and waits for the user to close them without
   force-closing Explorer.
@@ -59,6 +76,9 @@
   outside the turn.
 - Tutor and optional import enrichment now explicitly disable Codex hosted web
   search, preserving Lattice's source-only and metadata-only model boundaries.
+- Every Study kernel endpoint now requires the private per-launch Study
+  capability, and run/restart additionally require the ordinary mutation token.
+  Kernel children do not inherit the private capability.
 - Tutor source paths are canonically revalidated immediately before indexing
   and permission construction. A cataloged symlink can no longer grant Codex
   access to a same-user-readable file outside the selected library.

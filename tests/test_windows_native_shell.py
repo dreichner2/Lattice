@@ -30,6 +30,9 @@ PORTABLE_LAUNCHER_CODE = WINDOWS / "PortableLauncherUpdate.cs"
 EXTERNAL_VOLUME_CODE = WINDOWS / "ExternalLibraryVolumeRecord.cs"
 WINDOWS_BUILD = ROOT / "windows" / "build-windows.ps1"
 WINDOWS_INSTALLER = ROOT / "windows" / "install.ps1"
+WINDOWS_WORKFLOW = ROOT / ".github" / "workflows" / "windows-app.yml"
+MAC_WORKFLOW = ROOT / ".github" / "workflows" / "native-macos.yml"
+STUDY_PYTHON = ROOT / "scripts" / "study_python.py"
 XAML_NAME = "{http://schemas.microsoft.com/winfx/2006/xaml}Name"
 XAML_KEY = "{http://schemas.microsoft.com/winfx/2006/xaml}Key"
 
@@ -61,6 +64,9 @@ class WindowsNativeShellTests(unittest.TestCase):
         cls.external_volume_code = EXTERNAL_VOLUME_CODE.read_text(encoding="utf-8")
         cls.windows_build = WINDOWS_BUILD.read_text(encoding="utf-8")
         cls.windows_installer = WINDOWS_INSTALLER.read_text(encoding="utf-8")
+        cls.windows_workflow = WINDOWS_WORKFLOW.read_text(encoding="utf-8")
+        cls.mac_workflow = MAC_WORKFLOW.read_text(encoding="utf-8")
+        cls.study_python = STUDY_PYTHON.read_text(encoding="utf-8")
 
     def test_native_palette_matches_shared_lattice_surface(self) -> None:
         keyed_values = {
@@ -146,6 +152,47 @@ class WindowsNativeShellTests(unittest.TestCase):
             self.window_code,
         )
         self.assertIn("#access={_privateAccessToken}", self.window_code)
+        self.assertIn("--hidden-import study_python", self.windows_build)
+        self.assertIn("--hidden-import study_kernel", self.windows_build)
+        self.assertIn("--study-kernel", self.windows_build)
+        self.assertIn("Packaged Study Lab kernel", self.windows_build)
+
+    def test_packaged_kernel_containment_and_integration_stay_covered(self) -> None:
+        for contract in (
+            "AssignProcessToJobObject",
+            "0x00002000  # KILL_ON_JOB_CLOSE",
+            'start_new_session=os.name != "nt"',
+            "os.killpg",
+            "_generations",
+            "_stopping_kernels",
+        ):
+            self.assertIn(contract, self.study_python)
+        for contract in (
+            "/api/study/notebooks",
+            "/api/study/kernel/run",
+            "/api/study/kernel/restart",
+            "Packaged HTTP Study kernel did not execute through frozen re-entry",
+            "lattice-kernel-descendant.ready",
+            "-EncodedCommand",
+            "Packaged Study kernel descendant survived restart",
+            "LATTICE_PRIVATE_TOKEN",
+        ):
+            self.assertIn(contract, self.windows_workflow)
+        server_build = self.windows_build[
+            self.windows_build.index("Building the contained local service bundle"):
+            self.windows_build.index("Building the standalone storage relocation helper")
+        ]
+        self.assertIn("--onedir", server_build)
+        self.assertNotIn("--onefile", server_build)
+        self.assertIn(
+            'Copy-Item (Join-Path $ServerBundleRoot "*") $PublishedServerRoot -Recurse -Force',
+            self.windows_build,
+        )
+        self.assertIn(
+            'PYTHONPATH="Lattice.app/Contents/Resources/server"',
+            self.mac_workflow,
+        )
+        self.assertIn("PYTHONDONTWRITEBYTECODE=1", self.mac_workflow)
 
     def test_all_xaml_handlers_have_code_behind_methods(self) -> None:
         handlers: set[str] = set()

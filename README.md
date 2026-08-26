@@ -487,7 +487,7 @@ without modifying Git-tracked metadata.
 Portable checks:
 
 ```bash
-python3 -m py_compile scripts/library_ui.py scripts/cross_platform_server.py windows/server_bootstrap.py
+python3 -m py_compile scripts/library_ui.py scripts/study_python.py scripts/study_kernel.py scripts/cross_platform_server.py windows/server_bootstrap.py
 python3 -m unittest discover -s tests -p 'test_*.py' -v
 node --check ui/app.js
 node --check native/ImmersiveEPUB.js
@@ -544,6 +544,8 @@ cs-library/
 ├── scripts/
 │   ├── library_ui.py
 │   ├── cross_platform_server.py
+│   ├── study_python.py
+│   ├── study_kernel.py
 │   ├── build-macos-app.sh
 │   ├── fetch.py
 │   └── build_readable_books.py

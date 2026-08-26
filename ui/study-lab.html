@@ -30,10 +30,13 @@
         <input id="notebookTitle" class="study-notebook-title" type="text"
                aria-label="Notebook title" placeholder="Untitled notebook" maxlength="200">
         <span class="study-work-link" id="workLink"></span>
+        <button class="cell-action" id="restartKernelButton" type="button"
+                title="Stop the Python kernel and clear its variables">Restart kernel</button>
         <span class="study-conflict" id="conflictFlag" hidden>Changed elsewhere — reload to continue</span>
         <button class="button button-small study-delete-notebook" id="deleteNotebookButton"
                 type="button">Delete notebook</button>
       </div>
+      <p class="study-kernel-warning">Python runs on this computer with your user permissions. Only run code you trust.</p>
       <div id="cellStack" class="cell-stack"></div>
       <div class="cell-adder">
         <span class="cell-adder-label">Add cell</span>
@@ -51,6 +54,30 @@
       <button class="button button-primary" id="emptyNewButton" type="button">Create your first notebook</button>
     </div>
   </main>
+
+  <dialog id="newNotebookDialog" class="study-dialog">
+    <form method="dialog">
+      <h3>New notebook</h3>
+      <p class="study-dialog-hint">Give this local notebook a short title. You can rename it later.</p>
+      <input id="newNotebookTitleInput" type="text" value="Untitled notebook"
+             aria-label="New notebook title" maxlength="200" required>
+      <menu>
+        <button value="cancel" type="submit">Cancel</button>
+        <button value="confirm" class="button button-primary button-small" type="submit">Create notebook</button>
+      </menu>
+    </form>
+  </dialog>
+
+  <dialog id="deleteNotebookDialog" class="study-dialog">
+    <form method="dialog">
+      <h3>Delete notebook?</h3>
+      <p class="study-dialog-hint">Delete <strong id="deleteNotebookName">this notebook</strong> and all of its cells? This cannot be undone.</p>
+      <menu>
+        <button value="cancel" type="submit">Cancel</button>
+        <button value="confirm" class="button button-small study-delete-notebook" type="submit">Delete notebook</button>
+      </menu>
+    </form>
+  </dialog>
 
   <dialog id="linkDialog" class="study-dialog">
     <form method="dialog">

@@ -11,6 +11,7 @@ $Project = Join-Path $ScriptRoot "CSLibrary.Windows\CSLibrary.Windows.csproj"
 $BuildRoot = Join-Path $ScriptRoot "build"
 $PublishRoot = Join-Path $BuildRoot "publish-$Runtime"
 $ServerRoot = Join-Path $BuildRoot "server-$Runtime"
+$ServerBundleRoot = Join-Path $ServerRoot "LatticeServer"
 $PackageRoot = Join-Path $BuildRoot "package-$Runtime"
 $ArtifactsRoot = Join-Path $RepoRoot "artifacts"
 $LayoutPath = Join-Path $RepoRoot "library-layout.json"
@@ -88,7 +89,7 @@ try {
 
   if (-not $SkipTests) {
     Write-Host "Running portable checks..."
-    python -m py_compile scripts/library_ui.py scripts/library_vault.py scripts/lattice_tutor.py scripts/study_lab.py scripts/cross_platform_server.py scripts/move_library.py windows/server_bootstrap.py windows/generate_icon.py
+    python -m py_compile scripts/library_ui.py scripts/library_vault.py scripts/lattice_tutor.py scripts/study_lab.py scripts/study_python.py scripts/study_kernel.py scripts/cross_platform_server.py scripts/move_library.py windows/server_bootstrap.py windows/generate_icon.py
     Assert-NativeSuccess "Python compilation"
     python -m unittest discover -s tests -p "test_*.py" -v
     Assert-NativeSuccess "Python tests"
@@ -121,7 +122,7 @@ try {
     Assert-NativeSuccess "Node tests"
   }
 
-  Write-Host "Building the standalone local service..."
+  Write-Host "Building the contained local service bundle..."
   python -m pip install --disable-pip-version-check --quiet "pyinstaller==6.21.0"
   Assert-NativeSuccess "PyInstaller installation"
   Remove-Item $ServerRoot -Recurse -Force -ErrorAction SilentlyContinue
@@ -129,17 +130,39 @@ try {
   python -m PyInstaller `
     --noconfirm `
     --clean `
-    --onefile `
+    --onedir `
     --name LatticeServer `
     --paths (Join-Path $RepoRoot "scripts") `
     --paths (Join-Path $RepoRoot "scripts\vendor") `
     --hidden-import pypdf `
     --hidden-import study_lab `
+    --hidden-import study_python `
+    --hidden-import study_kernel `
     --distpath $ServerRoot `
     --workpath (Join-Path $BuildRoot "pyinstaller-work") `
     --specpath (Join-Path $BuildRoot "pyinstaller-spec") `
     (Join-Path $ScriptRoot "server_bootstrap.py")
-  Assert-NativeSuccess "Standalone service build"
+  Assert-NativeSuccess "Contained service build"
+  $ServerExecutable = Join-Path $ServerBundleRoot "LatticeServer.exe"
+  if (-not (Test-Path $ServerExecutable -PathType Leaf)) {
+    throw "The contained local service executable is missing"
+  }
+
+  Write-Host "Smoke-testing the packaged Study Lab kernel..."
+  $KernelRequests = @(
+    '{"id":"state","source":"answer = 41"}',
+    '{"id":"result","source":"answer + 1"}'
+  )
+  $KernelOutput = $KernelRequests | & $ServerExecutable --study-kernel
+  Assert-NativeSuccess "Packaged Study Lab kernel"
+  $KernelReplies = @($KernelOutput | ForEach-Object { $_ | ConvertFrom-Json })
+  if ($KernelReplies.Count -ne 2 -or
+      $KernelReplies[0].id -cne "state" -or -not $KernelReplies[0].ok -or
+      $KernelReplies[1].id -cne "result" -or -not $KernelReplies[1].ok -or
+      $KernelReplies[1].outputs[0].type -cne "result" -or
+      $KernelReplies[1].outputs[0].text -cne "42") {
+    throw "The packaged Study Lab kernel failed its persistence smoke test"
+  }
 
   Write-Host "Building the standalone storage relocation helper..."
   python -m PyInstaller `
@@ -166,8 +189,9 @@ try {
     -p:DebugSymbols=false
   Assert-NativeSuccess "Windows desktop application build"
 
-  New-Item (Join-Path $PublishRoot "Server") -ItemType Directory -Force | Out-Null
-  Copy-Item (Join-Path $ServerRoot "LatticeServer.exe") (Join-Path $PublishRoot "Server\LatticeServer.exe") -Force
+  $PublishedServerRoot = Join-Path $PublishRoot "Server"
+  New-Item $PublishedServerRoot -ItemType Directory -Force | Out-Null
+  Copy-Item (Join-Path $ServerBundleRoot "*") $PublishedServerRoot -Recurse -Force
   New-Item (Join-Path $PublishRoot "Tools") -ItemType Directory -Force | Out-Null
   Copy-Item (Join-Path $ServerRoot "LatticeStorage.exe") (Join-Path $PublishRoot "Tools\LatticeStorage.exe") -Force
 
