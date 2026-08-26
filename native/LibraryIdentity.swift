@@ -67,6 +67,26 @@ enum LibraryIdentity {
         return resolveLibraryFile(relativePath: relative, root: canonical) == candidate ? relative : nil
     }
 
+    static func sameHTTPOrigin(_ first: URL?, _ second: URL?) -> Bool {
+        guard
+            let first,
+            let second,
+            let firstScheme = first.scheme?.lowercased(),
+            let secondScheme = second.scheme?.lowercased(),
+            let firstHost = first.host?.lowercased(),
+            let secondHost = second.host?.lowercased(),
+            !firstHost.isEmpty,
+            ["http", "https"].contains(firstScheme),
+            firstScheme == secondScheme,
+            firstHost == secondHost
+        else { return false }
+        func effectivePort(_ url: URL, scheme: String) -> Int {
+            url.port ?? (scheme == "https" ? 443 : 80)
+        }
+        return effectivePort(first, scheme: firstScheme)
+            == effectivePort(second, scheme: secondScheme)
+    }
+
     private static func normalizedRelativePath(_ value: String) -> String {
         value.replacingOccurrences(of: "\\", with: "/")
             .trimmingCharacters(in: .whitespacesAndNewlines)

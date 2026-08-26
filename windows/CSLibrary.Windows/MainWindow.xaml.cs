@@ -4,6 +4,7 @@ using System.ComponentModel;
 using System.Diagnostics;
 using System.IO;
 using System.Net.Http;
+using System.Security.Cryptography;
 using System.Text;
 using System.Text.Json;
 using System.Windows;
@@ -68,6 +69,8 @@ public partial class MainWindow : Window
     private readonly UpdateService _updateService;
     private readonly UpdateCandidateSession? _updateCandidate;
     private readonly bool _candidateLaunchRequested;
+    private readonly string _privateAccessToken = Convert.ToHexString(
+        RandomNumberGenerator.GetBytes(32)).ToLowerInvariant();
     private Process? _serverProcess;
     private string? _serverUrl;
     private string? _libraryRoot;
@@ -332,7 +335,8 @@ public partial class MainWindow : Window
                 }
             }
             await ConfigureWebViewAsync(_libraryRoot);
-            Browser.CoreWebView2.Navigate($"{_serverUrl}/?app=windows");
+            Browser.CoreWebView2.Navigate(
+                $"{_serverUrl}/?app=windows#access={_privateAccessToken}");
             SetShellStatus("Loading your library", ShellStatus.Loading);
         }
         catch (OperationCanceledException) when (_lifetime.IsCancellationRequested)
@@ -427,7 +431,9 @@ public partial class MainWindow : Window
         start.ArgumentList.Add("--parent-pid");
         start.ArgumentList.Add(Environment.ProcessId.ToString());
         start.ArgumentList.Add("--no-browser");
+        start.ArgumentList.Add("--isolated");
         start.Environment["PYTHONUNBUFFERED"] = "1";
+        start.Environment["LATTICE_PRIVATE_TOKEN"] = _privateAccessToken;
 
         var process = new Process { StartInfo = start, EnableRaisingEvents = true };
         process.OutputDataReceived += (_, eventArgs) =>
@@ -1762,7 +1768,9 @@ public partial class MainWindow : Window
 
     private void Home_Click(object sender, RoutedEventArgs e)
     {
-        if (_serverUrl is not null) Browser.CoreWebView2?.Navigate($"{_serverUrl}/?app=windows");
+        if (_serverUrl is not null)
+            Browser.CoreWebView2?.Navigate(
+                $"{_serverUrl}/?app=windows#access={_privateAccessToken}");
     }
 
     private void Reload_Click(object sender, RoutedEventArgs e)

@@ -30,6 +30,29 @@ const IMPORT_STATUS_FAILED = new Set(["failed", "error"]);
 // multi-file drop. Poll long enough for every queued item to reach a terminal
 // state instead of presenting a still-running job as a fallback after ~2 min.
 const IMPORT_POLL_LIMIT = 900;
+const PRIVATE_ACCESS_STORAGE = "lattice:private-access";
+
+function capturePrivateAccessToken() {
+  try {
+    const fragment = new URLSearchParams(window.location.hash.slice(1));
+    const candidate = fragment.get("access") || "";
+    if (/^[A-Za-z0-9_-]{43,128}$/.test(candidate)) {
+      window.sessionStorage.setItem(PRIVATE_ACCESS_STORAGE, candidate);
+    }
+    if (fragment.has("access")) {
+      fragment.delete("access");
+      const suffix = fragment.toString();
+      window.history.replaceState(
+        null,
+        "",
+        `${window.location.pathname}${window.location.search}${suffix ? `#${suffix}` : ""}`,
+      );
+    }
+    return window.sessionStorage.getItem(PRIVATE_ACCESS_STORAGE) || "";
+  } catch {
+    return "";
+  }
+}
 
 const APP_MODE = new URLSearchParams(window.location.search).get("app");
 const IS_NATIVE_APP = APP_MODE === "1";
@@ -41,6 +64,7 @@ const SYSTEM_OPEN_LABEL = IS_WINDOWS ? "Open in Windows" : "Open on Mac";
 const state = {
   library: null,
   token: "",
+  privateToken: capturePrivateAccessToken(),
   query: "",
   view: "all",
   subject: "all",
@@ -3263,7 +3287,11 @@ function connectLiveUpdates() {
 
 async function insertTutorArtifact(artifact) {
   // Insert into the most recent notebook; create one if none exists.
-  const listResponse = await fetch("/api/study/notebooks", { cache: "no-store" });
+  const privateHeaders = { "X-Lattice-Private-Token": state.privateToken };
+  const listResponse = await fetch("/api/study/notebooks", {
+    cache: "no-store",
+    headers: privateHeaders,
+  });
   if (!listResponse.ok) throw new Error("Study Lab is unavailable");
   const list = await listResponse.json();
   let notebook = list.notebooks[0];
@@ -3271,7 +3299,11 @@ async function insertTutorArtifact(artifact) {
   if (!notebook) {
     const createResponse = await fetch("/api/study/notebooks", {
       method: "POST",
-      headers: { "Content-Type": "application/json", "X-Library-Token": token },
+      headers: {
+        "Content-Type": "application/json",
+        "X-Library-Token": token,
+        ...privateHeaders,
+      },
       body: JSON.stringify({ title: `From Tutor — ${new Date().toLocaleDateString()}` }),
     });
     if (!createResponse.ok) throw new Error("Could not create a notebook");
@@ -3281,7 +3313,11 @@ async function insertTutorArtifact(artifact) {
     `/api/study/notebook/${encodeURIComponent(notebook.id)}/cells`,
     {
       method: "POST",
-      headers: { "Content-Type": "application/json", "X-Library-Token": token },
+      headers: {
+        "Content-Type": "application/json",
+        "X-Library-Token": token,
+        ...privateHeaders,
+      },
       body: JSON.stringify({
         kind: artifact.kind,
         source: artifact.source,

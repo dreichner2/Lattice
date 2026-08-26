@@ -1,5 +1,7 @@
 from __future__ import annotations
 
+import hashlib
+import hmac
 import json
 import re
 import sys
@@ -20,6 +22,8 @@ import study_lab  # noqa: E402
 
 
 class StudyServerTests(unittest.TestCase):
+    private_token = "a" * 64
+
     @classmethod
     def setUpClass(cls) -> None:
         cls._temporary = tempfile.TemporaryDirectory()
@@ -43,6 +47,7 @@ class StudyServerTests(unittest.TestCase):
         )
         environment = dict(__import__("os").environ)
         environment["LATTICE_STUDY_ROOT"] = str(base / "study")
+        environment["LATTICE_PRIVATE_TOKEN"] = cls.private_token
         cls._patcher = mock.patch.dict(
             library_ui.os.environ, environment, clear=False
         )
@@ -74,22 +79,42 @@ class StudyServerTests(unittest.TestCase):
         with urllib.request.urlopen(self.url("/api/library"), timeout=5) as response:
             return json.loads(response.read())["actionToken"]
 
-    def get(self, route: str) -> tuple[int, dict]:
+    def get(
+        self,
+        route: str,
+        *,
+        private_token: str | None = private_token,
+    ) -> tuple[int, dict]:
+        headers = (
+            {"X-Lattice-Private-Token": private_token}
+            if private_token is not None
+            else {}
+        )
+        request = urllib.request.Request(self.url(route), headers=headers)
         try:
-            with urllib.request.urlopen(self.url(route), timeout=5) as response:
+            with urllib.request.urlopen(request, timeout=5) as response:
                 return response.status, json.loads(response.read())
         except urllib.error.HTTPError as caught:
             with caught:
                 return caught.code, json.loads(caught.read())
 
-    def post(self, route: str, body: dict) -> tuple[int, dict]:
+    def post(
+        self,
+        route: str,
+        body: dict,
+        *,
+        private_token: str | None = private_token,
+    ) -> tuple[int, dict]:
+        headers = {
+            "Content-Type": "application/json",
+            "X-Library-Token": self.token(),
+        }
+        if private_token is not None:
+            headers["X-Lattice-Private-Token"] = private_token
         request = urllib.request.Request(
             self.url(route),
             data=json.dumps(body).encode("utf-8"),
-            headers={
-                "Content-Type": "application/json",
-                "X-Library-Token": self.token(),
-            },
+            headers=headers,
             method="POST",
         )
         try:
@@ -106,6 +131,37 @@ class StudyServerTests(unittest.TestCase):
         self.assertEqual(status, 200)
         self.assertTrue(payload["studyLabAvailable"])
         self.assertEqual(payload["protocolVersion"], 4)
+
+    def test_health_proves_the_owned_server_without_receiving_the_private_token(self) -> None:
+        challenge = "c" * 64
+        request = urllib.request.Request(
+            self.url("/api/health"),
+            headers={"X-Lattice-Health-Challenge": challenge},
+        )
+        with urllib.request.urlopen(request, timeout=5) as response:
+            payload = json.loads(response.read())
+        expected = hmac.new(
+            self.private_token.encode("utf-8"),
+            f"{challenge}:{self.port}:0".encode("ascii"),
+            hashlib.sha256,
+        ).hexdigest()
+        self.assertEqual(payload["privateProof"], expected)
+
+    def test_private_token_is_not_exposed_by_public_api(self) -> None:
+        with urllib.request.urlopen(self.url("/api/library"), timeout=5) as response:
+            payload = json.loads(response.read())
+        self.assertNotIn("privateToken", payload)
+        self.assertNotIn(self.private_token, json.dumps(payload))
+
+    def test_study_reads_require_private_token(self) -> None:
+        for provided in (None, "b" * 64):
+            with self.subTest(provided=provided):
+                status, payload = self.get(
+                    "/api/study/notebooks",
+                    private_token=provided,
+                )
+                self.assertEqual(status, 403)
+                self.assertIn("private Study token", payload["error"])
 
     def test_status_lists_only_latex_and_python_kinds(self) -> None:
         status, payload = self.get("/api/study/status")
@@ -256,7 +312,10 @@ class StudyServerTests(unittest.TestCase):
         request = urllib.request.Request(
             self.url("/api/study/notebooks"),
             data=b'{"title":"nope"}',
-            headers={"Content-Type": "application/json"},
+            headers={
+                "Content-Type": "application/json",
+                "X-Lattice-Private-Token": self.private_token,
+            },
             method="POST",
         )
         with self.assertRaises(urllib.error.HTTPError) as caught:
@@ -265,6 +324,15 @@ class StudyServerTests(unittest.TestCase):
             self.assertEqual(caught.exception.code, 403)
         finally:
             caught.exception.close()
+
+    def test_mutations_require_private_token_too(self) -> None:
+        status, payload = self.post(
+            "/api/study/notebooks",
+            {"title": "nope"},
+            private_token="b" * 64,
+        )
+        self.assertEqual(status, 403)
+        self.assertIn("private Study token", payload["error"])
 
 
 if __name__ == "__main__":

@@ -320,6 +320,27 @@ class BookVaultTests(unittest.TestCase):
         self.assertEqual(self.entry()["phase"], "local")
         self.assertNotIn("/books/sample-book.pdf", (self.library / ".stignore").read_text())
 
+    def test_reconcile_keeps_return_pending_when_surviving_payload_changed(self) -> None:
+        self.vault.check_out(self.relative)
+        state = self.state()
+        state["entries"][self.relative].update(
+            {"phase": "return-pending", "ignoreAdded": True}
+        )
+        self.vault._write_state(state)
+        self.vault._ensure_ignore(self.relative)
+        self.payload.write_bytes(b"unexpected replacement")
+
+        report = self.vault.reconcile()
+
+        self.assertIn(self.relative, report["unrecoverableEntries"])
+        self.assertEqual(self.entry()["phase"], "return-pending")
+        self.assertIn("does not match", self.entry()["recoveryError"])
+        self.assertEqual(self.copy_for().read_bytes(), PAYLOAD_BYTES)
+        self.assertIn(
+            "/books/sample-book.pdf",
+            (self.library / ".stignore").read_text(encoding="utf-8"),
+        )
+
     def test_reconcile_completes_interrupted_restore_and_drops_vault_entry(self) -> None:
         self.vault.check_out(self.relative)
         self.vault.check_in(self.relative)

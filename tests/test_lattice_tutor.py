@@ -277,7 +277,7 @@ class TutorManagerTests(unittest.TestCase):
         self.assertEqual(context[0]["source"], "video:course-one")
         self.assertIn("Lecture 1: Shortest paths", context[0]["text"])
 
-    def test_windows_rejects_citations_for_sources_not_in_staged_context(self) -> None:
+    def test_citations_require_sources_in_the_staged_turn_context(self) -> None:
         response = {
             "answer": "The source might discuss Dijkstra. [1]",
             "citations": [
@@ -285,10 +285,6 @@ class TutorManagerTests(unittest.TestCase):
             ],
         }
         with mock.patch.object(
-            lattice_tutor,
-            "_uses_native_windows_sandbox",
-            return_value=True,
-        ), mock.patch.object(
             self.manager.index,
             "search",
             return_value=[],
@@ -417,15 +413,14 @@ class TutorManagerTests(unittest.TestCase):
             cache_root=Path(self.temporary.name) / "invocation-cache",
         )
         try:
-            with mock.patch.object(lattice_tutor, "_uses_native_windows_sandbox", return_value=False):
-                result = manager._run_codex(
-                    model="gpt-5.6-sol",
-                    effort="max",
-                    prompt="fixture",
-                    allowed_paths=[self.source.resolve()],
-                    denied_paths=[],
-                    session={"process": None},
-                )
+            result = manager._run_codex(
+                model="gpt-5.6-sol",
+                effort="max",
+                prompt="fixture",
+                allowed_paths=[self.source.resolve()],
+                denied_paths=[],
+                session={"process": None},
+            )
         finally:
             manager.close()
         self.assertEqual(result["answer"], "Grounded answer [1]")
@@ -433,14 +428,24 @@ class TutorManagerTests(unittest.TestCase):
         self.assertIn("--ignore-user-config", captured)
         self.assertIn("--ignore-rules", captured)
         self.assertIn('web_search="disabled"', captured)
-        self.assertIn("permissions.lattice-tutor.network.enabled=false", captured)
-        permission = next(value for value in captured if value.startswith("permissions.lattice-tutor.filesystem="))
-        source_grant = f"{lattice_tutor._toml_string(str(self.source.resolve()))}=\"read\""
-        parent_grant = f"{lattice_tutor._toml_string(str(self.root / 'books'))}=\"read\""
-        self.assertIn(source_grant, permission)
-        self.assertNotIn(parent_grant, permission)
+        self.assertEqual(captured[captured.index("--sandbox") + 1], "read-only")
+        self.assertNotIn("default_permissions=\"lattice-tutor\"", captured)
+        self.assertFalse(
+            any(value.startswith("permissions.lattice-tutor.") for value in captured)
+        )
+        disabled_features = {
+            captured[index + 1]
+            for index, value in enumerate(captured[:-1])
+            if value == "--disable"
+        }
+        self.assertGreaterEqual(
+            disabled_features,
+            {"shell_tool", "unified_exec", "code_mode"},
+        )
+        self.assertNotIn(str(self.root), "\n".join(captured))
+        self.assertNotIn(str(self.source.resolve()), "\n".join(captured))
 
-    def test_windows_uses_one_disposable_read_only_excerpt_workspace(self) -> None:
+    def test_every_platform_uses_one_disposable_read_only_excerpt_workspace(self) -> None:
         captured: list[str] = []
         observed: dict[str, object] = {}
         response = json.dumps({"answer": "Grounded answer [1]", "citations": []})
@@ -469,15 +474,14 @@ class TutorManagerTests(unittest.TestCase):
             cache_root=Path(self.temporary.name) / "windows-workspace-cache",
         )
         try:
-            with mock.patch.object(lattice_tutor, "_uses_native_windows_sandbox", return_value=True):
-                result = manager._run_codex(
-                    model="gpt-5.6-luna",
-                    effort="low",
-                    prompt=prompt,
-                    allowed_paths=[external_source],
-                    denied_paths=[],
-                    session={"process": None},
-                )
+            result = manager._run_codex(
+                model="gpt-5.6-luna",
+                effort="low",
+                prompt=prompt,
+                allowed_paths=[external_source],
+                denied_paths=[],
+                session={"process": None},
+            )
         finally:
             manager.close()
 

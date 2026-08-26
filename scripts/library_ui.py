@@ -13,6 +13,7 @@ import argparse
 import base64
 import codecs
 import hashlib
+import hmac
 import json
 import mimetypes
 import os
@@ -71,6 +72,8 @@ WORK_CELL = re.compile(
 SOURCE_LINK = re.compile(r"\[[^]]+]\((?P<url>https?://[^)]+)\)")
 RANGE_HEADER = re.compile(r"bytes=(?P<start>\d*)-(?P<end>\d*)$")
 LOOPBACK_HOSTS = frozenset({"127.0.0.1", "localhost", "::1"})
+PRIVATE_TOKEN_PATTERN = re.compile(r"^[A-Za-z0-9_-]{43,128}$")
+HEALTH_CHALLENGE_PATTERN = re.compile(r"^[0-9a-f]{64}$")
 MATERIAL_LABELS = {
     "book": "Books",
     "lecture": "Lectures",
@@ -2560,6 +2563,13 @@ class LibraryHTTPServer(ThreadingHTTPServer):
         self.library_id = library_identity(self.root)
         self.syncthing_folder_id = syncthing_folder_id(self.root)
         self.parent_pid = parent_pid
+        configured_private_token = os.environ.get("LATTICE_PRIVATE_TOKEN", "")
+        if configured_private_token:
+            if not PRIVATE_TOKEN_PATTERN.fullmatch(configured_private_token):
+                raise ValueError("LATTICE_PRIVATE_TOKEN is malformed")
+            self.private_token = configured_private_token
+        else:
+            self.private_token = secrets.token_urlsafe(32)
         self.taxonomy = load_taxonomy(self.root, required=True)
         self.vault = library_vault.BookVault(
             self.root,
@@ -3676,6 +3686,22 @@ class LibraryRequestHandler(BaseHTTPRequestHandler):
             return False
         return True
 
+    def _has_private_access(self) -> bool:
+        provided = self.headers.get("X-Lattice-Private-Token", "")
+        return bool(provided) and secrets.compare_digest(
+            provided,
+            self.server.private_token,
+        )
+
+    def _study_access_allowed(self) -> bool:
+        if not self._has_private_access():
+            self._send_json(HTTPStatus.FORBIDDEN, {"error": "Invalid private Study token"})
+            return False
+        return True
+
+    def _study_mutation_access_allowed(self) -> bool:
+        return self._study_access_allowed() and self._mutation_access_allowed()
+
     def _read_json_request(self, maximum: int = 64 * 1024) -> dict[str, Any]:
         try:
             length = int(self.headers.get("Content-Length", "0"))
@@ -3702,9 +3728,24 @@ class LibraryRequestHandler(BaseHTTPRequestHandler):
             return
         request_path = urllib.parse.urlsplit(self.path).path
         if request_path == "/api/health":
+            payload = self.server.health_payload()
+            challenge = self.headers.get("X-Lattice-Health-Challenge", "")
+            if HEALTH_CHALLENGE_PATTERN.fullmatch(challenge):
+                proof_message = ":".join(
+                    (
+                        challenge,
+                        str(int(self.server.server_address[1])),
+                        str(self.server.parent_pid or 0),
+                    )
+                )
+                payload["privateProof"] = hmac.new(
+                    self.server.private_token.encode("utf-8"),
+                    proof_message.encode("ascii"),
+                    hashlib.sha256,
+                ).hexdigest()
             self._send_json(
                 HTTPStatus.OK,
-                self.server.health_payload(),
+                payload,
                 head_only=head_only,
             )
             return
@@ -3718,9 +3759,13 @@ class LibraryRequestHandler(BaseHTTPRequestHandler):
             self._send_json(HTTPStatus.OK, self.server.ai_status(), head_only=head_only)
             return
         if request_path == "/api/study/status":
+            if not self._study_access_allowed():
+                return
             self._send_json(HTTPStatus.OK, self.server.study_status(), head_only=head_only)
             return
         if request_path == "/api/study/notebooks":
+            if not self._study_access_allowed():
+                return
             try:
                 payload = self.server.study_notebooks()
             except (OSError, sqlite3.Error):
@@ -3735,6 +3780,8 @@ class LibraryRequestHandler(BaseHTTPRequestHandler):
             self._send_json(HTTPStatus.OK, payload, head_only=head_only)
             return
         if request_path.startswith("/api/study/notebook/"):
+            if not self._study_access_allowed():
+                return
             notebook_id = urllib.parse.unquote(
                 request_path.removeprefix("/api/study/notebook/")
             )
@@ -4187,7 +4234,7 @@ class LibraryRequestHandler(BaseHTTPRequestHandler):
             self._send_json(HTTPStatus.OK, result)
             return
         if request_path == "/api/study/notebooks":
-            if not self._mutation_access_allowed():
+            if not self._study_mutation_access_allowed():
                 return
             try:
                 body = self._read_json_request(16 * 1024)
@@ -4207,7 +4254,7 @@ class LibraryRequestHandler(BaseHTTPRequestHandler):
             self._send_json(HTTPStatus.CREATED, result)
             return
         if request_path.startswith("/api/study/notebook/"):
-            if not self._mutation_access_allowed():
+            if not self._study_mutation_access_allowed():
                 return
             remainder = urllib.parse.unquote(
                 request_path.removeprefix("/api/study/notebook/")
@@ -4251,7 +4298,7 @@ class LibraryRequestHandler(BaseHTTPRequestHandler):
             self._send_json(HTTPStatus.OK, result)
             return
         if request_path in {"/api/study/cell/update", "/api/study/cell/move", "/api/study/cell/delete"}:
-            if not self._mutation_access_allowed():
+            if not self._study_mutation_access_allowed():
                 return
             actions = {
                 "/api/study/cell/update": self.server.study_update_cell,
@@ -4390,6 +4437,11 @@ def run_server(
 ) -> int:
     candidates = [port] if port == 0 else list(range(port, min(port + 20, 65536)))
     expected_library_id = library_identity(root)
+    # A browser launch needs this process's private Study capability. Never
+    # reuse an unrelated server whose per-launch capability is intentionally
+    # unavailable to us.
+    if open_browser:
+        reuse_running = False
     if reuse_running:
         for candidate in candidates:
             if candidate and (running_url := find_running_library(candidate, expected_library_id)):
@@ -4411,10 +4463,11 @@ def run_server(
 
     actual_port = int(server.server_address[1])
     url = f"http://127.0.0.1:{actual_port}"
+    launch_url = f"{url}#access={server.private_token}"
     print(f"Lattice is ready: {url}")
     print("Your library stays on this computer. Press Control-C to stop Lattice.")
     if open_browser:
-        threading.Timer(0.25, webbrowser.open, args=(url,)).start()
+        threading.Timer(0.25, webbrowser.open, args=(launch_url,)).start()
 
     def stop_server(_signum: int, _frame: Any) -> None:
         threading.Thread(target=server.shutdown, daemon=True).start()

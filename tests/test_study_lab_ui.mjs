@@ -33,6 +33,16 @@ test("Study Lab serializes autosaves and sends revisions on every existing-noteb
   assert.match(SCRIPT, /beforeunload/);
 });
 
+test("Study Lab keeps the private launch capability out of request URLs", () => {
+  for (const source of [SCRIPT, APP]) {
+    assert.match(source, /sessionStorage/);
+    assert.match(source, /history\.replaceState/);
+    assert.match(source, /X-Lattice-Private-Token/);
+  }
+  assert.doesNotMatch(SCRIPT, /[?&]access=/);
+  assert.doesNotMatch(APP, /[?&]access=/);
+});
+
 test("Study Lab renders locally without executing Python", () => {
   assert.match(SCRIPT, /trust:\s*false/);
   assert.match(SCRIPT, /execution is unavailable/);

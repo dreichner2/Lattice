@@ -32,6 +32,7 @@ final class ReaderBridge: NSObject, WKScriptMessageHandlerWithReply {
     private var activeDocumentID: String?
     var appInfoProvider: (() -> [String: Any])?
     var appActionHandler: ((String) -> Void)?
+    var allowedServerOrigin: URL?
     weak var coordinator: ImmersiveReaderCoordinator?
     weak var webView: WKWebView?
 
@@ -45,7 +46,10 @@ final class ReaderBridge: NSObject, WKScriptMessageHandlerWithReply {
         didReceive message: WKScriptMessage,
         replyHandler: @escaping (Any?, String?) -> Void
     ) {
-        guard message.frameInfo.isMainFrame, isLocalLibraryURL(message.frameInfo.request.url) else {
+        guard
+            message.frameInfo.isMainFrame,
+            LibraryIdentity.sameHTTPOrigin(message.frameInfo.request.url, allowedServerOrigin)
+        else {
             replyHandler(nil, "Reader bridge requests are accepted only from the main library page")
             return
         }
@@ -256,12 +260,6 @@ final class ReaderBridge: NSObject, WKScriptMessageHandlerWithReply {
 
     private func stableID(prefix: String, documentID: String, locator: String) -> String {
         LibraryIdentity.documentID(workID: "\(prefix):\(documentID):\(locator)", path: locator)
-    }
-
-    private func isLocalLibraryURL(_ url: URL?) -> Bool {
-        guard let url, let host = url.host?.lowercased() else { return false }
-        return (url.scheme == "http" || url.scheme == "https")
-            && ["127.0.0.1", "localhost", "::1"].contains(host)
     }
 
     private func isSafeReaderPath(_ path: String) -> Bool {

@@ -108,7 +108,23 @@ function Assert-PackageFileManifest([string]$Root) {
     ) { throw "Package file failed verification: $relative" }
     $expected[$relative] = $true
   }
-  foreach ($required in @("Lattice.exe", "Lattice.ico", "Server/LatticeServer.exe", "Tools/LatticeStorage.exe", "ui/index.html", "ui/app.js", "update-package.json")) {
+  foreach ($required in @(
+    "Lattice.exe",
+    "Lattice.ico",
+    "Server/LatticeServer.exe",
+    "Tools/LatticeStorage.exe",
+    "ui/index.html",
+    "ui/app.js",
+    "ui/study-lab.html",
+    "ui/study-lab.css",
+    "ui/study-lab.js",
+    "ui/vendor/katex/LICENSE",
+    "ui/vendor/katex/README-LATTICE.md",
+    "ui/vendor/katex/katex.min.css",
+    "ui/vendor/katex/katex.min.js",
+    "ui/vendor/katex/fonts/KaTeX_Main-Regular.woff2",
+    "update-package.json"
+  )) {
     if (-not $expected.ContainsKey($required)) { throw "The package file manifest omits $required" }
   }
   $actual = @{}

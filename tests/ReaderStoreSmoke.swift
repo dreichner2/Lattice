@@ -3,6 +3,24 @@ import Foundation
 @main
 struct ReaderStoreSmoke {
     static func main() throws {
+        let trustedOrigin = URL(string: "http://127.0.0.1:8766/library")!
+        precondition(LibraryIdentity.sameHTTPOrigin(
+            trustedOrigin,
+            URL(string: "http://127.0.0.1:8766/study-lab.html")
+        ))
+        precondition(!LibraryIdentity.sameHTTPOrigin(
+            trustedOrigin,
+            URL(string: "http://127.0.0.1:8767/")
+        ))
+        precondition(!LibraryIdentity.sameHTTPOrigin(
+            trustedOrigin,
+            URL(string: "http://localhost:8766/")
+        ))
+        precondition(LibraryIdentity.sameHTTPOrigin(
+            URL(string: "http://127.0.0.1/"),
+            URL(string: "http://127.0.0.1:80/")
+        ))
+
         let temporary = FileManager.default.temporaryDirectory
             .appendingPathComponent("cs-library-store-smoke-\(UUID().uuidString)", isDirectory: true)
         defer { try? FileManager.default.removeItem(at: temporary) }

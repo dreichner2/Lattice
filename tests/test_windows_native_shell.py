@@ -138,6 +138,15 @@ class WindowsNativeShellTests(unittest.TestCase):
         ):
             self.assertIn(contract, self.window_code)
 
+    def test_owned_server_supplies_private_study_capability(self) -> None:
+        self.assertIn("RandomNumberGenerator.GetBytes(32)", self.window_code)
+        self.assertIn('start.ArgumentList.Add("--isolated")', self.window_code)
+        self.assertIn(
+            'start.Environment["LATTICE_PRIVATE_TOKEN"] = _privateAccessToken',
+            self.window_code,
+        )
+        self.assertIn("#access={_privateAccessToken}", self.window_code)
+
     def test_all_xaml_handlers_have_code_behind_methods(self) -> None:
         handlers: set[str] = set()
         for element in self.window_tree.iter():

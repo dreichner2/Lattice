@@ -29,6 +29,11 @@ malicious document is required.
 - Resolves paths and rejects traversal and symlink escape.
 - Requires a random in-memory token for platform file actions, reader-state APIs,
   and Tutor chat/cancel/reset requests.
+- Requires a separate unguessable per-launch capability for every Study Lab
+  read and mutation. Packaged apps pass it privately to the server and deliver
+  it to the owning webview through a URL fragment that is immediately moved to
+  tab-scoped session storage; it is never returned by a public API or sent in a
+  request URL.
 - Requires that token for file import and metadata mutation. Browser requests
   must be same-origin; native clients may omit `Origin` and authenticate with
   the token over loopback.
@@ -246,21 +251,19 @@ possibly compromised key to authorize its own replacement.
   sizes, and rejects unknown or restricted works.
 - Eligible file and library-document paths must resolve to regular files inside
   the selected library. Lattice repeats canonical containment immediately
-  before indexing, prompt construction, and non-Windows Codex read grants so a
-  swapped or cataloged external symlink is excluded.
+  before indexing and prompt construction so a swapped or cataloged external
+  symlink is excluded.
 - Every Codex turn is ephemeral and ignores user configuration and repository
   instruction files. Apps, plugins, browser, computer-use, image, skill,
   workspace-dependency, memory, hook, and multi-agent capabilities are disabled.
   Hosted web search and model-tool network access are disabled.
 - The child process receives an allowlisted environment without API keys or
-  proxy credentials. On macOS, its custom read-only filesystem profile grants
-  only the exact eligible files in the active source scope. On Windows, Lattice
-  instead writes the bounded, scope-filtered turn context to one disposable
-  workspace under the system temporary directory, uses Codex's standard
-  read-only sandbox, and disables shell, unified-exec, and code-mode access.
-  The original library, including external-drive sources, unrelated sidecars,
-  credential storage, restricted editions, and the private Tutor index remain
-  outside the Windows Tutor turn.
+  proxy credentials. On every platform, Lattice writes only the bounded,
+  scope-filtered turn context to one disposable workspace under the system
+  temporary directory, uses Codex's standard read-only sandbox, and disables
+  shell, unified-exec, and code-mode access. The original library, including
+  external-drive sources, unrelated sidecars, credential storage, restricted
+  editions, and the private Tutor index remain outside the Tutor turn.
 - PDFs, EPUBs, supported source archives, and plain text are extracted under
   bounded file, member, and text limits. The private SQLite/FTS cache is created
   outside the synchronized library with user-only directory/file modes where
@@ -271,7 +274,8 @@ possibly compromised key to authorize its own replacement.
   boundary in addition to a filesystem sandbox boundary.
 - Library text and retrieved excerpts are treated as untrusted data, never as
   instructions. Structured model output is size-bounded, and citations are
-  accepted only when their source key belongs to the resolved active scope.
+  accepted only when their source key was actually staged as an excerpt or
+  course-metadata block for that turn.
 - Conversation history is bounded, memory-only, expires after inactivity, and
   is removed on reset or service exit. It is not written to the library,
   Syncthing, reader database, or Tutor source index.
@@ -280,6 +284,20 @@ possibly compromised key to authorize its own replacement.
   metadata to OpenAI through Codex. Video frames, audio, captions, and
   transcripts are not available unless separately present as an eligible local
   source, so the prompt forbids claims of having watched a lecture.
+
+### Study Lab
+
+- Notebook storage uses a private per-library namespace outside the synchronized
+  library and rejects linked, reparse-point, in-library, and home-directory
+  fallback locations that would weaken its owner-only boundary.
+- Every Study endpoint requires the server's per-launch private capability;
+  writes additionally require the ordinary action token and fresh
+  compare-and-swap revision.
+- Packaged desktop clients own an isolated server process and bind native bridge
+  messages and top-level navigation to that server's exact scheme, host, and
+  effective port, rather than trusting every loopback service.
+- LaTeX renders from the vendored KaTeX distribution with trust disabled.
+  Python cells are inert source text and never execute.
 
 ### Device vault
 
@@ -305,7 +323,9 @@ possibly compromised key to authorize its own replacement.
   around release/restore, then resumed and rescanned. A pre-existing exact
   ignore is preserved; only a Lattice-owned marker is removed on restore.
 - Reconciliation prunes only unreferenced files matching Lattice's managed
-  copy-name format. Corrupt state and unknown files are preserved for recovery.
+  copy-name format. A surviving `return-pending` payload must still match its
+  recorded digest before the ignore is removed or the entry becomes local;
+  corrupt state and unknown files are preserved for recovery.
 
 ### Reader data
 

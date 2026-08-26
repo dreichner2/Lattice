@@ -141,13 +141,14 @@ memory and disappear when reset or when the local service exits. Extracted
 source text is indexed only in a private per-device cache under
 `~/Library/Caches/Lattice/Tutor/` on macOS or
 `%LOCALAPPDATA%\Lattice\Tutor\` on Windows; it is outside the Syncthing folder.
-On Windows, Lattice retrieves the allowed excerpts itself and copies only the
-bounded turn context into one disposable read-only workspace under `%TEMP%`.
-The Codex child uses the standard read-only sandbox with shell, unified-exec,
-and code-mode access disabled. It receives no direct filesystem grant to the
-library, so books can remain on an external SSD or another drive letter without
-creating split sandbox roots. The temporary workspace is removed when that
-Tutor turn ends.
+On every platform, Lattice retrieves the allowed excerpts itself and copies
+only the bounded turn context into one disposable read-only workspace under the
+system temporary directory. The Codex child uses the standard read-only sandbox
+with shell, unified-exec, and code-mode access disabled. It receives no direct
+filesystem grant to the library, so books can remain on an external SSD or
+another drive letter without creating split sandbox roots. The temporary
+workspace is removed when that Tutor turn ends. Citations are accepted only for
+sources whose excerpts were actually included in that turn.
 When Codex emits diagnostics, Lattice keeps the latest bounded stderr report as
 `last-codex-stderr.log` in that same private cache and includes its location in
 the Tutor error. A Codex launch or sandbox failure does not mean the in-memory

@@ -1,6 +1,8 @@
 import AppKit
+import CryptoKit
 import Darwin
 import Foundation
+import Security
 import UniformTypeIdentifiers
 import WebKit
 
@@ -22,6 +24,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, WKNavigationDelegate, 
     private var readerStore: ReaderStore!
     private var readerBridge: ReaderBridge!
     private var currentServerURL: URL?
+    private var privateAccessToken = ""
     private var pendingOpenURLs: [URL] = []
     private var webInterfaceReady = false
     private var pendingAddMaterials = false
@@ -248,15 +251,9 @@ final class AppDelegate: NSObject, NSApplicationDelegate, WKNavigationDelegate, 
     // MARK: Server lifecycle
 
     private func connectToLibrary() {
-        if updateActivation != nil {
-            startLibraryServer()
-            return
-        }
-        locateRunningLibrary { [weak self] url in
-            guard let self else { return }
-            if let url { self.loadLibrary(at: url) }
-            else { self.startLibraryServer() }
-        }
+        // Study access is bound to a per-launch capability known only to this
+        // app and the server process it owns.
+        startLibraryServer()
     }
 
     private func locateRunningLibrary(
@@ -266,11 +263,26 @@ final class AppDelegate: NSObject, NSApplicationDelegate, WKNavigationDelegate, 
         let group = DispatchGroup()
         let lock = NSLock()
         var available = Set<Int>()
+        let healthChallenge = Self.newPrivateAccessToken()
 
         for port in candidatePorts {
             group.enter()
+            let expectedPrivateProof = Self.privateHealthProof(
+                token: privateAccessToken,
+                challenge: healthChallenge,
+                port: port,
+                parentPID: Int(ProcessInfo.processInfo.processIdentifier)
+            )
             let healthURL = URL(string: "http://127.0.0.1:\(port)/api/health")!
-            healthSession.dataTask(with: healthURL) { [expectedLibraryID] data, response, _ in
+            var request = URLRequest(url: healthURL)
+            if requireCurrentParent {
+                request.setValue(
+                    healthChallenge,
+                    forHTTPHeaderField: "X-Lattice-Health-Challenge"
+                )
+            }
+            healthSession.dataTask(with: request) {
+                [expectedLibraryID, expectedPrivateProof] data, response, _ in
                 defer { group.leave() }
                 guard let http = response as? HTTPURLResponse,
                       http.statusCode == 200,
@@ -281,8 +293,11 @@ final class AppDelegate: NSObject, NSApplicationDelegate, WKNavigationDelegate, 
                       json["libraryId"] as? String == expectedLibraryID
                 else { return }
                 if requireCurrentParent {
-                    guard json["parentPid"] as? Int
-                        == Int(ProcessInfo.processInfo.processIdentifier) else { return }
+                    guard
+                        json["parentPid"] as? Int
+                            == Int(ProcessInfo.processInfo.processIdentifier),
+                        json["privateProof"] as? String == expectedPrivateProof
+                    else { return }
                 } else if let reportedParent = json["parentPid"] as? Int {
                     guard let reportedParentPID = Int32(exactly: reportedParent),
                           reportedParentPID > 1,
@@ -315,6 +330,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, WKNavigationDelegate, 
             return
         }
         let uiRoot = bundledUIRoot() ?? libraryRoot.appendingPathComponent("ui", isDirectory: true)
+        privateAccessToken = Self.newPrivateAccessToken()
 
         do {
             let logDirectory = manager.urls(for: .libraryDirectory, in: .userDomainMask)[0]
@@ -328,7 +344,9 @@ final class AppDelegate: NSObject, NSApplicationDelegate, WKNavigationDelegate, 
 
             let process = Process()
             process.executableURL = URL(fileURLWithPath: python)
-            process.environment = Self.pythonProcessEnvironment()
+            var environment = Self.pythonProcessEnvironment()
+            environment["LATTICE_PRIVATE_TOKEN"] = privateAccessToken
+            process.environment = environment
             process.arguments = [
                 serverScript.path,
                 "--root", libraryRoot.path,
@@ -379,6 +397,29 @@ final class AppDelegate: NSObject, NSApplicationDelegate, WKNavigationDelegate, 
         return environment
     }
 
+    private static func newPrivateAccessToken() -> String {
+        var bytes = [UInt8](repeating: 0, count: 32)
+        guard SecRandomCopyBytes(kSecRandomDefault, bytes.count, &bytes) == errSecSuccess else {
+            return (UUID().uuidString + UUID().uuidString)
+                .replacingOccurrences(of: "-", with: "")
+                .lowercased()
+        }
+        return bytes.map { String(format: "%02x", $0) }.joined()
+    }
+
+    private static func privateHealthProof(
+        token: String,
+        challenge: String,
+        port: Int,
+        parentPID: Int
+    ) -> String {
+        let key = SymmetricKey(data: Data(token.utf8))
+        return HMAC<SHA256>.authenticationCode(
+            for: Data("\(challenge):\(port):\(parentPID)".utf8),
+            using: key
+        ).map { String(format: "%02x", $0) }.joined()
+    }
+
     private func bundledUIRoot() -> URL? {
         Bundle.main.resourceURL?.appendingPathComponent("ui", isDirectory: true)
     }
@@ -402,8 +443,12 @@ final class AppDelegate: NSObject, NSApplicationDelegate, WKNavigationDelegate, 
 
     private func loadLibrary(at url: URL) {
         currentServerURL = url
+        readerBridge.allowedServerOrigin = url
         webInterfaceReady = false
-        webView.load(URLRequest(url: url, cachePolicy: .reloadIgnoringLocalCacheData, timeoutInterval: 12))
+        var components = URLComponents(url: url, resolvingAgainstBaseURL: false)
+        components?.fragment = "access=\(privateAccessToken)"
+        let launchURL = components?.url ?? url
+        webView.load(URLRequest(url: launchURL, cachePolicy: .reloadIgnoringLocalCacheData, timeoutInterval: 12))
         if !pendingOpenURLs.isEmpty {
             let pending = pendingOpenURLs
             pendingOpenURLs.removeAll()
@@ -413,10 +458,8 @@ final class AppDelegate: NSObject, NSApplicationDelegate, WKNavigationDelegate, 
 
     // MARK: Web navigation
 
-    private func isLocalLibraryURL(_ url: URL) -> Bool {
-        guard let host = url.host?.lowercased() else { return false }
-        return (host == "127.0.0.1" || host == "localhost" || host == "::1")
-            && (url.scheme == "http" || url.scheme == "https")
+    private func isCurrentLibraryURL(_ url: URL) -> Bool {
+        LibraryIdentity.sameHTTPOrigin(url, currentServerURL)
     }
 
     func webView(
@@ -425,14 +468,21 @@ final class AppDelegate: NSObject, NSApplicationDelegate, WKNavigationDelegate, 
         decisionHandler: @escaping (WKNavigationActionPolicy) -> Void
     ) {
         guard let url = navigationAction.request.url else { decisionHandler(.cancel); return }
-        if immersiveReader?.openPDFIfNeeded(for: url) == true { decisionHandler(.cancel); return }
-        if isLocalLibraryURL(url) || url.scheme == "about" {
+        if navigationAction.targetFrame?.isMainFrame == false {
+            decisionHandler(.allow)
+            return
+        }
+        if isCurrentLibraryURL(url), immersiveReader?.openPDFIfNeeded(for: url) == true {
+            decisionHandler(.cancel)
+            return
+        }
+        if isCurrentLibraryURL(url) || url.scheme == "about" {
             decisionHandler(.allow)
         } else if navigationAction.navigationType == .linkActivated || navigationAction.targetFrame == nil {
             NSWorkspace.shared.open(url)
             decisionHandler(.cancel)
         } else {
-            decisionHandler(.allow)
+            decisionHandler(.cancel)
         }
     }
 
@@ -443,7 +493,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, WKNavigationDelegate, 
         windowFeatures: WKWindowFeatures
     ) -> WKWebView? {
         guard navigationAction.targetFrame == nil, let url = navigationAction.request.url else { return nil }
-        if isLocalLibraryURL(url) { webView.load(navigationAction.request) }
+        if isCurrentLibraryURL(url) { webView.load(navigationAction.request) }
         else { NSWorkspace.shared.open(url) }
         return nil
     }
@@ -557,6 +607,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, WKNavigationDelegate, 
         try? serverLog?.close()
         serverLog = nil
         currentServerURL = nil
+        readerBridge.allowedServerOrigin = nil
         webInterfaceReady = false
 
         let progress = NSAlert()
@@ -897,6 +948,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, WKNavigationDelegate, 
                 try? self.serverLog?.close()
                 self.serverLog = nil
                 self.currentServerURL = nil
+                self.readerBridge.allowedServerOrigin = nil
                 self.webInterfaceReady = false
                 self.webView.load(URLRequest(url: URL(string: "about:blank")!))
 

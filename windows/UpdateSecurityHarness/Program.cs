@@ -18,6 +18,7 @@ var tests = new (string Name, Action Body)[]
     ("rejects Windows device-name ZIP entries", RejectsWindowsDevicePath),
     ("accepts the pre-storage-helper rollback package", AcceptsLegacyPackageWithoutStorageHelper),
     ("requires the storage helper in new packages", RejectsNewPackageWithoutStorageHelper),
+    ("requires Study Lab assets in 2.3.3 packages", RejectsNewPackageWithoutStudyLab),
     ("removes a complete stale candidate before redownload", RemovesStaleCandidateForRedownload),
     ("removes only recognized expired activation records", RemovesExpiredActivation),
     ("keeps active authority monotonic when an older candidate finishes last", RejectsLateOlderPromotion),
@@ -211,6 +212,18 @@ static void RejectsNewPackageWithoutStorageHelper()
         Throws<InvalidDataException>(() => UpdateSecurity.ValidatePackageDirectory(
             root,
             StableSemanticVersion.Parse("2.1.2")));
+    });
+}
+
+static void RejectsNewPackageWithoutStudyLab()
+{
+    WithTemporaryRoot(root =>
+    {
+        BuildPackageDirectory(root, "2.3.3");
+        File.Delete(Path.Combine(root, "ui", "study-lab.js"));
+        Throws<InvalidDataException>(() => UpdateSecurity.ValidatePackageDirectory(
+            root,
+            StableSemanticVersion.Parse("2.3.3")));
     });
 }
 
@@ -517,6 +530,14 @@ static void BuildPackageDirectory(string root, string version, bool includeStora
         "ui/app.js",
         "ui/tutor.js",
         "ui/tutor-styles.css",
+        "ui/study-lab.html",
+        "ui/study-lab.css",
+        "ui/study-lab.js",
+        "ui/vendor/katex/LICENSE",
+        "ui/vendor/katex/README-LATTICE.md",
+        "ui/vendor/katex/katex.min.css",
+        "ui/vendor/katex/katex.min.js",
+        "ui/vendor/katex/fonts/KaTeX_Main-Regular.woff2",
     };
     if (includeStorageHelper) packageFiles.Add("Tools/LatticeStorage.exe");
     foreach (var relative in packageFiles)

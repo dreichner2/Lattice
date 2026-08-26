@@ -3,8 +3,33 @@
 (() => {
   "use strict";
 
+  const PRIVATE_ACCESS_STORAGE = "lattice:private-access";
+
+  function capturePrivateAccessToken() {
+    try {
+      const fragment = new URLSearchParams(window.location.hash.slice(1));
+      const candidate = fragment.get("access") || "";
+      if (/^[A-Za-z0-9_-]{43,128}$/.test(candidate)) {
+        window.sessionStorage.setItem(PRIVATE_ACCESS_STORAGE, candidate);
+      }
+      if (fragment.has("access")) {
+        fragment.delete("access");
+        const suffix = fragment.toString();
+        window.history.replaceState(
+          null,
+          "",
+          `${window.location.pathname}${window.location.search}${suffix ? `#${suffix}` : ""}`,
+        );
+      }
+      return window.sessionStorage.getItem(PRIVATE_ACCESS_STORAGE) || "";
+    } catch {
+      return "";
+    }
+  }
+
   const state = {
     token: "",
+    privateToken: capturePrivateAccessToken(),
     notebooks: [],
     currentId: "",
     cells: [],
@@ -41,7 +66,11 @@
   }
 
   async function api(route, options = {}) {
-    const headers = { "Content-Type": "application/json", ...(options.headers || {}) };
+    const headers = {
+      "Content-Type": "application/json",
+      "X-Lattice-Private-Token": state.privateToken,
+      ...(options.headers || {}),
+    };
     if (options.mutate) headers["X-Library-Token"] = state.token;
     const response = await fetch(route, { ...options, headers });
     let payload = {};

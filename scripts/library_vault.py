@@ -731,12 +731,24 @@ class BookVault:
             phase = entry["phase"]
             payload = self.local_payload(relative)
             if phase == PHASE_RETURN_PENDING:
-                if payload.is_file() and not payload.is_symlink():
+                payload_present = payload.exists() or payload.is_symlink()
+                if payload_present:
+                    try:
+                        self._verify_local_payload(payload, str(entry["sha256"]))
+                    except VaultError:
+                        if not self._has_ignore_marker(relative):
+                            entry["ignoreAdded"] = self._ensure_ignore(relative)
+                        entry["recoveryError"] = (
+                            "An unexpected local payload does not match the verified vault copy"
+                        )
+                        report["unrecoverableEntries"].append(relative)
+                        continue
                     if entry.get("ignoreAdded", True):
                         self._remove_ignore(relative)
                     entry["phase"] = PHASE_LOCAL
                     entry.pop("returnedAt", None)
                     entry.pop("ignoreAdded", None)
+                    entry.pop("recoveryError", None)
                     report["revertedReturns"].append(relative)
                 else:
                     if not self._verify_copy_quietly(entry):

@@ -16,6 +16,18 @@ internal static class UpdateSecurity
     // 2.1.1 is the last published package without Move Library. Keep it valid
     // as a rollback target while requiring the helper from the next release on.
     private static readonly StableSemanticVersion StorageHelperIntroducedVersion = new(2, 1, 2);
+    private static readonly StableSemanticVersion StudyLabIntroducedVersion = new(2, 3, 3);
+    private static readonly string[] StudyLabPackageFiles =
+    [
+        "ui/study-lab.html",
+        "ui/study-lab.css",
+        "ui/study-lab.js",
+        "ui/vendor/katex/LICENSE",
+        "ui/vendor/katex/README-LATTICE.md",
+        "ui/vendor/katex/katex.min.css",
+        "ui/vendor/katex/katex.min.js",
+        "ui/vendor/katex/fonts/KaTeX_Main-Regular.woff2",
+    ];
 
     // The corresponding private key is kept locally outside the repository and
     // release workflow. Only manifests signed by that off-repository key can
@@ -191,6 +203,14 @@ internal static class UpdateSecurity
         if (RequiresStorageHelper(expectedVersion)
             && !File.Exists(ResolveContainedPath(root, "Tools/LatticeStorage.exe")))
             throw new InvalidDataException("The extracted update is missing Tools/LatticeStorage.exe.");
+        if (RequiresStudyLab(expectedVersion))
+        {
+            foreach (var relative in StudyLabPackageFiles)
+            {
+                if (!File.Exists(ResolveContainedPath(root, relative)))
+                    throw new InvalidDataException($"The extracted update is missing {relative}.");
+            }
+        }
         ValidatePackageFiles(root, expectedVersion);
         return metadata;
     }
@@ -264,6 +284,14 @@ internal static class UpdateSecurity
         }
         if (RequiresStorageHelper(packageVersion) && !expected.Contains("Tools/LatticeStorage.exe"))
             throw new InvalidDataException("The package file manifest omits Tools/LatticeStorage.exe.");
+        if (RequiresStudyLab(packageVersion))
+        {
+            foreach (var required in StudyLabPackageFiles)
+            {
+                if (!expected.Contains(required))
+                    throw new InvalidDataException($"The package file manifest omits {required}.");
+            }
+        }
 
         var actual = EnumerateRegularPackageFiles(root);
         actual.Remove("update-files.json");
@@ -273,6 +301,9 @@ internal static class UpdateSecurity
 
     private static bool RequiresStorageHelper(StableSemanticVersion version) =>
         version.CompareTo(StorageHelperIntroducedVersion) >= 0;
+
+    private static bool RequiresStudyLab(StableSemanticVersion version) =>
+        version.CompareTo(StudyLabIntroducedVersion) >= 0;
 
     private static HashSet<string> EnumerateRegularPackageFiles(string root)
     {

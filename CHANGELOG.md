@@ -16,7 +16,9 @@
   in a per-device SQLite database outside the synchronized library folder,
   can be linked to catalog works, and render LaTeX through vendored KaTeX
   0.18.4.
-  New token-guarded endpoints live under `/api/study/*`; protocol version is 4.
+  New endpoints live under `/api/study/*`; every read and mutation requires an
+  unguessable per-launch private capability, and mutations also require the
+  ordinary action token. Protocol version is 4.
 
 ### Changed
 
@@ -28,11 +30,16 @@
 
 ### Fixed
 
-- Windows Tutor now uses Codex's standard read-only sandbox for its disposable
-  excerpt workspace instead of a custom split-read filesystem permission map,
-  which the unelevated Windows restricted-token sandbox refuses to enforce.
-  Tutor turns therefore reach the model instead of exiting during sandbox
-  initialization.
+- Tutor now uses Codex's standard read-only sandbox and one disposable excerpt
+  workspace on every platform. The original library is never granted to Codex;
+  shell, unified-exec, and code-mode are disabled, and citations must name a
+  source excerpt actually included in that turn.
+- Interrupted vault returns no longer remove the Syncthing ignore or mark a
+  surviving payload local unless it still matches the checked-out SHA-256.
+- macOS top-level navigation and native bridge messages are now bound to the
+  exact owned server origin, including port.
+- macOS and Windows update validation now requires the Study Lab, KaTeX, and
+  private-storage runtime files introduced in 2.3.3.
 - Windows external-drive eject now identifies visible File Explorer windows or
   tabs on the library drive and waits for the user to close them without
   force-closing Explorer.
@@ -43,9 +50,9 @@
 
 ### Security
 
-- Windows Tutor disables shell, unified-exec, and code-mode access for the
-  Codex child. Only the bounded prompt and response schema are present in the
-  temporary workspace; the original library and private Tutor index remain
+- Tutor disables shell, unified-exec, and code-mode access for the Codex child
+  on every platform. Only the bounded prompt and response schema are present in
+  the temporary workspace; the original library and private Tutor index remain
   outside the turn.
 - Tutor and optional import enrichment now explicitly disable Codex hosted web
   search, preserving Lattice's source-only and metadata-only model boundaries.
@@ -67,7 +74,8 @@
   in-library database locations, validates work links against the live catalog,
   and requires a fresh compare-and-swap revision for every existing-notebook
   mutation. Serialized browser saves prevent debounced edits from racing later
-  notebook actions.
+  notebook actions. A private per-launch capability prevents other local OS
+  accounts from reading notebooks through the loopback service.
 
 ## 2.3.2 — 2026-08-23
 
