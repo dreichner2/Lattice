@@ -95,7 +95,8 @@ PDF imports use the filename only because arbitrary PDF byte searches can
 mistake page content for metadata. EPUB imports may include bounded title,
 creator, and language fields from the package metadata. All values are treated
 as untrusted strings, and the ephemeral Codex run disables local execution,
-browser, app, image, and workspace tools before sending the request.
+hosted web search, browser, app, image, and workspace tools before sending the
+request.
 
 Codex is optional. If the executable is missing, the user is signed out, the
 model is unavailable, a timeout occurs, or output is invalid, import still

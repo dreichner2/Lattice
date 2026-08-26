@@ -2314,6 +2314,8 @@ def enrich_metadata_with_codex(
                 AI_MODEL,
                 "--config",
                 f'model_reasoning_effort="{AI_REASONING_EFFORT}"',
+                "--config",
+                'web_search="disabled"',
                 "--output-schema",
                 str(schema_path),
                 "--output-last-message",

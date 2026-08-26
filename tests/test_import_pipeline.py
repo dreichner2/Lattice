@@ -1493,6 +1493,7 @@ class CodexMetadataTests(unittest.TestCase):
         self.assertEqual(seen_command[seen_command.index("--model") + 1], "gpt-5.6-luna")
         self.assertEqual(seen_command[seen_command.index("--sandbox") + 1], "read-only")
         self.assertIn('model_reasoning_effort="medium"', seen_command)
+        self.assertIn('web_search="disabled"', seen_command)
         disabled = {
             seen_command[index + 1]
             for index, value in enumerate(seen_command[:-1])

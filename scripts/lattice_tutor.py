@@ -1570,6 +1570,8 @@ Answer as a tutor. Source-dependent claims need numbered citations. A citation s
                 "model_reasoning_summary=\"none\"",
                 "-c",
                 "model_verbosity=\"medium\"",
+                "-c",
+                "web_search=\"disabled\"",
             ]
             if isolated_windows_workspace:
                 arguments.extend(("--sandbox", "read-only"))

@@ -151,7 +151,7 @@ install Lattice.
   process have exited.
 - The eject helper uses only `CM_Request_Device_EjectW`; it never locks,
   dismounts, offlines, or rewrites a volume mount point. After a two-second
-  handle drain, at most eight retries are allowed and only for Configuration
+  handle drain, at most four attempts are allowed and only for Configuration
   Manager pending-close or outstanding-open vetoes. A safe-to-unplug claim
   requires `CR_SUCCESS`; otherwise the exact final veto is shown, a local
   diagnostic is retained, and the disconnected reconnect record remains
@@ -247,7 +247,7 @@ possibly compromised key to authorize its own replacement.
 - Every Codex turn is ephemeral and ignores user configuration and repository
   instruction files. Apps, plugins, browser, computer-use, image, skill,
   workspace-dependency, memory, hook, and multi-agent capabilities are disabled.
-  Model-tool network access is disabled.
+  Hosted web search and model-tool network access are disabled.
 - The child process receives an allowlisted environment without API keys or
   proxy credentials. On macOS, its custom read-only filesystem profile grants
   only the exact eligible files in the active source scope. On Windows, Lattice

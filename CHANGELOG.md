@@ -31,6 +31,8 @@
   Codex child. Only the bounded prompt and response schema are present in the
   temporary workspace; the original library and private Tutor index remain
   outside the turn.
+- Tutor and optional import enrichment now explicitly disable Codex hosted web
+  search, preserving Lattice's source-only and metadata-only model boundaries.
 
 ## 2.3.2 — 2026-08-23
 

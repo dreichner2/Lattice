@@ -318,6 +318,7 @@ class TutorManagerTests(unittest.TestCase):
         self.assertIn("--ephemeral", captured)
         self.assertIn("--ignore-user-config", captured)
         self.assertIn("--ignore-rules", captured)
+        self.assertIn('web_search="disabled"', captured)
         self.assertIn("permissions.lattice-tutor.network.enabled=false", captured)
         permission = next(value for value in captured if value.startswith("permissions.lattice-tutor.filesystem="))
         source_grant = f"{lattice_tutor._toml_string(str(self.source.resolve()))}=\"read\""
@@ -374,6 +375,7 @@ class TutorManagerTests(unittest.TestCase):
         self.assertNotEqual(workspace, self.root)
         self.assertFalse(workspace.exists())
         self.assertEqual(captured[captured.index("--sandbox") + 1], "read-only")
+        self.assertIn('web_search="disabled"', captured)
         self.assertNotIn("default_permissions=\"lattice-tutor\"", captured)
         self.assertFalse(
             any(value.startswith("permissions.lattice-tutor.") for value in captured)
