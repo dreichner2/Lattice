@@ -217,9 +217,12 @@ hands eject to a detached local helper. The main Lattice process exits before
 that helper calls Windows' native USB-device eject. Before closing, Lattice
 records the exact PID and start time of every process in its WebView2
 environment; the helper waits for the main app and that complete captured set
-to exit, then allows final handles to drain. Retries are bounded and limited to
-pending or outstanding handle closes. A failed attempt records timing and veto
-details in `%LOCALAPPDATA%\CS Library\last-eject-diagnostic.txt`. Keep the SSD
+to exit. If a File Explorer window or tab is open on the library drive, the
+helper identifies its location and waits visibly for you to close it before
+allowing final handles to drain. Retries are bounded and limited to pending or
+outstanding handle closes, with a quiet 30-second drain interval between native
+eject requests. A failed attempt records timing and veto details in
+`%LOCALAPPDATA%\CS Library\last-eject-diagnostic.txt`. Keep the SSD
 attached while **Ejecting…** is visible and unplug only after **Safe to unplug**
 appears. On macOS, use the same menu command and eject through Finder after
 Lattice closes.

@@ -1,6 +1,6 @@
 # Changelog
 
-## Unreleased
+## 2.3.3 — 2026-08-25
 
 ### Fixed
 
@@ -9,6 +9,13 @@
   which the unelevated Windows restricted-token sandbox refuses to enforce.
   Tutor turns therefore reach the model instead of exiting during sandbox
   initialization.
+- Windows external-drive eject now identifies visible File Explorer windows or
+  tabs on the library drive and waits for the user to close them without
+  force-closing Explorer.
+- Transient pending-close and outstanding-open vetoes now use fewer native
+  eject requests with a quiet 30-second drain interval, allowing delayed
+  filesystem and filter-driver handles to release after Lattice and Syncthing
+  exit.
 
 ### Security
 
