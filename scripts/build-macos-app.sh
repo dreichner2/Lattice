@@ -8,6 +8,7 @@ app_path="$library_root/Lattice.app"
 native_root="$library_root/native"
 ui_root="$library_root/ui"
 server_source="$library_root/scripts/library_ui.py"
+vault_source="$library_root/scripts/library_vault.py"
 tutor_source="$library_root/scripts/lattice_tutor.py"
 tutor_vendor_root="$library_root/scripts/vendor"
 storage_source="$library_root/scripts/move_library.py"
@@ -50,6 +51,7 @@ for resource in \
   "$native_root/Info.plist" \
   "$library_root/THIRD_PARTY_NOTICES.md" \
   "$server_source" \
+  "$vault_source" \
   "$tutor_source" \
   "$tutor_vendor_root/README.md" \
   "$tutor_vendor_root/pypdf-LICENSE" \
@@ -79,6 +81,7 @@ done
 /bin/cp "$native_root/Info.plist" "$staged_app/Contents/Info.plist"
 /bin/cp -R "$ui_root" "$staged_app/Contents/Resources/ui"
 /bin/cp "$server_source" "$staged_app/Contents/Resources/server/library_ui.py"
+/bin/cp "$vault_source" "$staged_app/Contents/Resources/server/library_vault.py"
 /bin/cp "$tutor_source" "$staged_app/Contents/Resources/server/lattice_tutor.py"
 /bin/cp -R "$tutor_vendor_root" "$staged_app/Contents/Resources/server/vendor"
 /usr/bin/find "$staged_app/Contents/Resources/server/vendor" -type f -name '*.pyc' -delete
@@ -147,6 +150,7 @@ for bundled in \
   "$staged_app/Contents/Resources/ui/pdf-reader-lifecycle.mjs" \
   "$staged_app/Contents/Resources/ui/vendor/pdfjs/build/pdf.min.mjs" \
   "$staged_app/Contents/Resources/server/library_ui.py" \
+  "$staged_app/Contents/Resources/server/library_vault.py" \
   "$staged_app/Contents/Resources/server/lattice_tutor.py" \
   "$staged_app/Contents/Resources/server/vendor/pypdf/__init__.py" \
   "$staged_app/Contents/Resources/server/vendor/pypdf-LICENSE" \

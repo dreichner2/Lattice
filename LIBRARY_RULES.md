@@ -111,6 +111,13 @@ taxonomy, and app source continue to come from GitHub. Syncthing must not be
 used to mirror `.git/`, build output, Codex credentials, or a live SQLite
 database.
 
+The per-device vault may release only a curated payload that has durable
+tracked metadata. Its adjacent sidecar is never released. Check out first
+creates a verified copy; the separate release action journals and establishes
+an effective exact-path Syncthing ignore before unlinking the payload. Restore
+must not overwrite an unexpected local file. New-arrival imports remain local
+and synchronized until they are intentionally curated.
+
 Do not force-add a book, paper, lecture, or private sidecar. If a separate
 content backup is ever
 needed, choose a storage system and rights policy explicitly rather than

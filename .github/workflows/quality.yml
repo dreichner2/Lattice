@@ -58,7 +58,7 @@ jobs:
 
       - name: Compile Python sources
         run: |
-          python -m py_compile scripts/library_ui.py scripts/cross_platform_server.py scripts/validate_library_layout.py windows/server_bootstrap.py
+          python -m py_compile scripts/library_ui.py scripts/library_vault.py scripts/cross_platform_server.py scripts/validate_library_layout.py windows/server_bootstrap.py
 
       - name: Validate clone and Syncthing layout
         run: |

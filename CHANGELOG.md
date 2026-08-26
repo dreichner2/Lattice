@@ -5,11 +5,10 @@
 ### Added
 
 - External-drive book vault: check out cataloged books to a verified per-device
-  cache, release the synchronized local copy (with an exact-path `.stignore`
-  entry so deletion never propagates), and restore byte-for-byte later. The
-  vault journal is updated before every destructive step and reconciled at
-  startup; away books stay visible on the shelf as "In the vault" with a
-  restore action. New endpoints `/api/vault`, `/api/vault/checkout`,
+  cache, explicitly release only the synchronized payload, and restore it
+  byte-for-byte later. The journal is updated before every destructive step;
+  adjacent sidecar metadata remains synchronized, and away books stay visible
+  on the shelf. New endpoints `/api/vault`, `/api/vault/checkout`,
   `/api/vault/checkin`, and `/api/vault/restore` are token-guarded like other
   mutations.
 
@@ -44,6 +43,12 @@
   outside the turn.
 - Tutor and optional import enrichment now explicitly disable Codex hosted web
   search, preserving Lattice's source-only and metadata-only model boundaries.
+- Vault release and restore pause a live, healthy Syncthing folder around the
+  filesystem transition. Release installs its exact-path ignore before broader
+  include rules and before payload deletion; restore never overwrites an
+  unexpected local file. Per-library private namespaces, fail-closed journals,
+  full SHA-256 verification, unique path-bound copies, and crash recovery keep
+  one library or corrupt state from deleting another library's cache.
 
 ## 2.3.2 — 2026-08-23
 

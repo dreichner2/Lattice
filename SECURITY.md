@@ -277,6 +277,28 @@ possibly compromised key to authorize its own replacement.
   transcripts are not available unless separately present as an eligible local
   source, so the prompt forbids claims of having watched a lecture.
 
+### Device vault
+
+- Vault state is namespaced by the stable Syncthing folder identity and stored
+  outside the synchronized library with private directory/file modes where
+  supported. A malformed, foreign, oversized, linked, or invalid journal fails
+  closed and is never interpreted as permission to prune copies.
+- Only curated payload paths backed by durable tracked metadata are eligible.
+  Relative paths reject traversal, hidden components, control characters, and
+  cross-platform Syncthing glob metacharacters. Copies are named from full
+  path and payload SHA-256 values so equal bytes at different paths never share
+  destructive lifecycle state.
+- Check out, release, and restore verify SHA-256 at each authority transition.
+  Release re-verifies the current local payload, preserves its metadata sidecar,
+  journals first, installs the rooted ignore before every broader pattern, and
+  then removes only the payload. Restore uses exclusive creation and refuses to
+  overwrite a conflicting local file.
+- A live managed Syncthing folder must be healthy and Up to Date and is paused
+  around release/restore, then resumed and rescanned. A pre-existing exact
+  ignore is preserved; only a Lattice-owned marker is removed on restore.
+- Reconciliation prunes only unreferenced files matching Lattice's managed
+  copy-name format. Corrupt state and unknown files are preserved for recovery.
+
 ### Reader data
 
 - Native Mac progress, notes, bookmarks, annotations, and sessions are stored

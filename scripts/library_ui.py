@@ -37,11 +37,12 @@ from datetime import datetime, timezone
 from http import HTTPStatus
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from pathlib import Path, PurePosixPath
-from typing import Any
+from typing import Any, Callable
 from xml.etree import ElementTree
 
 import lattice_tutor
 import library_vault
+import move_library
 
 
 REPO_ROOT = Path(__file__).resolve().parents[1]
@@ -158,6 +159,27 @@ def library_identity(root: Path) -> str:
     """Return the same stable canonical-root identity used by the native app."""
     canonical = root.expanduser().resolve()
     return hashlib.sha256(f"cs-library:{canonical}".encode("utf-8")).hexdigest()
+
+
+def syncthing_folder_id(root: Path) -> str | None:
+    """Return the stable storage identity when this is a synchronized library."""
+    layout_path = root / "library-layout.json"
+    if not layout_path.is_file():
+        return None
+    try:
+        layout = json.loads(layout_path.read_text(encoding="utf-8"))
+        folder_id = layout["syncthing"]["folder_id"]
+    except (OSError, UnicodeError, json.JSONDecodeError, KeyError, TypeError) as exc:
+        raise ValueError("library-layout.json has no valid Syncthing folder identity") from exc
+    if not isinstance(folder_id, str) or not re.fullmatch(r"[A-Za-z0-9._-]{1,128}", folder_id):
+        raise ValueError("library-layout.json has an invalid Syncthing folder identity")
+    return folder_id
+
+
+def vault_library_identity(root: Path) -> str:
+    """Keep one device vault attached to the library across root relocation."""
+    folder_id = syncthing_folder_id(root)
+    return f"syncthing:{folder_id}" if folder_id else f"path:{library_identity(root)}"
 
 
 def slugify(value: str) -> str:
@@ -1200,12 +1222,22 @@ def build_library(
                     "materialType": work["materialType"],
                     "materialLabel": work["materialLabel"],
                     "workCataloged": work["cataloged"],
+                    "vaultEligible": bool(
+                        work["cataloged"] and file["path"] in tracked_metadata
+                    ),
                 }
             )
 
     artifact_count = len(materials)
     indexed_count = sum(len(work["files"]) for work in works)
-    present_count = artifact_count
+    present_count = sum(1 for material in materials if material["exists"])
+    away_count = sum(1 for material in materials if material["availability"] == "away")
+    missing_count = sum(
+        1
+        for work in works
+        for file in work["files"]
+        if file["availability"] == "missing"
+    )
     manifest_path = root / "manifests" / "library.sha256"
     manifest_count = (
         len(manifest_path.read_text(encoding="utf-8").splitlines())
@@ -1255,7 +1287,7 @@ def build_library(
                 "vaultRoot": str(vault.root),
                 "checkedOut": vault.status()["checkedOut"],
             }
-        except OSError:
+        except (OSError, ValueError):
             vault_status = {"available": False, "checkedOut": {}}
     return {
         "name": "Lattice",
@@ -1273,13 +1305,14 @@ def build_library(
             "artifacts": artifact_count,
             "indexedArtifacts": indexed_count,
             "present": present_count,
+            "away": away_count,
             "subjects": len(subjects),
             "topics": len(topics),
             "bytes": sum(int(material["bytes"]) for material in materials),
             "manifestEntries": manifest_count,
             "materialCounts": material_counts,
             "allPresent": indexed_count == present_count,
-            "missing": indexed_count - present_count,
+            "missing": missing_count,
             "newArrivals": len(new_arrival_paths),
         },
         "vault": vault_status,
@@ -2524,26 +2557,37 @@ class LibraryHTTPServer(ThreadingHTTPServer):
         if not (self.ui_root / "index.html").is_file():
             raise ValueError(f"Lattice UI is missing: {self.ui_root}")
         self.library_id = library_identity(self.root)
+        self.syncthing_folder_id = syncthing_folder_id(self.root)
         self.parent_pid = parent_pid
         self.taxonomy = load_taxonomy(self.root, required=True)
         self.vault = library_vault.BookVault(
             self.root,
-            self.library_id,
+            vault_library_identity(self.root),
             vault_root=(
                 Path(os.environ["LATTICE_VAULT_ROOT"])
                 if os.environ.get("LATTICE_VAULT_ROOT")
                 else None
             ),
         )
+        self.vault_error = ""
         try:
             self.vault.reconcile()
-        except (OSError, ValueError):
-            # A broken vault never blocks the library from opening; the
-            # reconcile report surfaces through /api/vault instead.
-            pass
-        self.library = build_library(self.root, taxonomy=self.taxonomy, vault=self.vault)
+        except (OSError, ValueError) as exc:
+            # A broken device cache never blocks the synchronized library from
+            # opening, but mutations remain fail-closed until restart.
+            self.vault_error = str(exc)
+        self.library = build_library(
+            self.root,
+            taxonomy=self.taxonomy,
+            vault=None if self.vault_error else self.vault,
+        )
         self.lecture_catalog = load_lecture_catalog(self.root)
         self.allowed_paths = frozenset(file["path"] for file in self.library["materials"])
+        self.vault_eligible_paths = frozenset(
+            file["path"]
+            for file in self.library["materials"]
+            if file.get("vaultEligible") is True
+        )
         self._epub_cache: dict[
             str,
             tuple[tuple[int, int], dict[str, Any], dict[str, str]],
@@ -3177,9 +3221,13 @@ class LibraryHTTPServer(ThreadingHTTPServer):
 
     def away_paths(self) -> frozenset[str]:
         """Paths whose local payload has been released to the vault."""
+        if self.vault_error:
+            return frozenset()
         return self.vault.away_paths()
 
     def vault_payload(self) -> dict[str, Any]:
+        if self.vault_error:
+            return {"available": False, "error": self.vault_error, "checkedOut": {}}
         try:
             status = self.vault.status()
         except (OSError, ValueError) as exc:
@@ -3191,15 +3239,128 @@ class LibraryHTTPServer(ThreadingHTTPServer):
         }
 
     def _vault_known_path(self, relative: str) -> bool:
-        """A path is actionable when present locally or managed as away."""
-        return relative in self.allowed_paths or relative in self.vault.away_paths()
+        """Only durable catalog records or existing vault entries are actionable."""
+        if self.vault_error:
+            return False
+        return relative in self.vault_eligible_paths or relative in self.vault.away_paths()
+
+    def _require_vault(self) -> None:
+        if self.vault_error:
+            raise library_vault.VaultError(
+                f"The device vault is unavailable until Lattice restarts: {self.vault_error}"
+            )
+
+    def _run_vault_syncthing_guarded(
+        self,
+        operation: Callable[[], dict[str, Any]],
+    ) -> dict[str, Any]:
+        """Pause a live managed folder so ignore and payload events cannot race."""
+        self._require_vault()
+        folder_id = self.syncthing_folder_id
+        if folder_id is None:
+            return operation()
+        try:
+            discovery = move_library._discover_syncthing(self.root, folder_id, None)
+        except move_library.LibraryMoveError as exc:
+            raise library_vault.VaultError(str(exc)) from exc
+        if not discovery.running:
+            # A verified offline configuration will read the durable ignore
+            # before its first future scan. An unmanaged test/local folder has
+            # no synchronization race to coordinate.
+            return operation()
+
+        assert discovery.client is not None and discovery.folder is not None
+        client = discovery.client
+        folder = discovery.folder
+        if folder.get("type") != "sendreceive":
+            raise library_vault.VaultError(
+                "The Lattice Syncthing folder must be Send & Receive for vault operations"
+            )
+        paused_by_lattice = False
+        try:
+            if client.restart_required():
+                raise library_vault.VaultError(
+                    "Restart Syncthing before changing a vaulted book"
+                )
+            originally_paused = bool(folder.get("paused", False))
+            status = client.status(folder_id)
+            if not move_library._validate_syncthing_status(
+                status,
+                allow_paused=originally_paused,
+            ):
+                raise library_vault.VaultError(
+                    "Wait for the Lattice Syncthing folder to be Up to Date "
+                    "before changing a vaulted book"
+                )
+            if not originally_paused:
+                client.patch_folder(folder_id, {"paused": True})
+                paused_by_lattice = True
+                if not bool(client.folder(folder_id).get("paused", False)):
+                    raise library_vault.VaultError(
+                        "Syncthing did not pause the Lattice folder"
+                    )
+                move_library._wait_for_syncthing(
+                    client,
+                    folder_id,
+                    allow_paused=True,
+                    timeout=15.0,
+                    required_state="paused",
+                )
+        except (move_library.LibraryMoveError, library_vault.VaultError) as exc:
+            if paused_by_lattice:
+                try:
+                    client.patch_folder(folder_id, {"paused": False})
+                    client.scan(folder_id)
+                except Exception as resume_exc:
+                    raise library_vault.VaultError(
+                        f"{exc} Syncthing also could not resume: {resume_exc}"
+                    ) from exc
+            if isinstance(exc, library_vault.VaultError):
+                raise
+            raise library_vault.VaultError(str(exc)) from exc
+
+        result: dict[str, Any] | None = None
+        operation_error: BaseException | None = None
+        try:
+            result = operation()
+        except BaseException as exc:
+            operation_error = exc
+
+        resume_error: Exception | None = None
+        if paused_by_lattice:
+            try:
+                client.patch_folder(folder_id, {"paused": False})
+                if bool(client.folder(folder_id).get("paused", True)):
+                    raise move_library.LibraryMoveError(
+                        "Syncthing did not resume the Lattice folder"
+                    )
+                client.scan(folder_id)
+            except Exception as exc:  # safe state remains journaled and ignored
+                resume_error = exc
+
+        if operation_error is not None:
+            if resume_error is not None:
+                raise library_vault.VaultError(
+                    f"{operation_error} Syncthing also could not resume: {resume_error}"
+                ) from operation_error
+            raise operation_error
+        assert result is not None
+        if resume_error is not None:
+            result["warning"] = (
+                "The book operation completed safely, but Syncthing remains paused; "
+                "resume the Lattice folder in Syncthing."
+            )
+        return result
 
     def vault_check_out(self, value: dict[str, Any]) -> dict[str, Any]:
+        self._require_vault()
         relative = str(value.get("path") or "")
-        if relative not in self.allowed_paths or not resolve_payload(
+        if relative not in self.vault_eligible_paths or not resolve_payload(
             self.root, relative, {relative}
         ).is_file():
-            raise ValueError("Only a cataloged local payload can be checked out")
+            raise ValueError(
+                "Only a cataloged local payload with durable metadata can be checked out"
+            )
         with self._import_lock:
             result = self.vault.check_out(relative)
             self._snapshot = ()
@@ -3210,7 +3371,9 @@ class LibraryHTTPServer(ThreadingHTTPServer):
         if not self._vault_known_path(relative):
             raise ValueError("Unknown library path")
         with self._import_lock:
-            result = self.vault.check_in(relative)
+            result = self._run_vault_syncthing_guarded(
+                lambda: self.vault.check_in(relative)
+            )
             self._snapshot = ()
         return result
 
@@ -3221,7 +3384,9 @@ class LibraryHTTPServer(ThreadingHTTPServer):
         if not self._vault_known_path(relative):
             raise ValueError("Unknown library path")
         with self._import_lock:
-            result = self.vault.restore(relative)
+            result = self._run_vault_syncthing_guarded(
+                lambda: self.vault.restore(relative)
+            )
             self._snapshot = ()
         return result
 
@@ -3262,7 +3427,7 @@ class LibraryHTTPServer(ThreadingHTTPServer):
                 refreshed = build_library(
                     self.root,
                     taxonomy=refreshed_taxonomy,
-                    vault=self.vault,
+                    vault=None if self.vault_error else self.vault,
                 )
                 refreshed_lectures = load_lecture_catalog(self.root)
             except (OSError, TypeError, ValueError) as exc:
@@ -3287,6 +3452,11 @@ class LibraryHTTPServer(ThreadingHTTPServer):
                 self.taxonomy = refreshed_taxonomy
                 self.lecture_catalog = refreshed_lectures
                 self.allowed_paths = frozenset(current)
+                self.vault_eligible_paths = frozenset(
+                    path
+                    for path, file in current.items()
+                    if file.get("vaultEligible") is True
+                )
                 self.last_change = {
                     "revision": self.revision,
                     "added": sorted(current.keys() - previous.keys()),

@@ -58,15 +58,54 @@ class VaultServerTests(unittest.TestCase):
         base = Path(cls._temporary.name)
         cls.library_root = base / "library"
         (cls.library_root / "books").mkdir(parents=True)
-        (cls.library_root / "metadata").mkdir()
+        (cls.library_root / "metadata" / "books").mkdir(parents=True)
         (cls.library_root / "library-taxonomy.json").write_bytes(
             (ROOT / "library-taxonomy.json").read_bytes()
         )
-        (cls.library_root / "CATALOG.md").write_text("# Lattice\n", encoding="utf-8")
+        (cls.library_root / "CATALOG.md").write_text(
+            "\n".join(
+                (
+                    "# Lattice",
+                    "",
+                    "## Fixture Shelf",
+                    "",
+                    "| Book | Author(s) | Edition | Local | Source | Access |",
+                    "|---|---|---:|---|---|---|",
+                    "| <!-- work: vault-fixture --> "
+                    "[Vault Fixture Book](books/vault-fixture.pdf) | Fixture Author | "
+                    "1e | `books/vault-fixture.pdf` | — | Local study |",
+                    "",
+                )
+            ),
+            encoding="utf-8",
+        )
         cls.relative = "books/vault-fixture.pdf"
         cls.payload = cls.library_root / "books" / "vault-fixture.pdf"
         cls.payload.write_bytes(PAYLOAD_BYTES)
         write_sidecar(cls.payload, cls.relative)
+        (cls.library_root / "metadata" / "books" / "vault-fixture.json").write_text(
+            json.dumps(
+                {
+                    "title": "Vault Fixture Book",
+                    "path": cls.relative,
+                    "authors": "Fixture Author",
+                    "source": "Test fixture",
+                    "source_url": "",
+                    "license": "Local test",
+                    "sha256": digest_of(PAYLOAD_BYTES),
+                    "bytes": len(PAYLOAD_BYTES),
+                }
+            ),
+            encoding="utf-8",
+        )
+        cls.new_arrival_relative = "books/new-arrival.pdf"
+        cls.new_arrival = cls.library_root / cls.new_arrival_relative
+        cls.new_arrival.write_bytes(PAYLOAD_BYTES)
+        write_sidecar(cls.new_arrival, cls.new_arrival_relative)
+        (cls.library_root / ".stignore").write_text(
+            "!/books\n!/books/**\n*\n",
+            encoding="utf-8",
+        )
 
         import os
 
@@ -114,13 +153,26 @@ class VaultServerTests(unittest.TestCase):
             with urllib.request.urlopen(request, timeout=10) as response:
                 return response.status, json.loads(response.read())
         except urllib.error.HTTPError as caught:
-            return caught.code, json.loads(caught.read())
+            try:
+                return caught.code, json.loads(caught.read())
+            finally:
+                caught.close()
 
     def token(self) -> str:
         return self.get_json("/api/library")["actionToken"]
 
     def material_paths(self) -> list[str]:
         return [item["path"] for item in self.get_json("/api/library")["materials"]]
+
+    def material(self, relative: str) -> dict | None:
+        return next(
+            (
+                item
+                for item in self.get_json("/api/library")["materials"]
+                if item["path"] == relative
+            ),
+            None,
+        )
 
     def wait_until(self, condition, timeout: float = 8.0) -> bool:
         import time
@@ -137,14 +189,22 @@ class VaultServerTests(unittest.TestCase):
         import json as json_module
 
         self.payload.write_bytes(PAYLOAD_BYTES)
+        self.new_arrival.write_bytes(PAYLOAD_BYTES)
+        (self.library_root / ".stignore").write_text(
+            "!/books\n!/books/**\n*\n",
+            encoding="utf-8",
+        )
         state_path = self.server.vault.state_path
         state = {
             "version": 1,
-            "libraryId": self.server.library_id,
+            "libraryId": self.server.vault.library_id,
             "entries": {},
         }
         state_path.parent.mkdir(parents=True, exist_ok=True)
         state_path.write_text(json_module.dumps(state), encoding="utf-8")
+        for candidate in state_path.parent.iterdir():
+            if candidate != state_path and candidate.is_file():
+                candidate.unlink()
 
     def setUp(self) -> None:
         self.reset_fixture()
@@ -178,12 +238,21 @@ class VaultServerTests(unittest.TestCase):
         self.assertEqual(status, 200)
         self.assertFalse(self.payload.is_file())
         self.assertTrue(
-            self.wait_until(lambda: self.relative not in self.material_paths()),
-            "catalog never dropped the released payload",
+            self.payload.with_name(self.payload.name + ".library.json").is_file(),
+            "payload-only release must preserve synchronized metadata",
+        )
+        self.assertTrue(
+            self.wait_until(
+                lambda: (self.material(self.relative) or {}).get("availability") == "away"
+            ),
+            "away cataloged book did not remain visible with away availability",
         )
 
         library = self.get_json("/api/library")
         self.assertTrue(library["vault"]["available"])
+        material = next(item for item in library["materials"] if item["path"] == self.relative)
+        self.assertEqual(material["availability"], "away")
+        self.assertFalse(material["exists"])
 
         status, body = self.post_json("/api/vault/restore", {"path": self.relative}, token)
         self.assertEqual(status, 200)
@@ -206,10 +275,70 @@ class VaultServerTests(unittest.TestCase):
     def test_checkout_rejects_uncataloged_path(self) -> None:
         status, _body = self.post_json(
             "/api/vault/checkout",
+            {"path": self.new_arrival_relative},
+            self.token(),
+        )
+        self.assertEqual(status, 400)
+        self.assertTrue(self.new_arrival.is_file())
+
+    def test_checkout_rejects_path_traversal(self) -> None:
+        status, _body = self.post_json(
+            "/api/vault/checkout",
             {"path": "../../etc/passwd"},
             self.token(),
         )
         self.assertEqual(status, 400)
+
+    def test_live_syncthing_is_paused_around_destructive_transition(self) -> None:
+        events: list[str] = []
+
+        class FakeClient:
+            paused = False
+
+            def restart_required(self) -> bool:
+                return False
+
+            def status(self, _folder_id: str) -> dict:
+                return {
+                    "state": "paused" if self.paused else "idle",
+                    "needTotalItems": 0,
+                    "pullErrors": 0,
+                    "invalid": "",
+                }
+
+            def patch_folder(self, _folder_id: str, values: dict) -> None:
+                self.paused = bool(values["paused"])
+                events.append("pause" if self.paused else "resume")
+
+            def folder(self, _folder_id: str) -> dict:
+                return {"type": "sendreceive", "paused": self.paused}
+
+            def scan(self, _folder_id: str) -> None:
+                events.append("scan")
+
+        client = FakeClient()
+        discovery = library_ui.move_library.SyncthingDiscovery(
+            client,
+            {"type": "sendreceive", "paused": False},
+            Path("/tmp/config.xml"),
+            True,
+            True,
+        )
+        original_folder_id = self.server.syncthing_folder_id
+        self.server.syncthing_folder_id = "fixture-folder"
+        try:
+            with unittest.mock.patch.object(
+                library_ui.move_library,
+                "_discover_syncthing",
+                return_value=discovery,
+            ):
+                result = self.server._run_vault_syncthing_guarded(
+                    lambda: events.append("operation") or {"ok": True}
+                )
+        finally:
+            self.server.syncthing_folder_id = original_folder_id
+        self.assertTrue(result["ok"])
+        self.assertEqual(events, ["pause", "operation", "resume", "scan"])
 
 
 if __name__ == "__main__":

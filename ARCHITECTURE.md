@@ -33,6 +33,7 @@ and can be synchronized through Syncthing.
 │  ├─ validates the library root and server instance identity               │
 │  ├─ builds the catalog payload and watches local files                     │
 │  ├─ validates imports and writes collision-safe payloads and sidecars      │
+│  ├─ journals verified device-vault payload transitions (`library_vault.py`)│
 │  ├─ optionally asks local Codex for metadata-only classification           │
 │  ├─ brokers source-scoped Tutor turns (`lattice_tutor.py`)                 │
 │  ├─ extracts PDF/EPUB/text into a private per-device Tutor index           │
@@ -82,6 +83,33 @@ paths, adjacent sidecars, library identity, and the established Syncthing root.
 Reader databases remain in their existing per-user application-support paths;
 they are not moved or synchronized. The helper never edits `config.xml`, stores
 the Syncthing API key, or sends it beyond the configured loopback endpoint.
+
+## Payload tiering
+
+`scripts/library_vault.py` stores verified publication payloads under a private
+per-device base directory. A SHA-256 namespace derived from the stable
+Syncthing folder ID isolates each library and survives Move Library path
+changes. State and copies use private permissions where the platform supports
+them. Only curated paths backed by Git-tracked metadata are eligible, ensuring
+an away publication can still be reconstructed on the shelf. Adjacent private
+sidecars remain in the synchronized folder throughout every phase.
+
+Check out copies and verifies before journaling. Release verifies the current
+local payload and staged copy, journals `return-pending`, makes the rooted path
+the first matching `.stignore` rule, and then unlinks only the payload. Restore
+journals `restore-pending`, refuses to replace an unexpected local file, copies
+and verifies, removes only a Lattice-owned ignore, commits the journal, and then
+prunes the redundant vault copy. A live Syncthing folder is required to be Up
+to Date and is paused around release/restore so its watcher cannot observe a
+half-transition. An offline verified configuration consumes the durable ignore
+on its next scan.
+
+Journal parsing and ownership checks fail closed. Reconciliation never treats a
+malformed or foreign journal as empty, prunes only filenames in Lattice's
+managed copy format, and preserves unknown files. Interrupted returns are
+reverted when the payload survived or finalized when the verified vault copy
+survived; interrupted restores complete only when no conflicting payload is
+present.
 
 ## macOS direct updates
 

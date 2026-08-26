@@ -238,6 +238,26 @@ exact folder had a pre-existing pause, Lattice asks before resuming it. On
 macOS, install `Lattice.app` outside the library (normally in `/Applications`)
 before moving the library itself.
 
+### Release selected local payloads to the device vault
+
+Cataloged publications with durable tracked metadata can be tiered without
+moving the full library. In the file view, **Check out to vault** first creates
+and SHA-256-verifies a private device-local copy while the library copy remains
+readable. Only after that succeeds does **Release local copy** become available.
+Release removes the publication payload—not its adjacent metadata sidecar—and
+the shelf keeps the item visible as **In the vault**. **Restore from vault**
+creates and verifies the original bytes again without overwriting any unexpected
+local file.
+
+The device vault lives under Lattice's private application-data directory and
+uses a separate namespace for each stable Syncthing folder ID, so it does not
+move with an external reading drive or synchronize to another device. When the
+library is managed by a running Syncthing instance, Lattice requires it to be
+healthy and Up to Date, pauses the exact folder around release or restore,
+places the payload-specific ignore before broader include rules, then resumes
+and scans. A malformed vault journal, checksum mismatch, changed local payload,
+unsafe filename, or unavailable Syncthing control blocks deletion.
+
 ## Windows app
 
 The Windows package provides the same shelf, search, study documents, EPUB

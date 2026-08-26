@@ -82,6 +82,15 @@ test("Move Library keeps the installed app and private state local", () => {
   assert.match(MAC_BUILD, /server\/move_library\.py/);
 });
 
+test("book vault exposes all three phases and is bundled into the macOS app", () => {
+  assert.match(APP, /runVaultOperation\(material\.path, "checkout"\)/);
+  assert.match(APP, /"Release local copy"[\s\S]*?runVaultOperation\(material\.path, "checkin"\)/);
+  assert.match(APP, /"Restore from vault"[\s\S]*?runVaultOperation\(material\.path, "restore"\)/);
+  assert.match(APP, /vaultPhase === "local"/);
+  assert.match(APP, /material\.vaultEligible === true/);
+  assert.match(MAC_BUILD, /server\/library_vault\.py/);
+});
+
 test("macOS reconnect distinguishes a running process from active library sync", () => {
   assert.match(MAC_APP, /payload\["folderPaused"\] as\? Bool == true/);
   assert.match(MAC_APP, /Resume this exact folder now\?/);

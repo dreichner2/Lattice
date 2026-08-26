@@ -191,6 +191,22 @@ Syncthing finishes, already carrying the same title and subject. The Mac mini's
 90-day versioning is recovery protection, but Syncthing is still synchronization
 rather than a complete backup: deletions also propagate.
 
+### Device-vault ignores
+
+Lattice's device vault is payload-only and local to one computer. **Check out
+to vault** verifies a second copy but does not remove anything. The separate
+**Release local copy** action preserves the adjacent `.library.json` sidecar,
+adds a rooted payload rule before the allowlist's `!/books/**`, `!/papers/**`,
+or `!/lectures/**` rule, and only then removes the payload. This ordering is
+required because Syncthing applies the first matching ignore pattern.
+
+If Syncthing is running, Lattice requires the exact folder to be healthy and Up
+to Date and pauses it around release or restore; it resumes and requests a scan
+after the transition. If the verified configuration is offline, the durable
+`.stignore` rule is already present before Syncthing's next scan. Filenames with
+cross-platform ignore metacharacters are not eligible. Restoring removes only a
+rule Lattice added; a pre-existing exact rule remains in force.
+
 The only unavoidable manual security step in the Windows happy path is the Mac
 mini owner's approval of the new Device ID and existing-folder share. The
 Windows script has already selected the clone root and configured its half of

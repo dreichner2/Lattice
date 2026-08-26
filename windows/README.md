@@ -99,6 +99,14 @@ old path when its API remains reachable. If restoration cannot be confirmed, it
 keeps both copies and reports the failure. Do not manually move individual
 books: their disappearance can be synchronized as deletion.
 
+To free space for selected cataloged publications without moving the full
+library, use **Check out to vault**, then **Release local copy** in the shared
+file view. The first action only creates and verifies a private copy under
+`%LOCALAPPDATA%\Lattice\Vault`; the second pauses a healthy Syncthing folder,
+preserves the adjacent sidecar, protects the payload path with a device-local
+ignore, and releases only that payload. **Restore from vault** verifies the
+original bytes and never replaces an unexpected local file.
+
 ## Add material and optional Codex details
 
 Use the **Add** control in the Lattice header, or drag a PDF, EPUB, or TXT file

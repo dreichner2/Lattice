@@ -20,7 +20,7 @@ jobs:
 
       - name: Validate Python service
         run: |
-          python3 -m py_compile scripts/library_ui.py
+          python3 -m py_compile scripts/library_ui.py scripts/library_vault.py
           python3 -m unittest discover -s tests -p 'test_*.py' -v
 
       - name: Validate reader JavaScript
@@ -75,6 +75,7 @@ jobs:
           test -f "Lattice.app/Contents/Resources/ui/pdf-reader-lifecycle.mjs"
           test -f "Lattice.app/Contents/Resources/ui/vendor/pdfjs/build/pdf.min.mjs"
           test -f "Lattice.app/Contents/Resources/server/library_ui.py"
+          test -f "Lattice.app/Contents/Resources/server/library_vault.py"
           test -f "Lattice.app/Contents/Resources/server/lattice_tutor.py"
           test -f "Lattice.app/Contents/Resources/server/vendor/pypdf/__init__.py"
           test -f "Lattice.app/Contents/Resources/server/move_library.py"

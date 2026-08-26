@@ -80,7 +80,7 @@ try {
 
   if (-not $SkipTests) {
     Write-Host "Running portable checks..."
-    python -m py_compile scripts/library_ui.py scripts/lattice_tutor.py scripts/cross_platform_server.py scripts/move_library.py windows/server_bootstrap.py windows/generate_icon.py
+    python -m py_compile scripts/library_ui.py scripts/library_vault.py scripts/lattice_tutor.py scripts/cross_platform_server.py scripts/move_library.py windows/server_bootstrap.py windows/generate_icon.py
     Assert-NativeSuccess "Python compilation"
     python -m unittest discover -s tests -p "test_*.py" -v
     Assert-NativeSuccess "Python tests"

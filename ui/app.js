@@ -582,15 +582,15 @@ async function vaultAction(path, operation) {
 }
 
 const VAULT_OPERATION_LABELS = {
-  checkout: "Checked out to the vault",
-  checkin: "Released to the vault",
+  checkout: "Verified vault copy ready",
+  checkin: "Released local copy to the vault",
   restore: "Restored to this device",
 };
 
 async function runVaultOperation(path, operation) {
   try {
-    await vaultAction(path, operation);
-    announce(VAULT_OPERATION_LABELS[operation] || "Vault updated");
+    const payload = await vaultAction(path, operation);
+    announce(payload.warning || VAULT_OPERATION_LABELS[operation] || "Vault updated");
     await refreshLibrary(null, { quiet: true });
   } catch (error) {
     announce(error.message, true);
@@ -2113,7 +2113,7 @@ async function openOnMac(work, file) {
 
 async function openFile(work, file) {
   if (file.availability === "away") {
-    announce("This book is checked out to the vault. Restore it to read here.", true);
+    announce("This book's local copy was released to the vault. Restore it to read here.", true);
     return;
   }
   if (file.format === "EPUB") await showEpubReader(work, file);
@@ -2313,6 +2313,8 @@ function makeCard(work) {
 
 function makeMaterialCard(material) {
   const work = state.workById.get(material.workId);
+  const vaultEntry = state.library?.vault?.checkedOut?.[material.path];
+  const vaultPhase = vaultEntry?.phase;
   const card = node("article", `book-card material-card subject-${material.topicId || material.subjectId}${work.cataloged ? "" : " is-new-arrival"}${material.availability === "away" ? " is-away" : ""}`);
   card.dataset.material = material.path;
   const favorite = button(
@@ -2340,19 +2342,32 @@ function makeMaterialCard(material) {
   const meta = node("div", "book-meta");
   meta.append(node("span", "", subjectSummary(material)), node("span", "", material.format), node("span", "", humanBytes(material.bytes)), node("span", "book-status", material.materialLabel));
   info.append(meta);
-  if (material.availability === "away") {
+  if (material.availability === "away" || vaultPhase === "away") {
     info.append(node("p", "vault-note", "In the vault — restore to read on this device"));
+  } else if (vaultPhase === "local") {
+    info.append(node("p", "vault-note", "Verified vault copy ready — local copy still available"));
+  } else if (vaultPhase === "return-pending" || vaultPhase === "restore-pending") {
+    info.append(node("p", "vault-note", "Finishing a crash-safe vault transition"));
   }
   const actions = node("div", "card-actions");
   actions.append(
     button("button button-primary button-small", isBrowserReadable(material) ? "Read here" : SYSTEM_OPEN_LABEL, () => openFile(work, material)),
     button("button button-quiet button-small", "Work details", () => showDrawer(work.id)),
   );
-  if (material.availability === "away") {
+  if (material.availability === "away" || vaultPhase === "away") {
     actions.append(
       button("button button-quiet button-small", "Restore from vault", () => runVaultOperation(material.path, "restore")),
     );
-  } else if (material.workCataloged !== false) {
+  } else if (vaultPhase === "local") {
+    actions.append(
+      button("button button-quiet button-small", "Release local copy", () => runVaultOperation(material.path, "checkin")),
+    );
+  } else if (
+    vaultPhase !== "return-pending"
+    && vaultPhase !== "restore-pending"
+    && material.vaultEligible === true
+    && state.library?.vault?.available === true
+  ) {
     actions.append(
       button("button button-quiet button-small", "Check out to vault", () => runVaultOperation(material.path, "checkout")),
     );
