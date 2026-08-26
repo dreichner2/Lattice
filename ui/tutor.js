@@ -250,7 +250,51 @@
       });
     }
 
-    function renderMessages() {
+    function renderArtifact(artifact, message) {
+    const wrap = element("div", "tutor-artifact");
+    const head = element("div", "tutor-artifact-head");
+    head.append(
+      element("span", `tutor-artifact-kind is-${artifact.kind}`, artifact.kind === "latex" ? "LaTeX" : "Python"),
+      element("span", "tutor-artifact-label", artifact.label || "Suggested cell"),
+    );
+    wrap.append(head);
+
+    const preview = element("div", "tutor-artifact-preview");
+    if (artifact.kind === "latex" && window.katex) {
+      try {
+        window.katex.render(artifact.source, preview, { displayMode: true, throwOnError: false, strict: false, trust: false });
+      } catch {
+        preview.textContent = artifact.source;
+      }
+    } else {
+      const code = element("code", "", artifact.source);
+      preview.append(code);
+    }
+    wrap.append(preview);
+
+    const actions = element("div", "tutor-artifact-actions");
+    const insert = element("button", "button button-primary button-small", "Insert into Study Lab");
+    insert.type = "button";
+    insert.addEventListener("click", async () => {
+      insert.disabled = true;
+      try {
+        await options.onInsertArtifact?.(artifact);
+        insert.textContent = "Inserted ✓";
+      } catch (error) {
+        insert.disabled = false;
+        insert.textContent = "Insert failed — retry";
+        options.onInsertError?.(error);
+      }
+    });
+    actions.append(insert);
+    if (message.citations?.length) {
+      actions.append(element("span", "tutor-artifact-cited", `${message.citations.length} citation(s) will attach`));
+    }
+    wrap.append(actions);
+    return wrap;
+  }
+
+  function renderMessages() {
       const children = [];
       if (!state.messages.length) {
         elements.welcome.hidden = false;
@@ -271,6 +315,9 @@
         if (message.role === "user") bubble.textContent = message.text;
         else bubble.append(renderTutorText(message.text));
         item.append(bubble);
+        if (message.role === "tutor" && message.artifact) {
+          item.append(renderArtifact(message.artifact, message));
+        }
         if (message.role === "tutor" && message.citations?.length) {
           const citations = element("div", "tutor-citations");
           for (const citation of message.citations) {
@@ -526,6 +573,7 @@
           role: "tutor",
           text: String(response.answer || "Tutor returned no answer."),
           citations: Array.isArray(response.citations) ? response.citations : [],
+          artifact: response.artifact && typeof response.artifact === "object" ? response.artifact : null,
         });
         const scopeLabel = response.scope?.mode === "selected" ? "chosen sources" : "whole library";
         setRuntime("ready", response.grounded ? `Grounded in ${scopeLabel} · citations included` : `Answered from ${scopeLabel} · source limits noted`);

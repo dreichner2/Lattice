@@ -3261,11 +3261,44 @@ function connectLiveUpdates() {
   state.refreshTimer = window.setInterval(() => refreshLibrary(null, { quiet: true }), 12000);
 }
 
+async function insertTutorArtifact(artifact) {
+  // Insert into the most recent notebook; create one if none exists.
+  const listResponse = await fetch("/api/study/notebooks", { cache: "no-store" });
+  if (!listResponse.ok) throw new Error("Study Lab is unavailable");
+  const list = await listResponse.json();
+  let notebook = list.notebooks[0];
+  const token = state.token;
+  if (!notebook) {
+    const createResponse = await fetch("/api/study/notebooks", {
+      method: "POST",
+      headers: { "Content-Type": "application/json", "X-Library-Token": token },
+      body: JSON.stringify({ title: `From Tutor — ${new Date().toLocaleDateString()}` }),
+    });
+    if (!createResponse.ok) throw new Error("Could not create a notebook");
+    notebook = (await createResponse.json()).notebook;
+  }
+  const insertResponse = await fetch(
+    `/api/study/notebook/${encodeURIComponent(notebook.id)}/cells`,
+    {
+      method: "POST",
+      headers: { "Content-Type": "application/json", "X-Library-Token": token },
+      body: JSON.stringify({ kind: artifact.kind, source: artifact.source }),
+    },
+  );
+  if (!insertResponse.ok) {
+    const payload = await insertResponse.json().catch(() => ({}));
+    throw new Error(payload.error || "Insert failed");
+  }
+  announce(`Inserted into "${notebook.title}"`);
+}
+
 async function start() {
   initializeTheme();
   state.tutor = window.LatticeTutor?.create({
     announce,
     onOpenCitation: openTutorCitation,
+    onInsertArtifact: insertTutorArtifact,
+    onInsertError: (error) => announce(error.message || "Insert failed", true),
   }) || null;
   state.videoLibrary = window.CSVideoLibrary?.create({
     announce,
