@@ -406,6 +406,7 @@ def run_server(
     state_database: Path | None = None,
     parent_pid: int | None = None,
     open_browser: bool = True,
+    reuse_running: bool = True,
 ) -> int:
     root = root.expanduser().resolve()
     candidates = [port] if port == 0 else list(range(port, min(port + 20, 65536)))
@@ -415,7 +416,7 @@ def run_server(
     # A browser launch needs this process's private Study capability. Never
     # reuse an unrelated server whose per-launch capability is intentionally
     # unavailable to us.
-    if parent_pid is None and not open_browser:
+    if reuse_running and parent_pid is None and not open_browser:
         for candidate in candidates:
             if candidate and (running_url := find_matching_server(candidate, expected_library_id)):
                 print(f"Lattice is already running at {running_url}", flush=True)
@@ -469,6 +470,11 @@ def build_parser() -> argparse.ArgumentParser:
     parser.add_argument("--state-db", type=Path, default=default_state_database())
     parser.add_argument("--parent-pid", type=int, default=None)
     parser.add_argument("--no-browser", action="store_true")
+    parser.add_argument(
+        "--isolated",
+        action="store_true",
+        help="Own a new server process instead of reusing one",
+    )
     parser.add_argument("--print-library-id", action="store_true")
     return parser
 
@@ -492,6 +498,7 @@ def main(argv: list[str] | None = None) -> int:
             state_database=args.state_db,
             parent_pid=args.parent_pid,
             open_browser=not args.no_browser,
+            reuse_running=not args.isolated,
         )
     except (OSError, ValueError) as exc:
         print(str(exc), file=sys.stderr)

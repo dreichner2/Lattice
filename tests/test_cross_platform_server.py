@@ -248,6 +248,26 @@ class CrossPlatformServerTests(unittest.TestCase):
         )
         timer.return_value.start.assert_called_once_with()
 
+    def test_cli_accepts_native_candidate_isolation_and_disables_reuse(self) -> None:
+        arguments = [
+            "--root", str(self.root),
+            "--ui-root", str(self.ui),
+            "--state-db", str(self.database),
+            "--parent-pid", "42",
+            "--port", "0",
+            "--no-browser",
+            "--isolated",
+        ]
+        parsed = cross_platform_server.build_parser().parse_args(arguments)
+        self.assertTrue(parsed.isolated)
+        with mock.patch.object(
+            cross_platform_server,
+            "run_server",
+            return_value=0,
+        ) as run_server:
+            self.assertEqual(cross_platform_server.main(arguments), 0)
+        self.assertFalse(run_server.call_args.kwargs["reuse_running"])
+
 
 if __name__ == "__main__":
     unittest.main()
