@@ -227,7 +227,7 @@ class TutorManagerTests(unittest.TestCase):
             ],
             "artifact": {
                 "kind": "latex",
-                "source": "\begin{equation}\langle x,y\rangle^2\end{equation}",
+                "source": r"\begin{equation}\langle x,y\rangle^2\end{equation}",
                 "label": "Cauchy-Schwarz",
             },
         }

@@ -19,20 +19,22 @@ Write discipline:
 
 from __future__ import annotations
 
-import json
+import hashlib
 import os
 import sqlite3
+import stat
 import sys
-import tempfile
 import threading
-from datetime import datetime, timezone
-from pathlib import Path
+from datetime import datetime, timedelta, timezone
+from pathlib import Path, PurePosixPath
 from typing import Any
 
 CELL_KINDS = ("latex", "python")
 MAX_TITLE_CHARS = 200
 MAX_CELL_SOURCE_CHARS = 100_000
 MAX_CELLS_PER_NOTEBOOK = 500
+MAX_WORK_PATH_CHARS = 1_024
+MAX_WORK_TITLE_CHARS = 300
 
 _SCHEMA_VERSION = 1
 
@@ -49,19 +51,77 @@ def _utc_now() -> str:
     return datetime.now(timezone.utc).isoformat()
 
 
+def _storage_namespace(library_id: str) -> str:
+    identity = str(library_id or "")
+    if not identity or len(identity) > 4_096:
+        raise StudyError("A valid library identity is required")
+    return hashlib.sha256(identity.encode("utf-8")).hexdigest()
+
+
 def default_study_root(library_id: str) -> Path:
     """Private per-user, per-library storage location."""
+    namespace = _storage_namespace(library_id)
     override = os.environ.get("LATTICE_STUDY_ROOT")
     if override:
-        return Path(override) / library_id
+        return Path(override) / namespace
     if sys.platform == "win32":
         base = Path(os.environ.get("LOCALAPPDATA") or (Path.home() / "AppData" / "Local"))
-        return base / "Lattice" / "Study" / library_id
+        return base / "Lattice" / "Study" / namespace
     if sys.platform == "darwin":
         support = Path.home() / "Library" / "Application Support"
-        return support / "Lattice" / "Study" / library_id
+        return support / "Lattice" / "Study" / namespace
     state = Path(os.environ.get("XDG_STATE_HOME") or (Path.home() / ".local" / "state"))
-    return state / "lattice" / "study" / library_id
+    return state / "lattice" / "study" / namespace
+
+
+def _lexists(path: Path) -> bool:
+    return os.path.lexists(os.fspath(path))
+
+
+def _is_reparse(stat_result: os.stat_result) -> bool:
+    attributes = int(getattr(stat_result, "st_file_attributes", 0))
+    return stat.S_ISLNK(stat_result.st_mode) or bool(attributes & 0x400)
+
+
+def _require_plain_directory(path: Path) -> None:
+    try:
+        details = os.lstat(path)
+    except FileNotFoundError as exc:
+        raise StudyError("Study Lab storage disappeared during startup") from exc
+    if _is_reparse(details) or not stat.S_ISDIR(details.st_mode):
+        raise StudyError("Study Lab storage must be a regular, non-linked directory")
+
+
+def _require_plain_file(path: Path) -> os.stat_result:
+    try:
+        details = os.lstat(path)
+    except FileNotFoundError as exc:
+        raise StudyError("Study Lab database disappeared during startup") from exc
+    if _is_reparse(details) or not stat.S_ISREG(details.st_mode):
+        raise StudyError("Study Lab database must be a regular, non-linked file")
+    return details
+
+
+def _validate_work_link(work_path_value: Any, work_title_value: Any) -> tuple[str, str]:
+    work_path = str(work_path_value or "").strip()
+    work_title = str(work_title_value or "").strip()
+    if not work_path:
+        return "", ""
+    if len(work_path) > MAX_WORK_PATH_CHARS or "\\" in work_path:
+        raise StudyError("Linked work path is invalid")
+    normalized = PurePosixPath(work_path)
+    if (
+        normalized.is_absolute()
+        or not normalized.parts
+        or any(part in {"", ".", ".."} for part in normalized.parts)
+        or normalized.as_posix() != work_path
+    ):
+        raise StudyError("Linked work path is invalid")
+    if len(work_title) > MAX_WORK_TITLE_CHARS:
+        raise StudyError(
+            f"Linked work title exceeds {MAX_WORK_TITLE_CHARS} characters"
+        )
+    return work_path, work_title
 
 
 def _validate_title(value: Any) -> str:
@@ -97,20 +157,81 @@ class StudyLab:
     """SQLite-backed notebook store for one library identity."""
 
     def __init__(self, library_root: Path, library_id: str, study_root: Path | None = None):
-        self.library_root = Path(library_root).resolve()
-        self.library_id = library_id
-        self.root = study_root if study_root else default_study_root(library_id)
-        self.root.mkdir(parents=True, exist_ok=True)
+        self.library_root = Path(library_root).resolve(strict=True)
+        self.library_id = str(library_id or "")
+        _storage_namespace(self.library_id)
+        requested_root = Path(study_root) if study_root else default_study_root(self.library_id)
+        requested_root = Path(os.path.abspath(os.fspath(requested_root.expanduser())))
+        if not requested_root.name or requested_root == Path(requested_root.anchor):
+            raise StudyError("Study Lab storage root is unsafe")
+        # Resolve the parent (including the conventional /tmp -> /private/tmp
+        # indirection on macOS), but preserve the final component so an
+        # attacker-controlled link at the database root is rejected, not
+        # followed.
+        self.root = requested_root.parent.resolve(strict=False) / requested_root.name
+        if self.root == Path.home().resolve(strict=False):
+            raise StudyError("Study Lab storage root is unsafe")
+        resolved_candidate = self.root.resolve(strict=False)
+        if (
+            resolved_candidate == self.library_root
+            or self.library_root in resolved_candidate.parents
+        ):
+            raise StudyError(
+                "Study Lab storage must remain outside the synchronized library"
+            )
+        if _lexists(self.root):
+            _require_plain_directory(self.root)
+        else:
+            self.root.mkdir(parents=True, mode=0o700, exist_ok=False)
+            _require_plain_directory(self.root)
+        if os.name != "nt":
+            os.chmod(self.root, 0o700)
+
+        self.database_path = self.root / "Study.sqlite"
+        if _lexists(self.database_path):
+            database_details = _require_plain_file(self.database_path)
+        else:
+            flags = os.O_CREAT | os.O_EXCL | os.O_RDWR
+            flags |= int(getattr(os, "O_NOFOLLOW", 0))
+            descriptor = os.open(self.database_path, flags, 0o600)
+            os.close(descriptor)
+            database_details = _require_plain_file(self.database_path)
+        if os.name != "nt":
+            os.chmod(self.database_path, 0o600)
+        for suffix in ("-wal", "-shm", "-journal"):
+            sidecar = Path(f"{self.database_path}{suffix}")
+            if not _lexists(sidecar):
+                continue
+            _require_plain_file(sidecar)
+            if os.name != "nt":
+                os.chmod(sidecar, 0o600)
+
         self._lock = threading.RLock()
+        self._closed = False
         self._connection = sqlite3.connect(
-            self.root / "Study.sqlite",
+            self.database_path,
             check_same_thread=False,
+            timeout=5,
         )
         self._connection.row_factory = sqlite3.Row
         try:
+            self._connection.execute("PRAGMA busy_timeout = 5000")
             self._connection.execute("PRAGMA foreign_keys = ON")
+            self._connection.execute("PRAGMA journal_mode = WAL")
+            self._connection.execute("PRAGMA synchronous = FULL")
             self._migrate()
-        except sqlite3.Error:
+            connected_details = _require_plain_file(self.database_path)
+            if (
+                connected_details.st_dev,
+                connected_details.st_ino,
+            ) != (
+                database_details.st_dev,
+                database_details.st_ino,
+            ):
+                raise StudyError("Study Lab database changed during startup")
+            if os.name != "nt":
+                os.chmod(self.database_path, 0o600)
+        except (OSError, sqlite3.Error, StudyError):
             self._connection.close()
             raise
 
@@ -138,6 +259,16 @@ class StudyLab:
                 raise StudyError(
                     f"Unsupported Study Lab schema version {row['value']}"
                 )
+            identity = self._connection.execute(
+                "SELECT value FROM meta WHERE key = 'library_identity'"
+            ).fetchone()
+            if identity is None:
+                self._connection.execute(
+                    "INSERT INTO meta (key, value) VALUES ('library_identity', ?)",
+                    (self.library_id,),
+                )
+            elif identity["value"] != self.library_id:
+                raise StudyError("Study Lab database belongs to another library")
             self._connection.execute(
                 """
                 CREATE TABLE IF NOT EXISTS notebooks (
@@ -175,17 +306,39 @@ class StudyLab:
 
     def close(self) -> None:
         with self._lock:
+            if self._closed:
+                return
             self._connection.close()
+            self._closed = True
+            for suffix in ("", "-wal", "-shm", "-journal"):
+                path = Path(f"{self.database_path}{suffix}")
+                if not _lexists(path):
+                    continue
+                _require_plain_file(path)
+                if os.name != "nt":
+                    os.chmod(path, 0o600)
 
     # ------------------------------------------------------------- internals
 
     def _touch_notebook(self, cursor: sqlite3.Cursor, notebook_id: str) -> str:
-        updated_at = _utc_now()
+        row = cursor.execute(
+            "SELECT updated_at FROM notebooks WHERE id = ?",
+            (notebook_id,),
+        ).fetchone()
+        if row is None:
+            raise StudyError("Notebook not found")
+        now = datetime.now(timezone.utc)
+        try:
+            previous = datetime.fromisoformat(str(row["updated_at"]))
+        except ValueError as exc:
+            raise StudyError("Notebook revision is invalid") from exc
+        if now <= previous:
+            now = previous + timedelta(microseconds=1)
+        updated_at = now.isoformat()
         cursor.execute(
             "UPDATE notebooks SET updated_at = ? WHERE id = ?",
             (updated_at, notebook_id),
         )
-        self._last_touch = updated_at
         return updated_at
 
     def _mutation_result(self, notebook_id: str, updated_at: str, **extra: Any) -> dict[str, Any]:
@@ -227,10 +380,9 @@ class StudyLab:
             raise StudyError("Notebook not found")
         supplied = str(base_updated_at or "")
         if not supplied:
-            # No base supplied: the caller explicitly opted out of the
-            # concurrency check (programmatic edits). A client that tracks
-            # revisions always sends one.
-            return
+            raise StudyConflict(
+                "A fresh notebook revision is required. Reload to continue."
+            )
         if supplied != row["updated_at"]:
             raise StudyConflict(
                 "This notebook changed in another window. Reload to continue."
@@ -313,7 +465,10 @@ class StudyLab:
 
     def create_notebook(self, value: dict[str, Any]) -> dict[str, Any]:
         title = _validate_title(value.get("title"))
-        work_path = str(value.get("workPath") or "")
+        work_path, work_title = _validate_work_link(
+            value.get("workPath"),
+            value.get("workTitle"),
+        )
         now = _utc_now()
         notebook_id = _new_id()
         with self._lock:
@@ -329,7 +484,7 @@ class StudyLab:
                         INSERT INTO notebook_links (notebook_id, work_path, work_title)
                         VALUES (?, ?, ?)
                         """,
-                        (notebook_id, work_path, str(value.get("workTitle") or "")),
+                        (notebook_id, work_path, work_title),
                     )
                 self._connection.commit()
             except Exception:
@@ -348,17 +503,23 @@ class StudyLab:
                     "UPDATE notebooks SET title = ? WHERE id = ?",
                     (title, notebook_id),
                 )
-                self._touch_notebook(cursor, notebook_id)
+                updated_at = self._touch_notebook(cursor, notebook_id)
                 self._connection.commit()
             except Exception:
                 self._connection.rollback()
                 raise
-        return self.get_notebook(notebook_id)
+        result = self.get_notebook(notebook_id)
+        result.update(self._mutation_result(notebook_id, updated_at))
+        return result
 
     def set_link(self, notebook_id: str, value: dict[str, Any]) -> dict[str, Any]:
-        work_path = str(value.get("workPath") or "")
+        work_path, work_title = _validate_work_link(
+            value.get("workPath"),
+            value.get("workTitle"),
+        )
         with self._lock:
             self._require_notebook_row(notebook_id)
+            self._check_revision(notebook_id, value.get("baseUpdatedAt"))
             cursor = self._connection.cursor()
             try:
                 cursor.execute(
@@ -371,14 +532,16 @@ class StudyLab:
                         INSERT INTO notebook_links (notebook_id, work_path, work_title)
                         VALUES (?, ?, ?)
                         """,
-                        (notebook_id, work_path, str(value.get("workTitle") or "")),
+                        (notebook_id, work_path, work_title),
                     )
-                self._touch_notebook(cursor, notebook_id)
+                updated_at = self._touch_notebook(cursor, notebook_id)
                 self._connection.commit()
             except Exception:
                 self._connection.rollback()
                 raise
-        return self.get_notebook(notebook_id)
+        result = self.get_notebook(notebook_id)
+        result.update(self._mutation_result(notebook_id, updated_at))
+        return result
 
     def delete_notebook(self, notebook_id: str, value: dict[str, Any]) -> dict[str, Any]:
         with self._lock:
@@ -396,11 +559,9 @@ class StudyLab:
     def add_cell(self, notebook_id: str, value: dict[str, Any]) -> dict[str, Any]:
         kind = _validate_kind(value.get("kind"))
         source = _validate_source(value.get("source"))
-        # Appending is non-destructive, so it intentionally skips the
-        # compare-and-swap check: two windows may both append and both
-        # succeed. Only destructive operations require a fresh revision.
         with self._lock:
             self._require_notebook_row(notebook_id)
+            self._check_revision(notebook_id, value.get("baseUpdatedAt"))
             count = int(
                 self._connection.execute(
                     "SELECT COUNT(*) AS n FROM cells WHERE notebook_id = ?",
@@ -423,12 +584,17 @@ class StudyLab:
                     """,
                     (cell_id, notebook_id, count, kind, source, now, now),
                 )
-                self._touch_notebook(cursor, notebook_id)
+                updated_at = self._touch_notebook(cursor, notebook_id)
                 self._connection.commit()
             except Exception:
                 self._connection.rollback()
                 raise
-        return {"ok": True, "cell": self._cell_payload(self._require_cell_row(cell_id)), "notebookUpdatedAt": self._last_touch}
+            cell = self._cell_payload(self._require_cell_row(cell_id))
+        return self._mutation_result(
+            notebook_id,
+            updated_at,
+            cell=cell,
+        )
 
     def update_cell(self, value: dict[str, Any]) -> dict[str, Any]:
         source = _validate_source(value.get("source"))
@@ -442,12 +608,17 @@ class StudyLab:
                     "UPDATE cells SET source = ?, updated_at = ? WHERE id = ?",
                     (source, now, row["id"]),
                 )
-                self._touch_notebook(cursor, row["notebook_id"])
+                updated_at = self._touch_notebook(cursor, row["notebook_id"])
                 self._connection.commit()
             except Exception:
                 self._connection.rollback()
                 raise
-        return {"ok": True, "cell": self._cell_payload(self._require_cell_row(row["id"])), "notebookUpdatedAt": self._last_touch}
+            cell = self._cell_payload(self._require_cell_row(row["id"]))
+        return self._mutation_result(
+            row["notebook_id"],
+            updated_at,
+            cell=cell,
+        )
 
     def move_cell(self, value: dict[str, Any]) -> dict[str, Any]:
         direction = str(value.get("direction") or "")
@@ -494,16 +665,17 @@ class StudyLab:
                     "UPDATE cells SET position = ?, updated_at = ? WHERE id = ?",
                     (neighbor["position"], now, row["id"]),
                 )
-                self._touch_notebook(cursor, row["notebook_id"])
+                updated_at = self._touch_notebook(cursor, row["notebook_id"])
                 self._connection.commit()
             except Exception:
                 self._connection.rollback()
                 raise
-        return {
-            "ok": True,
-            "cell": self._cell_payload(self._require_cell_row(row["id"])),
-            "notebookUpdatedAt": self._last_touch,
-        }
+            cell = self._cell_payload(self._require_cell_row(row["id"]))
+        return self._mutation_result(
+            row["notebook_id"],
+            updated_at,
+            cell=cell,
+        )
 
     def delete_cell(self, value: dict[str, Any]) -> dict[str, Any]:
         with self._lock:
@@ -519,9 +691,13 @@ class StudyLab:
                     """,
                     (row["notebook_id"], row["position"]),
                 )
-                self._touch_notebook(cursor, row["notebook_id"])
+                updated_at = self._touch_notebook(cursor, row["notebook_id"])
                 self._connection.commit()
             except Exception:
                 self._connection.rollback()
                 raise
-        return {"ok": True, "deleted": row["id"], "notebookUpdatedAt": self._last_touch}
+        return self._mutation_result(
+            row["notebook_id"],
+            updated_at,
+            deleted=row["id"],
+        )

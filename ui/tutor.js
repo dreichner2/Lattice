@@ -288,7 +288,12 @@
     });
     actions.append(insert);
     if (message.citations?.length) {
-      actions.append(element("span", "tutor-artifact-cited", `${message.citations.length} citation(s) will attach`));
+      const label = message.citations.length === 1 ? "citation" : "citations";
+      actions.append(element(
+        "span",
+        "tutor-artifact-cited",
+        `Grounded by ${message.citations.length} Tutor ${label}`,
+      ));
     }
     wrap.append(actions);
     return wrap;

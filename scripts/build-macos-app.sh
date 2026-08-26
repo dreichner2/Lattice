@@ -10,6 +10,7 @@ ui_root="$library_root/ui"
 server_source="$library_root/scripts/library_ui.py"
 vault_source="$library_root/scripts/library_vault.py"
 tutor_source="$library_root/scripts/lattice_tutor.py"
+study_source="$library_root/scripts/study_lab.py"
 tutor_vendor_root="$library_root/scripts/vendor"
 storage_source="$library_root/scripts/move_library.py"
 build_root=$(/usr/bin/mktemp -d "${TMPDIR:-/tmp}/cs-library-app.XXXXXX")
@@ -53,6 +54,7 @@ for resource in \
   "$server_source" \
   "$vault_source" \
   "$tutor_source" \
+  "$study_source" \
   "$tutor_vendor_root/README.md" \
   "$tutor_vendor_root/pypdf-LICENSE" \
   "$tutor_vendor_root/pypdf/__init__.py" \
@@ -62,6 +64,14 @@ for resource in \
   "$ui_root/tutor.js" \
   "$ui_root/styles.css" \
   "$ui_root/tutor-styles.css" \
+  "$ui_root/study-lab.html" \
+  "$ui_root/study-lab.css" \
+  "$ui_root/study-lab.js" \
+  "$ui_root/vendor/katex/LICENSE" \
+  "$ui_root/vendor/katex/README-LATTICE.md" \
+  "$ui_root/vendor/katex/katex.min.css" \
+  "$ui_root/vendor/katex/katex.min.js" \
+  "$ui_root/vendor/katex/fonts/KaTeX_Main-Regular.woff2" \
   "$ui_root/pdf-reader.html" \
   "$ui_root/pdf-reader.css" \
   "$ui_root/pdf-reader.js" \
@@ -83,6 +93,7 @@ done
 /bin/cp "$server_source" "$staged_app/Contents/Resources/server/library_ui.py"
 /bin/cp "$vault_source" "$staged_app/Contents/Resources/server/library_vault.py"
 /bin/cp "$tutor_source" "$staged_app/Contents/Resources/server/lattice_tutor.py"
+/bin/cp "$study_source" "$staged_app/Contents/Resources/server/study_lab.py"
 /bin/cp -R "$tutor_vendor_root" "$staged_app/Contents/Resources/server/vendor"
 /usr/bin/find "$staged_app/Contents/Resources/server/vendor" -type f -name '*.pyc' -delete
 /usr/bin/find "$staged_app/Contents/Resources/server/vendor" -type d -name '__pycache__' -empty -delete
@@ -145,6 +156,14 @@ for bundled in \
   "$staged_app/Contents/Resources/ui/app.js" \
   "$staged_app/Contents/Resources/ui/tutor.js" \
   "$staged_app/Contents/Resources/ui/tutor-styles.css" \
+  "$staged_app/Contents/Resources/ui/study-lab.html" \
+  "$staged_app/Contents/Resources/ui/study-lab.css" \
+  "$staged_app/Contents/Resources/ui/study-lab.js" \
+  "$staged_app/Contents/Resources/ui/vendor/katex/LICENSE" \
+  "$staged_app/Contents/Resources/ui/vendor/katex/README-LATTICE.md" \
+  "$staged_app/Contents/Resources/ui/vendor/katex/katex.min.css" \
+  "$staged_app/Contents/Resources/ui/vendor/katex/katex.min.js" \
+  "$staged_app/Contents/Resources/ui/vendor/katex/fonts/KaTeX_Main-Regular.woff2" \
   "$staged_app/Contents/Resources/ui/pdf-reader.html" \
   "$staged_app/Contents/Resources/ui/pdf-reader.js" \
   "$staged_app/Contents/Resources/ui/pdf-reader-lifecycle.mjs" \
@@ -152,6 +171,7 @@ for bundled in \
   "$staged_app/Contents/Resources/server/library_ui.py" \
   "$staged_app/Contents/Resources/server/library_vault.py" \
   "$staged_app/Contents/Resources/server/lattice_tutor.py" \
+  "$staged_app/Contents/Resources/server/study_lab.py" \
   "$staged_app/Contents/Resources/server/vendor/pypdf/__init__.py" \
   "$staged_app/Contents/Resources/server/vendor/pypdf-LICENSE" \
   "$staged_app/Contents/Resources/server/move_library.py" \

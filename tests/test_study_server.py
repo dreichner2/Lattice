@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import json
+import re
 import sys
 import tempfile
 import threading
@@ -30,6 +31,16 @@ class StudyServerTests(unittest.TestCase):
             (ROOT / "library-taxonomy.json").read_bytes()
         )
         (cls.library_root / "CATALOG.md").write_text("# Lattice\n", encoding="utf-8")
+        (cls.library_root / "books" / "signals.pdf").write_bytes(b"test-pdf")
+        (cls.library_root / "metadata" / "signals.json").write_text(
+            json.dumps(
+                {
+                    "path": "books/signals.pdf",
+                    "title": "Signals and Systems",
+                }
+            ),
+            encoding="utf-8",
+        )
         environment = dict(__import__("os").environ)
         environment["LATTICE_STUDY_ROOT"] = str(base / "study")
         cls._patcher = mock.patch.dict(
@@ -68,7 +79,8 @@ class StudyServerTests(unittest.TestCase):
             with urllib.request.urlopen(self.url(route), timeout=5) as response:
                 return response.status, json.loads(response.read())
         except urllib.error.HTTPError as caught:
-            return caught.code, json.loads(caught.read())
+            with caught:
+                return caught.code, json.loads(caught.read())
 
     def post(self, route: str, body: dict) -> tuple[int, dict]:
         request = urllib.request.Request(
@@ -84,7 +96,8 @@ class StudyServerTests(unittest.TestCase):
             with urllib.request.urlopen(request, timeout=10) as response:
                 return response.status, json.loads(response.read())
         except urllib.error.HTTPError as caught:
-            return caught.code, json.loads(caught.read())
+            with caught:
+                return caught.code, json.loads(caught.read())
 
     # ------------------------------------------------------------------ tests
 
@@ -103,9 +116,14 @@ class StudyServerTests(unittest.TestCase):
     def test_full_notebook_lifecycle_over_http(self) -> None:
         status, created = self.post(
             "/api/study/notebooks",
-            {"title": "Fourier notes", "workPath": "books/signals.pdf", "workTitle": "Signals"},
+            {
+                "title": "Fourier notes",
+                "workPath": "books/signals.pdf",
+                "workTitle": "Untrusted client title",
+            },
         )
         self.assertEqual(status, 201)
+        self.assertEqual(created["notebook"]["workTitle"], "Signals and Systems")
         notebook_id = created["notebook"]["id"]
 
         status, notebook = self.get(f"/api/study/notebook/{notebook_id}")
@@ -115,7 +133,11 @@ class StudyServerTests(unittest.TestCase):
 
         status, added = self.post(
             f"/api/study/notebook/{notebook_id}/cells",
-            {"kind": "latex", "source": "$\\nabla \\cdot E = \\rho$"},
+            {
+                "kind": "latex",
+                "source": "$\\nabla \\cdot E = \\rho$",
+                "baseUpdatedAt": token,
+            },
         )
         self.assertEqual(status, 200)
         cell_id = added["cell"]["id"]
@@ -167,9 +189,39 @@ class StudyServerTests(unittest.TestCase):
         notebook_id = created["notebook"]["id"]
         status, body = self.post(
             f"/api/study/notebook/{notebook_id}/cells",
-            {"kind": "text", "source": "prose"},
+            {
+                "kind": "text",
+                "source": "prose",
+                "baseUpdatedAt": created["notebook"]["updatedAt"],
+            },
         )
         self.assertEqual(status, 400)
+
+    def test_link_requires_revision_and_exact_catalog_path(self) -> None:
+        status, created = self.post("/api/study/notebooks", {"title": "Links"})
+        self.assertEqual(status, 201)
+        notebook = created["notebook"]
+        route = f"/api/study/notebook/{notebook['id']}/link"
+
+        status, _body = self.post(route, {"workPath": "books/signals.pdf"})
+        self.assertEqual(status, 409)
+        status, _body = self.post(
+            route,
+            {
+                "workPath": "books/missing.pdf",
+                "baseUpdatedAt": notebook["updatedAt"],
+            },
+        )
+        self.assertEqual(status, 400)
+        status, linked = self.post(
+            route,
+            {
+                "workPath": "books/signals.pdf",
+                "baseUpdatedAt": notebook["updatedAt"],
+            },
+        )
+        self.assertEqual(status, 200)
+        self.assertEqual(linked["notebook"]["workTitle"], "Signals and Systems")
 
     def test_study_lab_assets_are_served(self) -> None:
         for route, marker in (
@@ -184,6 +236,18 @@ class StudyServerTests(unittest.TestCase):
                 body = response.read()
             self.assertIn(marker, body, route)
 
+        katex_css = (ROOT / "ui" / "vendor" / "katex" / "katex.min.css").read_text(
+            encoding="utf-8"
+        )
+        font_paths = sorted(set(re.findall(r"url\((fonts/[^)]+)\)", katex_css)))
+        self.assertGreater(len(font_paths), 10)
+        for relative in font_paths:
+            with urllib.request.urlopen(
+                self.url(f"/vendor/katex/{relative}"), timeout=5
+            ) as response:
+                self.assertEqual(response.status, 200, relative)
+                self.assertGreater(int(response.headers["Content-Length"]), 0, relative)
+
     def test_katex_vendor_rejects_traversal(self) -> None:
         status, _body = self.get("/vendor/katex/..%2F..%2F..%2Flibrary%2FCATALOG.md")
         self.assertEqual(status, 404)
@@ -197,7 +261,10 @@ class StudyServerTests(unittest.TestCase):
         )
         with self.assertRaises(urllib.error.HTTPError) as caught:
             urllib.request.urlopen(request, timeout=5)
-        self.assertEqual(caught.exception.code, 403)
+        try:
+            self.assertEqual(caught.exception.code, 403)
+        finally:
+            caught.exception.close()
 
 
 if __name__ == "__main__":

@@ -199,8 +199,8 @@ Use **Move reading library** from the Windows library menu or
 drive or a folder on it; Lattice creates a `Lattice` folder there.
 
 This moves the selected library checkout, not the installed application. The
-executable, updater, WebView profile, private reader database, Tutor cache, and
-language runtimes remain on the computer's internal storage. The lightweight
+executable, updater, WebView profile, private reader database, Tutor cache,
+Study Lab database, and language runtimes remain on the computer's internal storage. The lightweight
 catalog/scaffold travels with the publications because it supplies stable paths,
 library identity, import rules, and the existing Syncthing folder boundary.
 

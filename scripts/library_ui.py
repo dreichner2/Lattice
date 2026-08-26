@@ -2584,6 +2584,9 @@ class LibraryHTTPServer(ThreadingHTTPServer):
         )
         self.lecture_catalog = load_lecture_catalog(self.root)
         self.allowed_paths = frozenset(file["path"] for file in self.library["materials"])
+        self.materials_by_path = {
+            file["path"]: file for file in self.library["materials"]
+        }
         self.vault_eligible_paths = frozenset(
             file["path"]
             for file in self.library["materials"]
@@ -3432,8 +3435,36 @@ class LibraryHTTPServer(ThreadingHTTPServer):
     def study_notebooks(self) -> dict[str, Any]:
         return self._require_study().list_notebooks()
 
+    def _study_value_with_catalog_link(self, value: dict[str, Any]) -> dict[str, Any]:
+        result = dict(value)
+        work_path = str(value.get("workPath") or "").strip()
+        if not work_path:
+            result["workPath"] = ""
+            result["workTitle"] = ""
+            return result
+        normalized = PurePosixPath(work_path)
+        if (
+            normalized.is_absolute()
+            or not normalized.parts
+            or any(part in {"", ".", ".."} for part in normalized.parts)
+            or normalized.as_posix() != work_path
+        ):
+            raise study_lab.StudyError("Linked work path is invalid")
+        material = self.materials_by_path.get(work_path)
+        if material is None:
+            raise study_lab.StudyError(
+                "Linked work must be an exact path from the current library catalog"
+            )
+        result["workPath"] = work_path
+        result["workTitle"] = str(
+            material.get("title") or _display_title(work_path)
+        )[: study_lab.MAX_WORK_TITLE_CHARS]
+        return result
+
     def study_create_notebook(self, value: dict[str, Any]) -> dict[str, Any]:
-        return self._require_study().create_notebook(value)
+        return self._require_study().create_notebook(
+            self._study_value_with_catalog_link(value)
+        )
 
     def study_get_notebook(self, notebook_id: str) -> dict[str, Any]:
         return self._require_study().get_notebook(notebook_id)
@@ -3445,7 +3476,10 @@ class LibraryHTTPServer(ThreadingHTTPServer):
         return self._require_study().delete_notebook(notebook_id, value)
 
     def study_set_link(self, notebook_id: str, value: dict[str, Any]) -> dict[str, Any]:
-        return self._require_study().set_link(notebook_id, value)
+        return self._require_study().set_link(
+            notebook_id,
+            self._study_value_with_catalog_link(value),
+        )
 
     def study_add_cell(self, notebook_id: str, value: dict[str, Any]) -> dict[str, Any]:
         return self._require_study().add_cell(notebook_id, value)
@@ -3507,6 +3541,7 @@ class LibraryHTTPServer(ThreadingHTTPServer):
                 self.taxonomy = refreshed_taxonomy
                 self.lecture_catalog = refreshed_lectures
                 self.allowed_paths = frozenset(current)
+                self.materials_by_path = current
                 self.vault_eligible_paths = frozenset(
                     path
                     for path, file in current.items()
@@ -3528,6 +3563,9 @@ class LibraryHTTPServer(ThreadingHTTPServer):
         tutor = getattr(self, "tutor", None)
         if tutor is not None:
             tutor.close()
+        study = getattr(self, "study", None)
+        if study is not None:
+            study.close()
         with self._job_lock:
             self._ai_worker_stop.set()
         self._fallback_queued_enrichment_on_shutdown()
@@ -3685,6 +3723,12 @@ class LibraryRequestHandler(BaseHTTPRequestHandler):
         if request_path == "/api/study/notebooks":
             try:
                 payload = self.server.study_notebooks()
+            except (OSError, sqlite3.Error):
+                self._send_json(
+                    HTTPStatus.INTERNAL_SERVER_ERROR,
+                    {"error": "Study Lab storage is temporarily unavailable"},
+                )
+                return
             except ValueError as exc:
                 self._send_json(HTTPStatus.SERVICE_UNAVAILABLE, {"error": str(exc)})
                 return
@@ -3696,6 +3740,12 @@ class LibraryRequestHandler(BaseHTTPRequestHandler):
             )
             try:
                 payload = self.server.study_get_notebook(notebook_id)
+            except (OSError, sqlite3.Error):
+                self._send_json(
+                    HTTPStatus.INTERNAL_SERVER_ERROR,
+                    {"error": "Study Lab storage is temporarily unavailable"},
+                )
+                return
             except ValueError as exc:
                 status = (
                     HTTPStatus.NOT_FOUND
@@ -4145,6 +4195,12 @@ class LibraryRequestHandler(BaseHTTPRequestHandler):
             except study_lab.StudyError as exc:
                 self._send_json(HTTPStatus.BAD_REQUEST, {"error": str(exc)})
                 return
+            except (OSError, sqlite3.Error):
+                self._send_json(
+                    HTTPStatus.INTERNAL_SERVER_ERROR,
+                    {"error": "Study Lab storage is temporarily unavailable"},
+                )
+                return
             except ValueError as exc:
                 self._send_json(HTTPStatus.SERVICE_UNAVAILABLE, {"error": str(exc)})
                 return
@@ -4183,6 +4239,12 @@ class LibraryRequestHandler(BaseHTTPRequestHandler):
                 )
                 self._send_json(status, {"error": str(exc)})
                 return
+            except (OSError, sqlite3.Error):
+                self._send_json(
+                    HTTPStatus.INTERNAL_SERVER_ERROR,
+                    {"error": "Study Lab storage is temporarily unavailable"},
+                )
+                return
             except ValueError as exc:
                 self._send_json(HTTPStatus.SERVICE_UNAVAILABLE, {"error": str(exc)})
                 return
@@ -4209,6 +4271,12 @@ class LibraryRequestHandler(BaseHTTPRequestHandler):
                     else HTTPStatus.BAD_REQUEST
                 )
                 self._send_json(status, {"error": str(exc)})
+                return
+            except (OSError, sqlite3.Error):
+                self._send_json(
+                    HTTPStatus.INTERNAL_SERVER_ERROR,
+                    {"error": "Study Lab storage is temporarily unavailable"},
+                )
                 return
             except ValueError as exc:
                 self._send_json(HTTPStatus.SERVICE_UNAVAILABLE, {"error": str(exc)})

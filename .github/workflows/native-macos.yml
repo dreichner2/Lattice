@@ -20,7 +20,7 @@ jobs:
 
       - name: Validate Python service
         run: |
-          python3 -m py_compile scripts/library_ui.py scripts/library_vault.py
+          python3 -m py_compile scripts/library_ui.py scripts/library_vault.py scripts/lattice_tutor.py scripts/study_lab.py
           python3 -m unittest discover -s tests -p 'test_*.py' -v
 
       - name: Validate reader JavaScript
@@ -28,6 +28,8 @@ jobs:
           node --check native/ImmersiveEPUB.js
           node --check native/LibraryWorkspace.js
           node --check ui/app.js
+          node --check ui/tutor.js
+          node --check ui/study-lab.js
           node --check ui/pdf-reader.js
           node --test tests/*.mjs
 
@@ -71,12 +73,17 @@ jobs:
           test -f "Lattice.app/Contents/Resources/ui/app.js"
           test -f "Lattice.app/Contents/Resources/ui/tutor.js"
           test -f "Lattice.app/Contents/Resources/ui/tutor-styles.css"
+          test -f "Lattice.app/Contents/Resources/ui/study-lab.html"
+          test -f "Lattice.app/Contents/Resources/ui/study-lab.js"
+          test -f "Lattice.app/Contents/Resources/ui/vendor/katex/katex.min.js"
+          test -f "Lattice.app/Contents/Resources/ui/vendor/katex/fonts/KaTeX_Main-Regular.woff2"
           test -f "Lattice.app/Contents/Resources/ui/pdf-reader.html"
           test -f "Lattice.app/Contents/Resources/ui/pdf-reader-lifecycle.mjs"
           test -f "Lattice.app/Contents/Resources/ui/vendor/pdfjs/build/pdf.min.mjs"
           test -f "Lattice.app/Contents/Resources/server/library_ui.py"
           test -f "Lattice.app/Contents/Resources/server/library_vault.py"
           test -f "Lattice.app/Contents/Resources/server/lattice_tutor.py"
+          test -f "Lattice.app/Contents/Resources/server/study_lab.py"
           test -f "Lattice.app/Contents/Resources/server/vendor/pypdf/__init__.py"
           test -f "Lattice.app/Contents/Resources/server/move_library.py"
           test -f "Lattice.app/Contents/Resources/ImmersiveEPUB.js"

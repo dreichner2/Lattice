@@ -14,7 +14,8 @@
 - Study Lab: classic Jupyter-style notebooks with explicit `latex` and
   `python` cells (no prose cells and no automatic segmentation). Notebooks live
   in a per-device SQLite database outside the synchronized library folder,
-  can be linked to catalog works, and render LaTeX through a vendored KaTeX.
+  can be linked to catalog works, and render LaTeX through vendored KaTeX
+  0.18.4.
   New token-guarded endpoints live under `/api/study/*`; protocol version is 4.
 
 ### Changed
@@ -62,6 +63,11 @@
 - Vault payloads and every existing parent component must be regular,
   non-linked filesystem objects. Symbolic links and Windows reparse points are
   rejected before checkout, release, restore, ignore, or deletion state changes.
+- Study Lab uses a private hashed per-library namespace, rejects linked or
+  in-library database locations, validates work links against the live catalog,
+  and requires a fresh compare-and-swap revision for every existing-notebook
+  mutation. Serialized browser saves prevent debounced edits from racing later
+  notebook actions.
 
 ## 2.3.2 — 2026-08-23
 

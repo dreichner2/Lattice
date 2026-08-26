@@ -31,6 +31,8 @@
                aria-label="Notebook title" placeholder="Untitled notebook" maxlength="200">
         <span class="study-work-link" id="workLink"></span>
         <span class="study-conflict" id="conflictFlag" hidden>Changed elsewhere — reload to continue</span>
+        <button class="button button-small study-delete-notebook" id="deleteNotebookButton"
+                type="button">Delete notebook</button>
       </div>
       <div id="cellStack" class="cell-stack"></div>
       <div class="cell-adder">
@@ -53,8 +55,10 @@
   <dialog id="linkDialog" class="study-dialog">
     <form method="dialog">
       <h3>Link a library work</h3>
-      <p class="study-dialog-hint">Paste the catalog path of the book or paper this notebook belongs to.</p>
-      <input id="linkPathInput" type="text" placeholder="books/example.pdf" spellcheck="false">
+      <p class="study-dialog-hint">Choose the exact catalog path of the library work this notebook belongs to. Leave it blank to unlink.</p>
+      <input id="linkPathInput" type="text" list="linkPathOptions"
+             placeholder="books/example.pdf" spellcheck="false" maxlength="1024">
+      <datalist id="linkPathOptions"></datalist>
       <menu>
         <button value="cancel" type="submit">Cancel</button>
         <button id="linkSaveButton" value="confirm" class="button button-primary button-small" type="submit">Save link</button>
@@ -63,6 +67,6 @@
   </dialog>
 
   <script src="/vendor/katex/katex.min.js" defer></script>
-  <script src="/study-lab.js?v=1" defer></script>
+  <script src="/study-lab.js?v=2" defer></script>
 </body>
 </html>

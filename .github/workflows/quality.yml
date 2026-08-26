@@ -58,7 +58,7 @@ jobs:
 
       - name: Compile Python sources
         run: |
-          python -m py_compile scripts/library_ui.py scripts/library_vault.py scripts/cross_platform_server.py scripts/validate_library_layout.py windows/server_bootstrap.py
+          python -m py_compile scripts/library_ui.py scripts/library_vault.py scripts/lattice_tutor.py scripts/study_lab.py scripts/cross_platform_server.py scripts/move_library.py scripts/validate_library_layout.py windows/server_bootstrap.py
 
       - name: Validate clone and Syncthing layout
         run: |
@@ -71,6 +71,8 @@ jobs:
       - name: Run reader tests
         run: |
           node --check ui/app.js
+          node --check ui/tutor.js
+          node --check ui/study-lab.js
           node --check ui/pdf-reader.js
           node --check native/ImmersiveEPUB.js
           node --check native/LibraryWorkspace.js

@@ -10,6 +10,10 @@
     cells: [],
     revision: "",
     saving: new Map(),
+    saveQueue: Promise.resolve(),
+    saveError: null,
+    pendingMutations: 0,
+    catalogMaterials: [],
   };
 
   const elements = {};
@@ -29,6 +33,8 @@
       "linkDialog",
       "linkPathInput",
       "linkSaveButton",
+      "linkPathOptions",
+      "deleteNotebookButton",
     ]) {
       elements[id] = document.getElementById(id);
     }
@@ -53,6 +59,30 @@
       clearTimeout(announce.timer);
       announce.timer = setTimeout(() => { sub.textContent = "LaTeX & Python notes linked to your library"; }, 2400);
     }
+  }
+
+  function handleStudyError(error, blockSaves = false) {
+    if (blockSaves) state.saveError = error;
+    if (/another window|fresh notebook revision/i.test(error.message)) {
+      elements.conflictFlag.hidden = false;
+    }
+    announce(error.message, true);
+  }
+
+  function enqueueMutation(operation) {
+    state.pendingMutations += 1;
+    const pending = state.saveQueue.then(operation);
+    state.saveQueue = pending
+      .catch(() => undefined)
+      .finally(() => { state.pendingMutations -= 1; });
+    return pending;
+  }
+
+  function setEditorDisabled(disabled) {
+    if (!elements.editorLayout) return;
+    elements.editorLayout
+      .querySelectorAll("button, input, textarea")
+      .forEach((control) => { control.disabled = disabled; });
   }
 
   // ------------------------------------------------------------------ katex
@@ -87,7 +117,7 @@
     container.innerHTML = "";
     const note = document.createElement("p");
     note.style.cssText = "color:var(--faint);font-size:10px;margin:0 0 8px;";
-    note.textContent = "Python execution arrives with the runtime update.";
+    note.textContent = "Python cells are inert in this release; execution is unavailable.";
     const code = document.createElement("code");
     code.textContent = source || "(empty python cell)";
     container.append(note, code);
@@ -107,7 +137,7 @@
         const count = document.createElement("small");
         count.textContent = String(notebook.cellCount);
         item.append(name, count);
-        item.addEventListener("click", () => openNotebook(notebook.id));
+        item.addEventListener("click", () => void openNotebook(notebook.id));
         return item;
       }),
     );
@@ -138,7 +168,7 @@
     up.textContent = "↑";
     up.disabled = cell.position === 0;
     up.setAttribute("aria-label", "Move cell up");
-    up.addEventListener("click", () => moveCell(cell.id, "up"));
+    up.addEventListener("click", () => void moveCell(cell.id, "up"));
 
     const down = document.createElement("button");
     down.type = "button";
@@ -146,13 +176,13 @@
     down.textContent = "↓";
     down.disabled = cell.position === state.cells.length - 1;
     down.setAttribute("aria-label", "Move cell down");
-    down.addEventListener("click", () => moveCell(cell.id, "down"));
+    down.addEventListener("click", () => void moveCell(cell.id, "down"));
 
     const remove = document.createElement("button");
     remove.type = "button";
     remove.className = "cell-action";
     remove.textContent = "Delete";
-    remove.addEventListener("click", () => deleteCell(cell.id));
+    remove.addEventListener("click", () => void deleteCell(cell.id));
 
     actions.append(toggle, up, down, remove);
     bar.append(actions);
@@ -204,10 +234,13 @@
   }
 
   async function openNotebook(notebookId) {
+    setEditorDisabled(true);
     try {
+      await flushPendingSaves();
       const payload = await api(`/api/study/notebook/${encodeURIComponent(notebookId)}`);
       state.currentId = notebookId;
       state.revision = payload.notebook.updatedAt;
+      state.saveError = null;
       state.cells = payload.cells.map((cell) => ({ ...cell, mode: "preview" }));
       elements.notebookTitle.value = payload.notebook.title;
       elements.conflictFlag.hidden = true;
@@ -217,7 +250,9 @@
       renderWorkLink();
       renderCells();
     } catch (error) {
-      announce(error.message, true);
+      handleStudyError(error);
+    } finally {
+      setEditorDisabled(false);
     }
   }
 
@@ -234,26 +269,34 @@
     try {
       const title = window.prompt("Notebook title", "Untitled notebook");
       if (!title) return;
-      const created = await api("/api/study/notebooks", {
+      await flushPendingSaves();
+      const created = await enqueueMutation(() => api("/api/study/notebooks", {
         method: "POST",
         mutate: true,
         body: JSON.stringify({ title }),
-      });
+      }));
       await refreshList();
       await openNotebook(created.notebook.id);
     } catch (error) {
-      announce(error.message, true);
+      handleStudyError(error);
     }
   }
 
   function scheduleSave(cell) {
-    clearTimeout(state.saving.get(cell.id));
-    const timer = setTimeout(() => void saveCell(cell), 650);
-    state.saving.set(cell.id, timer);
+    const prior = state.saving.get(cell.id);
+    if (prior) clearTimeout(prior.timer);
+    const timer = setTimeout(() => {
+      state.saving.delete(cell.id);
+      void persistCell(cell).catch((error) => handleStudyError(error, true));
+    }, 650);
+    state.saving.set(cell.id, { timer, cell });
   }
 
-  async function saveCell(cell) {
-    try {
+  function persistCell(cell) {
+    return enqueueMutation(async () => {
+      if (cell.notebookId !== state.currentId) {
+        throw new Error("Notebook changed before the pending cell save completed");
+      }
       const result = await api("/api/study/cell/update", {
         method: "POST",
         mutate: true,
@@ -266,19 +309,32 @@
       state.revision = result.notebookUpdatedAt;
       cell.updatedAt = result.cell.updatedAt;
       announce("Saved");
-    } catch (error) {
-      if (/another window/i.test(error.message)) elements.conflictFlag.hidden = false;
-      announce(error.message, true);
+      return result;
+    });
+  }
+
+  async function flushPendingSaves() {
+    if (state.saveError) throw state.saveError;
+    while (state.saving.size) {
+      const pending = [...state.saving.values()];
+      state.saving.clear();
+      for (const entry of pending) {
+        clearTimeout(entry.timer);
+        await persistCell(entry.cell);
+      }
     }
+    await state.saveQueue;
+    if (state.saveError) throw state.saveError;
   }
 
   async function moveCell(cellId, direction) {
     try {
-      const result = await api("/api/study/cell/move", {
+      await flushPendingSaves();
+      const result = await enqueueMutation(() => api("/api/study/cell/move", {
         method: "POST",
         mutate: true,
         body: JSON.stringify({ cellId, direction, baseUpdatedAt: state.revision }),
-      });
+      }));
       state.revision = result.notebookUpdatedAt;
       const index = state.cells.findIndex((cell) => cell.id === cellId);
       const target = direction === "up" ? index - 1 : index + 1;
@@ -289,60 +345,67 @@
         renderCells();
       }
     } catch (error) {
-      announce(error.message, true);
+      handleStudyError(error);
     }
   }
 
   async function deleteCell(cellId) {
     try {
-      const result = await api("/api/study/cell/delete", {
+      await flushPendingSaves();
+      const result = await enqueueMutation(() => api("/api/study/cell/delete", {
         method: "POST",
         mutate: true,
         body: JSON.stringify({ cellId, baseUpdatedAt: state.revision }),
-      });
+      }));
       state.revision = result.notebookUpdatedAt;
       state.cells = state.cells.filter((cell) => cell.id !== cellId);
       state.cells.forEach((cell, position) => { cell.position = position; });
       renderCells();
     } catch (error) {
-      announce(error.message, true);
+      handleStudyError(error);
     }
   }
 
   async function addCell(kind) {
     if (!state.currentId) return;
     try {
-      const result = await api(`/api/study/notebook/${encodeURIComponent(state.currentId)}/cells`, {
+      await flushPendingSaves();
+      const result = await enqueueMutation(() => api(`/api/study/notebook/${encodeURIComponent(state.currentId)}/cells`, {
         method: "POST",
         mutate: true,
-        body: JSON.stringify({ kind, source: "" }),
-      });
+        body: JSON.stringify({
+          kind,
+          source: "",
+          baseUpdatedAt: state.revision,
+        }),
+      }));
       state.revision = result.notebookUpdatedAt;
       state.cells.push({ ...result.cell, mode: "edit" });
       renderCells();
       const editors = elements.cellStack.querySelectorAll("textarea");
       if (editors.length) editors[editors.length - 1].focus();
     } catch (error) {
-      announce(error.message, true);
+      handleStudyError(error);
     }
   }
 
   async function saveTitle() {
     if (!state.currentId) return;
     try {
-      const result = await api(`/api/study/notebook/${encodeURIComponent(state.currentId)}`, {
+      await flushPendingSaves();
+      const result = await enqueueMutation(() => api(`/api/study/notebook/${encodeURIComponent(state.currentId)}`, {
         method: "POST",
         mutate: true,
         body: JSON.stringify({
           title: elements.notebookTitle.value.trim() || "Untitled notebook",
           baseUpdatedAt: state.revision,
         }),
-      });
+      }));
       state.revision = result.notebookUpdatedAt;
       await refreshListPreservingSelection();
       announce("Renamed");
     } catch (error) {
-      announce(error.message, true);
+      handleStudyError(error);
     }
   }
 
@@ -355,11 +418,53 @@
     renderNotebookList();
   }
 
+  async function deleteNotebook() {
+    if (!state.currentId) return;
+    const notebook = state.notebooks.find((item) => item.id === state.currentId);
+    if (!window.confirm(`Delete "${notebook?.title || "this notebook"}" and all of its cells?`)) {
+      return;
+    }
+    try {
+      await flushPendingSaves();
+      await enqueueMutation(() => api(
+        `/api/study/notebook/${encodeURIComponent(state.currentId)}/delete`,
+        {
+          method: "POST",
+          mutate: true,
+          body: JSON.stringify({ baseUpdatedAt: state.revision }),
+        },
+      ));
+      state.currentId = "";
+      state.revision = "";
+      state.cells = [];
+      await refreshList();
+      if (!state.notebooks.length) {
+        elements.editorLayout.hidden = true;
+        elements.emptyLayout.hidden = false;
+      }
+      announce("Notebook deleted");
+    } catch (error) {
+      handleStudyError(error);
+    }
+  }
+
+  function renderLinkOptions() {
+    elements.linkPathOptions.replaceChildren(
+      ...state.catalogMaterials.map((material) => {
+        const option = document.createElement("option");
+        option.value = material.path;
+        option.label = material.title || material.path;
+        return option;
+      }),
+    );
+  }
+
   // ------------------------------------------------------------------ init
 
   function wireEvents() {
     elements.newNotebookButton.addEventListener("click", () => void createNotebook());
     elements.emptyNewButton.addEventListener("click", () => void createNotebook());
+    elements.deleteNotebookButton.addEventListener("click", () => void deleteNotebook());
     elements.notebookTitle.addEventListener("change", () => void saveTitle());
     document.querySelectorAll("[data-add-kind]").forEach((button) => {
       button.addEventListener("click", () => void addCell(button.dataset.addKind));
@@ -372,18 +477,22 @@
       if (elements.linkDialog.returnValue !== "confirm" || !state.currentId) return;
       void (async () => {
         try {
+          await flushPendingSaves();
           const workPath = elements.linkPathInput.value.trim();
-          const result = await api(`/api/study/notebook/${encodeURIComponent(state.currentId)}/link`, {
+          const result = await enqueueMutation(() => api(`/api/study/notebook/${encodeURIComponent(state.currentId)}/link`, {
             method: "POST",
             mutate: true,
-            body: JSON.stringify({ workPath }),
-          });
+            body: JSON.stringify({ workPath, baseUpdatedAt: state.revision }),
+          }));
           state.revision = result.notebookUpdatedAt;
           const notebook = state.notebooks.find((item) => item.id === state.currentId);
-          if (notebook) notebook.workPath = workPath;
+          if (notebook) {
+            notebook.workPath = result.notebook.workPath;
+            notebook.workTitle = result.notebook.workTitle;
+          }
           renderWorkLink();
         } catch (error) {
-          announce(error.message, true);
+          handleStudyError(error);
         }
       })();
     });
@@ -395,6 +504,10 @@
     try {
       const library = await api("/api/library");
       state.token = library.actionToken;
+      state.catalogMaterials = Array.isArray(library.materials)
+        ? library.materials.filter((material) => typeof material.path === "string")
+        : [];
+      renderLinkOptions();
       await refreshList();
     } catch (error) {
       announce(error.message, true);
@@ -406,4 +519,10 @@
   } else {
     void init();
   }
+
+  window.addEventListener("beforeunload", (event) => {
+    if (!state.saving.size && !state.pendingMutations) return;
+    event.preventDefault();
+    event.returnValue = "";
+  });
 })();

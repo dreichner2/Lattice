@@ -3282,7 +3282,11 @@ async function insertTutorArtifact(artifact) {
     {
       method: "POST",
       headers: { "Content-Type": "application/json", "X-Library-Token": token },
-      body: JSON.stringify({ kind: artifact.kind, source: artifact.source }),
+      body: JSON.stringify({
+        kind: artifact.kind,
+        source: artifact.source,
+        baseUpdatedAt: notebook.updatedAt,
+      }),
     },
   );
   if (!insertResponse.ok) {

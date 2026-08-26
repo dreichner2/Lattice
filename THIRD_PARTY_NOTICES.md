@@ -40,3 +40,12 @@ SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 Lattice's web PDF reader includes PDF.js under the Apache License 2.0. Its
 complete license and bundled-data notices are retained under
 `ui/vendor/pdfjs/`.
+
+## KaTeX 0.18.4
+
+Project: <https://www.npmjs.com/package/katex/v/0.18.4>
+
+Copyright (c) 2013-2020 Khan Academy and other contributors
+
+KaTeX is included under the MIT License. The complete license and Lattice's
+archive digest and provenance record are retained under `ui/vendor/katex/`.

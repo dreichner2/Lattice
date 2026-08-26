@@ -130,6 +130,11 @@
   font-weight: 720;
 }
 
+.study-delete-notebook {
+  border-color: color-mix(in srgb, var(--danger, #e5484d) 35%, transparent);
+  color: var(--danger, #e5484d);
+}
+
 .cell-stack { display: grid; gap: 14px; }
 
 .cell {

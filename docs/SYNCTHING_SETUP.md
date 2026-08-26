@@ -105,8 +105,8 @@ pause state when its API remains reachable. If restoration cannot be confirmed,
 both copies are retained and the error identifies the path that needs checking.
 
 The installed Lattice app never moves with this command. The executable,
-updater, WebView profile, private reader data, Tutor cache, and bundled runtimes
-stay on internal storage. The lightweight Git checkout travels with the reading
+updater, WebView profile, private reader data, Tutor cache, Study Lab database,
+and bundled runtimes stay on internal storage. The lightweight Git checkout travels with the reading
 payloads because it supplies the catalog, stable relative paths, import rules,
 and the root-level Syncthing allowlist.
 

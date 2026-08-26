@@ -23,6 +23,14 @@ $RequiredUiFiles = @(
   "tutor.js",
   "styles.css",
   "tutor-styles.css",
+  "study-lab.html",
+  "study-lab.css",
+  "study-lab.js",
+  "vendor/katex/LICENSE",
+  "vendor/katex/README-LATTICE.md",
+  "vendor/katex/katex.min.css",
+  "vendor/katex/katex.min.js",
+  "vendor/katex/fonts/KaTeX_Main-Regular.woff2",
   "video-styles.css",
   "videos.js",
   "pdf-reader.html",
@@ -80,7 +88,7 @@ try {
 
   if (-not $SkipTests) {
     Write-Host "Running portable checks..."
-    python -m py_compile scripts/library_ui.py scripts/library_vault.py scripts/lattice_tutor.py scripts/cross_platform_server.py scripts/move_library.py windows/server_bootstrap.py windows/generate_icon.py
+    python -m py_compile scripts/library_ui.py scripts/library_vault.py scripts/lattice_tutor.py scripts/study_lab.py scripts/cross_platform_server.py scripts/move_library.py windows/server_bootstrap.py windows/generate_icon.py
     Assert-NativeSuccess "Python compilation"
     python -m unittest discover -s tests -p "test_*.py" -v
     Assert-NativeSuccess "Python tests"
@@ -92,6 +100,8 @@ try {
     Assert-NativeSuccess "ui/videos.js syntax check"
     node --check ui/tutor.js
     Assert-NativeSuccess "ui/tutor.js syntax check"
+    node --check ui/study-lab.js
+    Assert-NativeSuccess "ui/study-lab.js syntax check"
     node --check native/ImmersiveEPUB.js
     Assert-NativeSuccess "native/ImmersiveEPUB.js syntax check"
     node --check native/LibraryWorkspace.js
@@ -124,6 +134,7 @@ try {
     --paths (Join-Path $RepoRoot "scripts") `
     --paths (Join-Path $RepoRoot "scripts\vendor") `
     --hidden-import pypdf `
+    --hidden-import study_lab `
     --distpath $ServerRoot `
     --workpath (Join-Path $BuildRoot "pyinstaller-work") `
     --specpath (Join-Path $BuildRoot "pyinstaller-spec") `
