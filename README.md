@@ -51,7 +51,7 @@ location is saved, so the app does not have to remain beside the repository.
 Python 3 is currently required to run the loopback library service.
 
 The three-dot button sits inline with the library header controls, shows the installed version, and
-provides **Check for Updates…** and **Move Library to External Storage…**. The
+provides **Check for Updates…** and **Move Reading Library to External Storage…**. The
 update check verifies Lattice's RSA-signed release manifest before trusting the
 version or `Lattice-macOS.zip`. When the app is installed at
 `/Applications/Lattice.app`, **Install Update** downloads the exact signed size
@@ -194,9 +194,15 @@ macOS, and Syncthing paths.
 
 ### Move the library to an external drive
 
-Use **Move library to another drive…** from the Windows library menu or
-**File → Move Library to External Storage…** on macOS. Select the external
+Use **Move reading library** from the Windows library menu or
+**File → Move Reading Library to External Storage…** on macOS. Select the external
 drive or a folder on it; Lattice creates a `Lattice` folder there.
+
+This moves the selected library checkout, not the installed application. The
+executable, updater, WebView profile, private reader database, Tutor cache, and
+language runtimes remain on the computer's internal storage. The lightweight
+catalog/scaffold travels with the publications because it supplies stable paths,
+library identity, import rules, and the existing Syncthing folder boundary.
 
 Move Library requires the synchronized folder to be **Up to Date**. It pauses
 the established Syncthing folder, copies the complete checkout (including the

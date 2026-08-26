@@ -1984,8 +1984,10 @@ public partial class MainWindow : Window
 
         var consent = MessageBox.Show(
             this,
-            $"Move the complete Lattice library to:\n\n{destination}\n\n"
-            + "Lattice will require Syncthing to be Up to Date, pause it, copy and verify every file, "
+            $"Move the Lattice reading library to:\n\n{destination}\n\n"
+            + "The installed app, updater, and private reader data stay on this PC. Lattice will move "
+            + "the selected library checkout, including its publications and adjacent metadata. It will "
+            + "require Syncthing to be Up to Date, pause it, copy and verify every file, "
             + "redirect the same Syncthing folder ID, and only then remove the old copy. Keep the drive "
             + "connected until Lattice reopens.\n\nContinue?",
             "Move Library",

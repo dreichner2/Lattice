@@ -79,13 +79,19 @@ Do not add `books/`, `papers/`, or `lectures/` as separate Syncthing folders.
 The repository root is the one shared folder, and the checked-in `.stignore`
 keeps the public Git source separate from private payloads and sidecars.
 
-## Move the library to another drive
+## Move the reading library to another drive
 
 Wait until Syncthing reports **Up to Date**, open Lattice's library-options
-menu, and choose **Move library to another drive…**. Select the external drive
+menu, and choose **Move reading library**. Select the external drive
 or a folder on it. Lattice pauses the current folder, copies the whole library
 to a new `Lattice` directory, verifies each file, redirects both Lattice and the
 same Syncthing folder ID, resumes and scans it, then removes the original copy.
+
+The installed app does not move. Its executable, updater, WebView profile,
+private reader database, Tutor cache, and bundled runtimes stay under local
+AppData. The external copy contains the selected library checkout: publications,
+adjacent sidecars, and the lightweight catalog/scaffold that defines stable
+paths and the Syncthing boundary.
 
 Keep the drive connected until the library reopens. If any copy, hash, API, or
 post-scan check fails, Lattice preserves the original and restores Syncthing's

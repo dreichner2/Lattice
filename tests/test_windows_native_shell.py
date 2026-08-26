@@ -172,6 +172,11 @@ class WindowsNativeShellTests(unittest.TestCase):
     def test_move_library_is_native_verified_and_syncthing_aware(self) -> None:
         self.assertIn("MoveLibrary_Click", self.window_code)
         self.assertIn("LibraryMoveClient.MoveAsync", self.window_code)
+        self.assertIn(
+            "The installed app, updater, and private reader data stay on this PC",
+            self.window_code,
+        )
+        self.assertIn("including its publications and adjacent metadata", self.window_code)
         self.assertIn("copy and verify every file", self.window_code)
         self.assertIn("redirect the same Syncthing folder ID", self.window_code)
         self.assertIn("_libraryMoveInProgress", self.window_code)
