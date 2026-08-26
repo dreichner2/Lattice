@@ -218,6 +218,54 @@ class TutorManagerTests(unittest.TestCase):
         self.assertEqual(result["citations"][0]["path"], "books/algorithms.txt")
         self.assertEqual(run.call_args.kwargs["allowed_paths"], [self.source.resolve()])
         self.assertEqual(run.call_args.kwargs["denied_paths"], [])
+        self.assertIsNone(result["artifact"])
+
+    def test_chat_passes_through_validated_artifact(self) -> None:
+        response = {
+            "answer": "Here is the Cauchy-Schwarz inequality. [1]",
+            "citations": [
+                {"source": "books/algorithms.txt", "locator": "document"},
+            ],
+            "artifact": {
+                "kind": "latex",
+                "source": "\begin{equation}\langle x,y\rangle^2\end{equation}",
+                "label": "Cauchy-Schwarz",
+            },
+        }
+        with mock.patch.object(self.manager, "_run_codex", return_value=response):
+            result = self.manager.chat(
+                {
+                    "sessionId": "0123456789abcdefghij",
+                    "message": "Derive Cauchy-Schwarz.",
+                    "model": "gpt-5.6-terra",
+                    "effort": "high",
+                    "scope": "selected",
+                    "workIds": ["eligible-work"],
+                    "courseIds": [],
+                },
+                self.library,
+                self.catalog,
+            )
+        self.assertEqual(result["artifact"]["kind"], "latex")
+        self.assertIn("Cauchy", result["artifact"]["label"])
+
+    def test_artifact_validation_strips_fences_and_rejects_bad_kinds(self) -> None:
+        fenced = {
+            "kind": "python",
+            "source": "```python\nimport numpy as np\nprint(np.pi)\n```",
+        }
+        cleaned = self.manager._validate_artifact(fenced)
+        self.assertEqual(cleaned["source"], "import numpy as np\nprint(np.pi)")
+
+        for broken in (
+            {"kind": "text", "source": "prose"},
+            {"kind": "latex", "source": ""},
+            {"kind": "latex"},
+            "not-a-dict",
+            None,
+            {"kind": "latex", "source": "x" * (lattice_tutor.MAX_ARTIFACT_CHARS + 1)},
+        ):
+            self.assertIsNone(self.manager._validate_artifact(broken))
 
     def test_video_scope_is_metadata_only(self) -> None:
         scope = self.manager._resolve_scope(
