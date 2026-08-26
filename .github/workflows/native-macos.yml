@@ -67,6 +67,19 @@ jobs:
             -o /tmp/mac-update-installer-smoke
           /tmp/mac-update-installer-smoke
 
+      - name: Validate on-device PDF text recognition
+        run: |
+          swiftc -O \
+            -framework AppKit \
+            -framework CryptoKit \
+            -framework PDFKit \
+            -framework Vision \
+            native/LibraryIdentity.swift \
+            native/PDFOCRService.swift \
+            tests/PDFOCRSmoke.swift \
+            -o /tmp/pdf-ocr-smoke
+          /tmp/pdf-ocr-smoke
+
       - name: Build and verify Lattice.app
         run: |
           ./scripts/build-macos-app.sh

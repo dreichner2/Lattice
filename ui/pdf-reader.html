@@ -140,7 +140,13 @@
           </div>
 
           <footer class="reader-statusbar">
-            <span><i class="status-dot"></i><span id="statusText">Local reader</span></span>
+            <span class="reader-status-message">
+              <i class="status-dot"></i><span id="statusText">Local reader</span>
+              <button id="ocrButton" class="ocr-button" type="button"
+                      title="Recognize this scanned page locally so its text can be selected" hidden>
+                Make text selectable
+              </button>
+            </span>
             <span id="documentStats">Waiting for document</span>
             <span class="shortcut-hint"><kbd>F11</kbd> Fullscreen <kbd>Ctrl</kbd><b>+</b><kbd>F</kbd> Search</span>
           </footer>

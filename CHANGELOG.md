@@ -1,5 +1,31 @@
 # Changelog
 
+## 2.4.1 — 2026-08-26
+
+### Added
+
+- Image-only PDF pages in the macOS app are recognized locally with Apple
+  Vision and receive a selectable Chinese/English text overlay. Recognition is
+  automatic for the current scanned page, cached for the session, and never
+  modifies or uploads the source PDF.
+
+### Fixed
+
+- Left and Right Arrow once again turn PDF and EPUB pages in the packaged macOS
+  app even when WebKit restores the library without its presentation query.
+- The macOS app now provides the standard responder-chain Edit menu, restoring
+  Command-C, Command-V, Cut, Undo, Redo, and Select All inside reader and Study
+  fields. Control-C/V/A/X aliases are also accepted for Windows-style muscle
+  memory.
+- Scanned PDFs now clearly distinguish a missing embedded text layer from a
+  reader selection failure instead of leaving the page apparently inert.
+
+### Security
+
+- OCR requests are accepted only from the owned main-frame origin, require a
+  validated PDF path beneath the selected library, resolve symlinks before
+  access, and remain on-device.
+
 ## 2.4.0 — 2026-08-25
 
 ### Added

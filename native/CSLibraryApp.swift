@@ -23,6 +23,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, WKNavigationDelegate, 
     private var immersiveReader: ImmersiveReaderCoordinator!
     private var readerStore: ReaderStore!
     private var readerBridge: ReaderBridge!
+    private var pdfOCRService: PDFOCRService!
     private var currentServerURL: URL?
     private var privateAccessToken = ""
     private var pendingOpenURLs: [URL] = []
@@ -48,6 +49,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, WKNavigationDelegate, 
 
         do {
             readerStore = try ReaderStore()
+            pdfOCRService = PDFOCRService(libraryRoot: libraryRoot)
         } catch {
             showFatalError(title: "The reading database could not start", message: error.localizedDescription)
             return
@@ -163,7 +165,8 @@ final class AppDelegate: NSObject, NSApplicationDelegate, WKNavigationDelegate, 
                     "app.checkForUpdates",
                     "app.moveLibrary",
                     "app.disconnectLibrary",
-                    "app.reconnectLibrary"
+                    "app.reconnectLibrary",
+                    "pdf.ocrPage"
                 ]
             ]
         }
@@ -178,6 +181,10 @@ final class AppDelegate: NSObject, NSApplicationDelegate, WKNavigationDelegate, 
                 default: break
                 }
             }
+        }
+        bridge.pdfOCRProvider = { [weak self] path, page, completion in
+            guard let self else { return }
+            self.pdfOCRService.recognize(relativePath: path, pageNumber: page, completion: completion)
         }
         readerBridge = bridge
         configuration.userContentController.addScriptMessageHandler(bridge, contentWorld: .page, name: ReaderBridge.handlerName)
@@ -233,8 +240,22 @@ final class AppDelegate: NSObject, NSApplicationDelegate, WKNavigationDelegate, 
     private func installReaderKeyMonitor() {
         readerKeyMonitor = NSEvent.addLocalMonitorForEvents(matching: .keyDown) { [weak self] event in
             guard let self, self.window?.isKeyWindow == true else { return event }
+            let modifiers = event.modifierFlags.intersection([.command, .control, .option, .shift])
+            if modifiers == [.control], let key = event.charactersIgnoringModifiers?.lowercased() {
+                let action: Selector?
+                switch key {
+                case "a": action = #selector(NSResponder.selectAll(_:))
+                case "c": action = #selector(NSText.copy(_:))
+                case "v": action = #selector(NSText.paste(_:))
+                case "x": action = #selector(NSText.cut(_:))
+                default: action = nil
+                }
+                if let action, NSApp.sendAction(action, to: nil, from: self) { return nil }
+            }
+
             if self.immersiveReader?.isPDFOpen == true { return self.immersiveReader.handleKeyEvent(event) }
-            guard event.modifierFlags.intersection([.command, .control, .option, .shift]).isEmpty else { return event }
+
+            guard modifiers.isEmpty else { return event }
             switch event.keyCode {
             case 123:
                 self.webView?.evaluateJavaScript("window.csLibraryHandleNativeArrow?.(-1)")
@@ -1538,6 +1559,18 @@ final class AppDelegate: NSObject, NSApplicationDelegate, WKNavigationDelegate, 
         fileItem.submenu = fileMenu
         mainMenu.addItem(fileItem)
 
+        let editItem = NSMenuItem()
+        let editMenu = NSMenu(title: "Edit")
+        addResponderMenuItem(editMenu, "Undo", #selector(UndoManager.undo), "z")
+        addResponderMenuItem(editMenu, "Redo", #selector(UndoManager.redo), "z", [.command, .shift])
+        editMenu.addItem(.separator())
+        addResponderMenuItem(editMenu, "Cut", #selector(NSText.cut(_:)), "x")
+        addResponderMenuItem(editMenu, "Copy", #selector(NSText.copy(_:)), "c")
+        addResponderMenuItem(editMenu, "Paste", #selector(NSText.paste(_:)), "v")
+        addResponderMenuItem(editMenu, "Select All", #selector(NSResponder.selectAll(_:)), "a")
+        editItem.submenu = editMenu
+        mainMenu.addItem(editItem)
+
         let readerItem = NSMenuItem()
         let readerMenu = NSMenu(title: "Reader")
         addMenuItem(readerMenu, "Previous Page", #selector(readerPrevious(_:)), "[", [.command])
@@ -1577,6 +1610,18 @@ final class AppDelegate: NSObject, NSApplicationDelegate, WKNavigationDelegate, 
         let item = menu.addItem(withTitle: title, action: action, keyEquivalent: key)
         item.target = self
         item.keyEquivalentModifierMask = key.isEmpty ? [] : modifiers
+    }
+
+    private func addResponderMenuItem(
+        _ menu: NSMenu,
+        _ title: String,
+        _ action: Selector,
+        _ key: String,
+        _ modifiers: NSEvent.ModifierFlags = [.command]
+    ) {
+        let item = menu.addItem(withTitle: title, action: action, keyEquivalent: key)
+        item.target = nil
+        item.keyEquivalentModifierMask = modifiers
     }
 
     private func showFatalError(title: String, message: String) {

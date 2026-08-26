@@ -69,6 +69,8 @@ PDFs open in the same Lattice-owned reader on macOS and Windows, with:
 - direct page entry, lazy thumbnails, and document outlines;
 - fit-page, fit-width, zoom, and rotation controls;
 - whole-document search with result navigation;
+- automatic on-device OCR on macOS makes Chinese and English text selectable
+  on image-only scanned pages without changing the source PDF;
 - distraction-free focus mode and true fullscreen;
 - restored page, layout, zoom, and rotation; and
 - exact-page bookmarks plus a responsive Reading Desk for notes and Study Lab;
@@ -302,7 +304,7 @@ cd "$HOME\Lattice"
 & ".\windows\setup\Install Lattice and Connect.cmd"
 ```
 
-The setup downloads and installs the pinned Lattice `v2.4.0` release for the
+The setup downloads and installs the pinned Lattice `v2.4.1` release for the
 current user, installs official Syncthing `2.1.3` through WinGet when needed,
 selects this clone as the library, configures the Mac mini hub and shared folder
 on the Windows side, starts both apps, and copies the Windows Syncthing Device ID.

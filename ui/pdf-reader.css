@@ -600,9 +600,45 @@ html[data-theme="dark"] .viewer-host {
 }
 
 #viewerContainer .pdfViewer .page {
+  position: relative;
   overflow: visible;
   border-radius: 3px;
   box-shadow: 0 9px 29px rgba(25, 28, 37, 0.17), 0 2px 5px rgba(25, 28, 37, 0.08);
+}
+
+.ocrTextLayer {
+  position: absolute;
+  z-index: 2;
+  inset: 0;
+  overflow: hidden;
+  cursor: text;
+  pointer-events: auto;
+  user-select: text;
+  -webkit-user-select: text;
+}
+
+.ocrTextLayer span {
+  position: absolute;
+  display: block;
+  margin: 0;
+  padding: 0;
+  color: transparent;
+  cursor: text;
+  font-family: sans-serif;
+  font-weight: 400;
+  letter-spacing: 0;
+  text-shadow: none;
+  transform-origin: 0 0;
+  white-space: pre;
+  user-select: text;
+  -webkit-text-fill-color: transparent;
+  -webkit-user-select: text;
+}
+
+.ocrTextLayer span::selection {
+  background: color-mix(in srgb, var(--accent) 38%, transparent);
+  color: transparent;
+  -webkit-text-fill-color: transparent;
 }
 
 html[data-theme="dark"] #viewerContainer .pdfViewer .page {
@@ -708,6 +744,38 @@ html[data-theme="dark"] #viewerContainer .pdfViewer .page {
 
 .reader-statusbar > span:last-child {
   justify-content: flex-end;
+}
+
+.reader-status-message {
+  min-width: 0;
+}
+
+.reader-status-message #statusText {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.ocr-button {
+  min-height: 19px;
+  flex: 0 0 auto;
+  padding: 0 7px;
+  border: 1px solid color-mix(in srgb, var(--accent) 28%, var(--line));
+  border-radius: 6px;
+  background: var(--accent-soft);
+  color: var(--accent-deep);
+  cursor: pointer;
+  font: inherit;
+  font-weight: 780;
+}
+
+.ocr-button:hover:not(:disabled) {
+  border-color: color-mix(in srgb, var(--accent) 48%, var(--line));
+}
+
+.ocr-button:disabled {
+  cursor: default;
+  opacity: 0.68;
 }
 
 .status-dot {

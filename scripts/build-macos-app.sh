@@ -120,11 +120,13 @@ target_arch=$(/usr/bin/uname -m)
   -framework CryptoKit \
   -framework PDFKit \
   -framework Security \
+  -framework Vision \
   -framework WebKit \
   -lsqlite3 \
   "$native_root/ReaderModels.swift" \
   "$native_root/LibraryIdentity.swift" \
   "$native_root/ReaderStore.swift" \
+  "$native_root/PDFOCRService.swift" \
   "$native_root/ReaderBridge.swift" \
   "$native_root/MacUpdateChecker.swift" \
   "$native_root/MacUpdateInstaller.swift" \

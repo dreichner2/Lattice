@@ -57,6 +57,7 @@ const elements = {
   loadingPercent: $("#loadingPercent"),
   loadingProgress: $("#loadingProgress"),
   nextPage: $("#nextPageButton"),
+  ocr: $("#ocrButton"),
   open: $("#openButton"),
   outlineTab: $("#outlineTab"),
   outlineView: $("#outlineView"),
@@ -108,6 +109,9 @@ let lastFindQuery = "";
 let closePending = false;
 let focusMode = false;
 let selectionTimer = 0;
+let ocrSequence = 0;
+const scannedPages = new Map();
+const ocrPages = new Map();
 
 document.documentElement.dataset.theme = requestedTheme;
 document.title = `${requestedTitle} — Lattice`;
@@ -356,6 +360,149 @@ function reportSelection() {
     page: normalizePage(pageElement.dataset.pageNumber, pdfDocument?.numPages || Number.MAX_SAFE_INTEGER),
     text,
   });
+}
+
+function normalizeOCRLine(value) {
+  if (!value || typeof value !== "object") return null;
+  const text = String(value.text || "").replace(/[\u0000-\u0008\u000b\u000c\u000e-\u001f\u007f]/g, "").trim().slice(0, 2000);
+  const x = Math.min(1, Math.max(0, Number(value.x)));
+  const y = Math.min(1, Math.max(0, Number(value.y)));
+  const width = Math.min(1 - x, Math.max(0, Number(value.width)));
+  const height = Math.min(1 - y, Math.max(0, Number(value.height)));
+  if (!text || !Number.isFinite(x + y + width + height) || width <= 0 || height <= 0) return null;
+  return { text, x, y, width, height };
+}
+
+function pageElement(pageNumber) {
+  return elements.viewer.querySelector(`.page[data-page-number="${normalizePage(pageNumber)}"]`);
+}
+
+function rotatedOCRBox(line) {
+  switch (normalizeRotation(pdfViewer.pagesRotation)) {
+  case 90:
+    return { ...line, x: line.y, y: 1 - line.x - line.width, width: line.height, height: line.width };
+  case 180:
+    return { ...line, x: 1 - line.x - line.width, y: 1 - line.y - line.height };
+  case 270:
+    return { ...line, x: 1 - line.y - line.height, y: line.x, width: line.height, height: line.width };
+  default:
+    return line;
+  }
+}
+
+function renderOCRLayer(pageNumber) {
+  const page = normalizePage(pageNumber, pdfDocument?.numPages || Number.MAX_SAFE_INTEGER);
+  const target = pageElement(page);
+  const record = ocrPages.get(page);
+  if (!target || record?.status !== "ready" || !record.lines.length) return;
+
+  target.querySelector(".ocrTextLayer")?.remove();
+  const layer = document.createElement("div");
+  layer.className = "ocrTextLayer";
+  layer.dataset.pageNumber = String(page);
+  layer.setAttribute("aria-label", `Recognized selectable text for page ${page}`);
+  const pageWidth = Math.max(1, target.clientWidth);
+  const pageHeight = Math.max(1, target.clientHeight);
+  target.append(layer);
+
+  for (const sourceLine of record.lines) {
+    const line = rotatedOCRBox(sourceLine);
+    const span = document.createElement("span");
+    const lineHeight = Math.max(5, line.height * pageHeight);
+    span.textContent = line.text;
+    span.style.left = `${line.x * 100}%`;
+    span.style.top = `${(1 - line.y - line.height) * 100}%`;
+    span.style.height = `${line.height * 100}%`;
+    span.style.fontSize = `${lineHeight}px`;
+    span.style.lineHeight = `${lineHeight}px`;
+    layer.append(span);
+    const naturalWidth = Math.max(1, span.getBoundingClientRect().width);
+    const scaleX = Math.min(5, Math.max(0.08, (line.width * pageWidth) / naturalWidth));
+    span.style.transform = `scaleX(${scaleX})`;
+  }
+}
+
+function rerenderOCRLayers() {
+  for (const [page, record] of ocrPages) {
+    if (record.status === "ready" && pageElement(page)) renderOCRLayer(page);
+  }
+}
+
+function updateOCRControls(pageNumber = pdfViewer.currentPageNumber || 1) {
+  const page = normalizePage(pageNumber, pdfDocument?.numPages || Number.MAX_SAFE_INTEGER);
+  const scanned = scannedPages.get(page) === true;
+  const record = ocrPages.get(page);
+  elements.ocr.hidden = !scanned || record?.status === "ready";
+  elements.ocr.disabled = record?.status === "pending";
+
+  if (!scanned) {
+    if (scannedPages.get(page) === false) elements.statusText.textContent = `Page ${page} ready`;
+    return;
+  }
+  if (record?.status === "pending") {
+    elements.ocr.textContent = "Recognizing…";
+    elements.statusText.textContent = `Recognizing scanned page ${page} locally…`;
+  } else if (record?.status === "ready") {
+    elements.statusText.textContent = `Scanned page ${page} · selectable text ready`;
+  } else if (record?.status === "error") {
+    elements.ocr.textContent = "Try recognition again";
+    elements.statusText.textContent = record.error || "This scanned page needs text recognition";
+  } else {
+    elements.ocr.textContent = "Make text selectable";
+    elements.statusText.textContent = `Scanned page ${page} · preparing selectable text`;
+  }
+}
+
+function requestPageOCR(pageNumber = pdfViewer.currentPageNumber || 1) {
+  const page = normalizePage(pageNumber, pdfDocument?.numPages || Number.MAX_SAFE_INTEGER);
+  if (scannedPages.get(page) !== true || ocrPages.get(page)?.status === "pending") return;
+  const requestId = `ocr-${Date.now()}-${ocrSequence += 1}`;
+  ocrPages.set(page, { status: "pending", requestId, lines: [] });
+  updateOCRControls(page);
+  postToShelf("ocr-request", { path: documentPath, page, requestId });
+}
+
+async function inspectPageText(pageNumber) {
+  const page = normalizePage(pageNumber, pdfDocument?.numPages || Number.MAX_SAFE_INTEGER);
+  if (!pdfDocument || scannedPages.has(page)) {
+    if (page === pdfViewer.currentPageNumber) {
+      updateOCRControls(page);
+      if (scannedPages.get(page) === true && !ocrPages.has(page)) requestPageOCR(page);
+    }
+    return;
+  }
+  try {
+    const pdfPage = await pdfDocument.getPage(page);
+    const content = await pdfPage.getTextContent();
+    const textLength = content.items.reduce((total, item) => total + String(item?.str || "").trim().length, 0);
+    const scanned = textLength < 12;
+    scannedPages.set(page, scanned);
+    if (page === pdfViewer.currentPageNumber) {
+      updateOCRControls(page);
+      if (scanned) requestPageOCR(page);
+    }
+  } catch {
+    // Failure to inspect the text layer must not interrupt page reading.
+  }
+}
+
+function receiveOCRResult(message) {
+  const page = normalizePage(message.page, pdfDocument?.numPages || Number.MAX_SAFE_INTEGER);
+  const pending = ocrPages.get(page);
+  if (!pending || pending.requestId !== message.requestId) return;
+  const lines = Array.isArray(message.lines) ? message.lines.map(normalizeOCRLine).filter(Boolean) : [];
+  if (message.error || !lines.length) {
+    ocrPages.set(page, {
+      status: "error",
+      requestId: pending.requestId,
+      lines: [],
+      error: cleanLabel(message.error || "No text was found on this scanned page", 240),
+    });
+  } else {
+    ocrPages.set(page, { status: "ready", requestId: pending.requestId, lines });
+    renderOCRLayer(page);
+  }
+  if (page === pdfViewer.currentPageNumber) updateOCRControls(page);
 }
 
 function nextPage() {
@@ -616,12 +763,14 @@ eventBus.on("pagesinit", () => {
   postToShelf("ready", {
     path: documentPath,
     pageCount: pdfDocument.numPages,
-    capabilities: ["range-loading", "search", "single-page", "two-page", "focus-mode", "fullscreen", "rotation", "bookmarks", "reader-desk", "audio", "navigate"],
+    capabilities: ["range-loading", "search", "single-page", "two-page", "focus-mode", "fullscreen", "rotation", "bookmarks", "reader-desk", "audio", "navigate", "on-device-ocr"],
   });
 });
 
 eventBus.on("pagerendered", (event) => {
   if (!firstPageRendered && event.pageNumber === pdfViewer.currentPageNumber) hideLoading();
+  if (ocrPages.get(event.pageNumber)?.status === "ready") renderOCRLayer(event.pageNumber);
+  void inspectPageText(event.pageNumber);
 });
 
 eventBus.on("pagechanging", (event) => {
@@ -631,14 +780,20 @@ eventBus.on("pagechanging", (event) => {
     page: normalizePage(event.pageNumber, pdfDocument?.numPages || Number.MAX_SAFE_INTEGER),
   });
   scheduleStateSave();
+  updateOCRControls(event.pageNumber);
+  void inspectPageText(event.pageNumber);
 });
 
 eventBus.on("scalechanging", (event) => {
   updateZoom(event.scale, event.presetValue);
   scheduleStateSave();
+  window.setTimeout(rerenderOCRLayers, 120);
 });
 
-eventBus.on("rotationchanging", () => scheduleStateSave());
+eventBus.on("rotationchanging", () => {
+  scheduleStateSave();
+  window.setTimeout(rerenderOCRLayers, 120);
+});
 eventBus.on("updateviewarea", () => scheduleStateSave());
 
 eventBus.on("updatefindmatchescount", (event) => {
@@ -671,6 +826,7 @@ elements.outlineTab.addEventListener("click", () => setSidebarTab("outline"));
 elements.thumbnailsTab.addEventListener("click", () => setSidebarTab("pages"));
 elements.previousPage.addEventListener("click", previousPage);
 elements.nextPage.addEventListener("click", nextPage);
+elements.ocr.addEventListener("click", () => requestPageOCR());
 elements.pageNumber.addEventListener("change", () => goToPage(elements.pageNumber.value));
 elements.pageNumber.addEventListener("keydown", (event) => {
   if (event.key !== "Enter") return;
@@ -796,6 +952,8 @@ window.addEventListener("message", (event) => {
     toggleFocusMode();
   } else if (message.type === "shortcut") {
     handlePageNavigationKey(message.key);
+  } else if (message.type === "ocr-result") {
+    receiveOCRResult(message);
   } else if (message.type === "prepare-close") {
     void requestShelfAction("close");
   }
