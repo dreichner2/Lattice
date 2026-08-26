@@ -11,6 +11,11 @@
   on the shelf. New endpoints `/api/vault`, `/api/vault/checkout`,
   `/api/vault/checkin`, and `/api/vault/restore` are token-guarded like other
   mutations.
+- Study Lab: classic Jupyter-style notebooks with explicit `latex` and
+  `python` cells (no prose cells and no automatic segmentation). Notebooks live
+  in a per-device SQLite database outside the synchronized library folder,
+  can be linked to catalog works, and render LaTeX through a vendored KaTeX.
+  New token-guarded endpoints live under `/api/study/*`; protocol version is 4.
 
 ### Changed
 

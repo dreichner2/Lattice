@@ -2,7 +2,7 @@ import CryptoKit
 import Foundation
 
 enum LibraryIdentity {
-    static let protocolVersion = 3
+    static let protocolVersion = 4
     private static let readableExtensions = Set(["pdf", "epub", "txt"])
     private static let readableRoots = Set(["books", "papers", "lectures"])
 

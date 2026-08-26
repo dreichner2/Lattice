@@ -43,6 +43,7 @@ from xml.etree import ElementTree
 import lattice_tutor
 import library_vault
 import move_library
+import study_lab
 
 
 REPO_ROOT = Path(__file__).resolve().parents[1]
@@ -98,7 +99,7 @@ AI_QUEUE_CAPACITY = 16
 IMPORT_JOB_HISTORY_LIMIT = 100
 IMPORT_TERMINAL_STATUSES = frozenset({"complete", "fallback", "failed", "manual"})
 WATCH_INTERVAL_SECONDS = 0.65
-PROTOCOL_VERSION = 3
+PROTOCOL_VERSION = 4
 SUBJECT_ID_PATTERN = re.compile(r"^[a-z0-9]+(?:-[a-z0-9]+)*$")
 MAX_ASSIGNED_SUBJECTS = 64
 MAX_SUBJECT_ID_BYTES = 96
@@ -2588,6 +2589,15 @@ class LibraryHTTPServer(ThreadingHTTPServer):
             for file in self.library["materials"]
             if file.get("vaultEligible") is True
         )
+        try:
+            self.study = study_lab.StudyLab(
+                self.root,
+                vault_library_identity(self.root),
+            )
+        except (OSError, sqlite3.Error, ValueError):
+            # A private-database failure must not keep the library from
+            # opening; Study Lab endpoints report unavailability instead.
+            self.study = None
         self._epub_cache: dict[
             str,
             tuple[tuple[int, int], dict[str, Any], dict[str, str]],
@@ -3402,7 +3412,52 @@ class LibraryHTTPServer(ThreadingHTTPServer):
                 "revision": self.revision,
                 "watching": not self._watcher_stop.is_set(),
                 "refreshError": self.last_refresh_error,
+                "studyLabAvailable": self.study is not None,
             }
+
+    # ------------------------------------------------------------- study lab
+
+    def _require_study(self) -> study_lab.StudyLab:
+        if self.study is None:
+            raise ValueError("Study Lab storage is unavailable")
+        return self.study
+
+    def study_status(self) -> dict[str, Any]:
+        try:
+            available = self._require_study() is not None
+        except ValueError:
+            available = False
+        return {"available": available, "cellKinds": list(study_lab.CELL_KINDS)}
+
+    def study_notebooks(self) -> dict[str, Any]:
+        return self._require_study().list_notebooks()
+
+    def study_create_notebook(self, value: dict[str, Any]) -> dict[str, Any]:
+        return self._require_study().create_notebook(value)
+
+    def study_get_notebook(self, notebook_id: str) -> dict[str, Any]:
+        return self._require_study().get_notebook(notebook_id)
+
+    def study_rename_notebook(self, notebook_id: str, value: dict[str, Any]) -> dict[str, Any]:
+        return self._require_study().rename_notebook(notebook_id, value)
+
+    def study_delete_notebook(self, notebook_id: str, value: dict[str, Any]) -> dict[str, Any]:
+        return self._require_study().delete_notebook(notebook_id, value)
+
+    def study_set_link(self, notebook_id: str, value: dict[str, Any]) -> dict[str, Any]:
+        return self._require_study().set_link(notebook_id, value)
+
+    def study_add_cell(self, notebook_id: str, value: dict[str, Any]) -> dict[str, Any]:
+        return self._require_study().add_cell(notebook_id, value)
+
+    def study_update_cell(self, value: dict[str, Any]) -> dict[str, Any]:
+        return self._require_study().update_cell(value)
+
+    def study_move_cell(self, value: dict[str, Any]) -> dict[str, Any]:
+        return self._require_study().move_cell(value)
+
+    def study_delete_cell(self, value: dict[str, Any]) -> dict[str, Any]:
+        return self._require_study().delete_cell(value)
 
     def _watch_parent(self) -> None:
         assert self.parent_pid is not None
@@ -3624,6 +3679,33 @@ class LibraryRequestHandler(BaseHTTPRequestHandler):
         if request_path == "/api/ai/status":
             self._send_json(HTTPStatus.OK, self.server.ai_status(), head_only=head_only)
             return
+        if request_path == "/api/study/status":
+            self._send_json(HTTPStatus.OK, self.server.study_status(), head_only=head_only)
+            return
+        if request_path == "/api/study/notebooks":
+            try:
+                payload = self.server.study_notebooks()
+            except ValueError as exc:
+                self._send_json(HTTPStatus.SERVICE_UNAVAILABLE, {"error": str(exc)})
+                return
+            self._send_json(HTTPStatus.OK, payload, head_only=head_only)
+            return
+        if request_path.startswith("/api/study/notebook/"):
+            notebook_id = urllib.parse.unquote(
+                request_path.removeprefix("/api/study/notebook/")
+            )
+            try:
+                payload = self.server.study_get_notebook(notebook_id)
+            except ValueError as exc:
+                status = (
+                    HTTPStatus.NOT_FOUND
+                    if "not found" in str(exc).casefold()
+                    else HTTPStatus.BAD_REQUEST
+                )
+                self._send_json(status, {"error": str(exc)})
+                return
+            self._send_json(HTTPStatus.OK, payload, head_only=head_only)
+            return
         if request_path == "/api/tutor/status":
             try:
                 status = self.server.tutor_status()
@@ -3684,6 +3766,12 @@ class LibraryRequestHandler(BaseHTTPRequestHandler):
                 head_only=head_only,
             )
             return
+        if request_path.startswith("/vendor/katex/"):
+            self._serve_katex_vendor(
+                request_path.removeprefix("/vendor/katex/"),
+                head_only=head_only,
+            )
+            return
         if request_path.startswith("/document/"):
             name = urllib.parse.unquote(request_path.removeprefix("/document/"))
             if name not in ALLOWED_DOCUMENTS:
@@ -3713,6 +3801,9 @@ class LibraryRequestHandler(BaseHTTPRequestHandler):
             "/styles.css": ("styles.css", "text/css; charset=utf-8", False),
             "/video-styles.css": ("video-styles.css", "text/css; charset=utf-8", False),
             "/tutor-styles.css": ("tutor-styles.css", "text/css; charset=utf-8", False),
+            "/study-lab.css": ("study-lab.css", "text/css; charset=utf-8", False),
+            "/study-lab.html": ("study-lab.html", "text/html; charset=utf-8", True),
+            "/study-lab.js": ("study-lab.js", "text/javascript; charset=utf-8", False),
             "/videos.js": ("videos.js", "text/javascript; charset=utf-8", False),
             "/tutor.js": ("tutor.js", "text/javascript; charset=utf-8", False),
             "/app.js": ("app.js", "text/javascript; charset=utf-8", False),
@@ -3772,6 +3863,45 @@ class LibraryRequestHandler(BaseHTTPRequestHandler):
             ".svg": "image/svg+xml",
             ".ttf": "font/ttf",
             ".wasm": "application/wasm",
+        }
+        self._send_bytes(
+            HTTPStatus.OK,
+            path.read_bytes(),
+            content_types.get(path.suffix.lower(), "text/plain; charset=utf-8"),
+            cache="private, max-age=31536000, immutable",
+            head_only=head_only,
+        )
+
+    def _serve_katex_vendor(self, encoded_path: str, *, head_only: bool) -> None:
+        try:
+            relative = urllib.parse.unquote(encoded_path)
+            if not relative or "\\" in relative or "\x00" in relative:
+                raise ValueError("KaTeX asset not found")
+            pure = PurePosixPath(relative)
+            if pure.is_absolute() or any(part in {"", ".", ".."} for part in pure.parts):
+                raise ValueError("KaTeX asset not found")
+            vendor_root = (self.server.ui_root / "vendor" / "katex").resolve()
+            path = vendor_root.joinpath(*pure.parts).resolve()
+            if vendor_root not in path.parents and path != vendor_root:
+                raise ValueError("KaTeX asset not found")
+            if not path.is_file() or path.suffix.lower() not in {
+                ".css",
+                ".js",
+                ".woff",
+                ".woff2",
+                ".ttf",
+            }:
+                raise ValueError("KaTeX asset not found")
+        except (OSError, ValueError):
+            self._send_json(HTTPStatus.NOT_FOUND, {"error": "KaTeX asset not found"})
+            return
+
+        content_types = {
+            ".css": "text/css; charset=utf-8",
+            ".js": "text/javascript; charset=utf-8",
+            ".ttf": "font/ttf",
+            ".woff": "font/woff",
+            ".woff2": "font/woff2",
         }
         self._send_bytes(
             HTTPStatus.OK,
@@ -4003,6 +4133,85 @@ class LibraryRequestHandler(BaseHTTPRequestHandler):
                     HTTPStatus.INTERNAL_SERVER_ERROR,
                     {"error": f"Vault storage error: {exc}"},
                 )
+                return
+            self._send_json(HTTPStatus.OK, result)
+            return
+        if request_path == "/api/study/notebooks":
+            if not self._mutation_access_allowed():
+                return
+            try:
+                body = self._read_json_request(16 * 1024)
+                result = self.server.study_create_notebook(body)
+            except study_lab.StudyError as exc:
+                self._send_json(HTTPStatus.BAD_REQUEST, {"error": str(exc)})
+                return
+            except ValueError as exc:
+                self._send_json(HTTPStatus.SERVICE_UNAVAILABLE, {"error": str(exc)})
+                return
+            self._send_json(HTTPStatus.CREATED, result)
+            return
+        if request_path.startswith("/api/study/notebook/"):
+            if not self._mutation_access_allowed():
+                return
+            remainder = urllib.parse.unquote(
+                request_path.removeprefix("/api/study/notebook/")
+            )
+            try:
+                body = self._read_json_request(256 * 1024)
+                if remainder.endswith("/cells"):
+                    result = self.server.study_add_cell(
+                        remainder[: -len("/cells")], body
+                    )
+                elif remainder.endswith("/delete"):
+                    result = self.server.study_delete_notebook(
+                        remainder[: -len("/delete")], body
+                    )
+                elif remainder.endswith("/link"):
+                    result = self.server.study_set_link(
+                        remainder[: -len("/link")], body
+                    )
+                else:
+                    result = self.server.study_rename_notebook(remainder, body)
+            except study_lab.StudyConflict as exc:
+                self._send_json(HTTPStatus.CONFLICT, {"error": str(exc)})
+                return
+            except study_lab.StudyError as exc:
+                status = (
+                    HTTPStatus.NOT_FOUND
+                    if "not found" in str(exc).casefold()
+                    else HTTPStatus.BAD_REQUEST
+                )
+                self._send_json(status, {"error": str(exc)})
+                return
+            except ValueError as exc:
+                self._send_json(HTTPStatus.SERVICE_UNAVAILABLE, {"error": str(exc)})
+                return
+            self._send_json(HTTPStatus.OK, result)
+            return
+        if request_path in {"/api/study/cell/update", "/api/study/cell/move", "/api/study/cell/delete"}:
+            if not self._mutation_access_allowed():
+                return
+            actions = {
+                "/api/study/cell/update": self.server.study_update_cell,
+                "/api/study/cell/move": self.server.study_move_cell,
+                "/api/study/cell/delete": self.server.study_delete_cell,
+            }
+            try:
+                body = self._read_json_request(256 * 1024)
+                result = actions[request_path](body)
+            except study_lab.StudyConflict as exc:
+                self._send_json(HTTPStatus.CONFLICT, {"error": str(exc)})
+                return
+            except study_lab.StudyError as exc:
+                status = (
+                    HTTPStatus.NOT_FOUND
+                    if "not found" in str(exc).casefold()
+                    else HTTPStatus.BAD_REQUEST
+                )
+                self._send_json(status, {"error": str(exc)})
+                return
+            except ValueError as exc:
+                self._send_json(HTTPStatus.SERVICE_UNAVAILABLE, {"error": str(exc)})
                 return
             self._send_json(HTTPStatus.OK, result)
             return

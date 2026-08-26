@@ -120,7 +120,7 @@ internal sealed class UpdateCandidateSession
                 || !document.RootElement.TryGetProperty("protocolVersion", out var protocol)
                 || protocol.ValueKind != JsonValueKind.Number
                 || !protocol.TryGetInt32(out var protocolVersion)
-                || protocolVersion != 3
+                || protocolVersion != 4
                 || !document.RootElement.TryGetProperty("status", out var status)
                 || status.ValueKind != JsonValueKind.String
                 || !string.Equals(status.GetString(), "ok", StringComparison.Ordinal)
