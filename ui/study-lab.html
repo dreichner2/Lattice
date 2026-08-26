@@ -1,0 +1,68 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <meta name="color-scheme" content="dark">
+  <title>Study Lab · Lattice</title>
+  <link rel="stylesheet" href="/styles.css">
+  <link rel="stylesheet" href="/vendor/katex/katex.min.css">
+  <link rel="stylesheet" href="/study-lab.css">
+</head>
+<body class="study-lab-body">
+  <header class="study-toolbar">
+    <a class="study-back" href="/">‹ Library</a>
+    <div class="study-title-wrap">
+      <h1 id="studyHeading">Study Lab</h1>
+      <p class="study-sub" id="studySub">LaTeX &amp; Python notes linked to your library</p>
+    </div>
+    <button class="button button-primary button-small" id="newNotebookButton" type="button">New notebook</button>
+  </header>
+
+  <main class="study-layout" hidden id="editorLayout">
+    <aside class="study-sidebar">
+      <p class="nav-label">Notebooks</p>
+      <nav id="notebookList" class="study-notebook-list" aria-label="Notebooks"></nav>
+    </aside>
+
+    <section class="study-editor" aria-label="Notebook editor">
+      <div class="study-notebook-head">
+        <input id="notebookTitle" class="study-notebook-title" type="text"
+               aria-label="Notebook title" placeholder="Untitled notebook" maxlength="200">
+        <span class="study-work-link" id="workLink"></span>
+        <span class="study-conflict" id="conflictFlag" hidden>Changed elsewhere — reload to continue</span>
+      </div>
+      <div id="cellStack" class="cell-stack"></div>
+      <div class="cell-adder">
+        <span class="cell-adder-label">Add cell</span>
+        <button class="button button-small" data-add-kind="latex" type="button">𝐿𝑎𝑇𝑒𝑋</button>
+        <button class="button button-small" data-add-kind="python" type="button">Python</button>
+      </div>
+    </section>
+  </main>
+
+  <main class="study-empty" id="emptyLayout">
+    <div class="empty-state">
+      <div class="empty-mark">✎</div>
+      <h3>No notebooks yet</h3>
+      <p>Create a notebook to keep LaTeX derivations and Python scratch work next to your books.</p>
+      <button class="button button-primary" id="emptyNewButton" type="button">Create your first notebook</button>
+    </div>
+  </main>
+
+  <dialog id="linkDialog" class="study-dialog">
+    <form method="dialog">
+      <h3>Link a library work</h3>
+      <p class="study-dialog-hint">Paste the catalog path of the book or paper this notebook belongs to.</p>
+      <input id="linkPathInput" type="text" placeholder="books/example.pdf" spellcheck="false">
+      <menu>
+        <button value="cancel" type="submit">Cancel</button>
+        <button id="linkSaveButton" value="confirm" class="button button-primary button-small" type="submit">Save link</button>
+      </menu>
+    </form>
+  </dialog>
+
+  <script src="/vendor/katex/katex.min.js" defer></script>
+  <script src="/study-lab.js?v=1" defer></script>
+</body>
+</html>

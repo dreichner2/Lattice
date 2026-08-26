@@ -1,5 +1,15 @@
 # Changelog
 
+## Unreleased
+
+### Added
+
+- Study Lab: classic Jupyter-style notebooks with explicit `latex` and
+  `python` cells (no prose cells, no automatic segmentation). Notebooks live
+  in a per-device SQLite database outside the synchronized library folder,
+  can be linked to catalog works, and render LaTeX through a vendored KaTeX.
+  New token-guarded endpoints under `/api/study/*`; protocol version is now 4.
+
 ## 2.3.2 — 2026-08-23
 
 ### Fixed

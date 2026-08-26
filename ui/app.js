@@ -3244,4 +3244,11 @@ async function start() {
   }
 }
 
+const studyLabButton = document.getElementById("studyLabButton");
+if (studyLabButton) {
+  studyLabButton.addEventListener("click", () => {
+    window.location.href = "/study-lab.html";
+  });
+}
+
 start();
