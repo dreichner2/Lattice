@@ -82,15 +82,18 @@
     }
   }
 
-  function renderPythonPreview(container, source) {
+  function renderPythonPreview(container, source, hasRun) {
     container.classList.add("cell-preview");
     container.innerHTML = "";
-    const note = document.createElement("p");
-    note.style.cssText = "color:var(--faint);font-size:10px;margin:0 0 8px;";
-    note.textContent = "Python execution arrives with the runtime update.";
     const code = document.createElement("code");
-    code.textContent = source || "(empty python cell)";
-    container.append(note, code);
+    code.textContent = source && source.trim() ? source : "(empty python cell)";
+    container.append(code);
+    const note = document.createElement("p");
+    note.className = "cell-run-note";
+    note.textContent = hasRun
+      ? "Ran — no output was produced"
+      : "Press Run ▶ to execute this cell in the Python kernel";
+    container.append(note);
   }
 
   // ------------------------------------------------------------- rendering
@@ -122,13 +125,14 @@
     bar.append(chip);
     const actions = document.createElement("div");
     actions.className = "cell-actions";
+    actions.dataset.cellId = cell.id;
 
     if (cell.kind === "python") {
       const runButton = document.createElement("button");
       runButton.type = "button";
       runButton.className = "cell-action cell-run";
-      runButton.textContent = cell.mode === "edit" ? "Run ▶" : "Run ▶";
-      runButton.addEventListener("click", () => void runCell(cell, runButton));
+      runButton.textContent = "Run ▶";
+      runButton.dataset.action = "run";
       actions.append(runButton);
     }
 
@@ -136,10 +140,8 @@
     toggle.type = "button";
     toggle.className = "cell-action";
     toggle.textContent = cell.mode === "edit" ? "Preview" : "Edit";
-    toggle.addEventListener("click", () => {
-      cell.mode = cell.mode === "edit" ? "preview" : "edit";
-      renderCells();
-    });
+    toggle.dataset.action = "toggle";
+    actions.append(toggle);
 
     const up = document.createElement("button");
     up.type = "button";
@@ -147,7 +149,8 @@
     up.textContent = "↑";
     up.disabled = cell.position === 0;
     up.setAttribute("aria-label", "Move cell up");
-    up.addEventListener("click", () => moveCell(cell.id, "up"));
+    up.dataset.action = "up";
+    actions.append(up);
 
     const down = document.createElement("button");
     down.type = "button";
@@ -155,15 +158,16 @@
     down.textContent = "↓";
     down.disabled = cell.position === state.cells.length - 1;
     down.setAttribute("aria-label", "Move cell down");
-    down.addEventListener("click", () => moveCell(cell.id, "down"));
+    down.dataset.action = "down";
+    actions.append(down);
 
     const remove = document.createElement("button");
     remove.type = "button";
     remove.className = "cell-action";
     remove.textContent = "Delete";
-    remove.addEventListener("click", () => deleteCell(cell.id));
+    remove.dataset.action = "delete";
+    actions.append(remove);
 
-    actions.append(toggle, up, down, remove);
     bar.append(actions);
     return bar;
   }
@@ -188,8 +192,10 @@
       renderLatex(body, cell.source);
     } else if (cell.outputs && cell.outputs.length) {
       renderOutputs(body, cell);
+    } else if (cell.hasRun) {
+      renderPythonPreview(body, "", true);
     } else {
-      renderPythonPreview(body, cell.source);
+      renderPythonPreview(body, cell.source, false);
     }
     return body;
   }
@@ -376,8 +382,19 @@
   }
 
   async function runCell(cell, button) {
-    if (!state.currentId || !cell.source.trim()) {
-      announce("Nothing to run in that cell", true);
+    // If the page lost its notebook context (reload, stale state), reopen
+    // the first notebook instead of failing silently.
+    if (!state.currentId && state.notebooks.length) {
+      await openNotebook(state.notebooks[0].id);
+      const reopened = state.cells.find((item) => item.id === cell.id);
+      if (reopened) cell = reopened;
+    }
+    if (!state.currentId) {
+      announce("Open a notebook before running a cell", true);
+      return;
+    }
+    if (!cell.source.trim()) {
+      announce("That cell is empty — add some Python first", true);
       return;
     }
     button.disabled = true;
@@ -394,11 +411,15 @@
         }),
       });
       cell.outputs = result.outputs;
+      cell.hasRun = true;
       cell.mode = "preview";
       renderCells();
       announce(result.ok ? "Ran without errors" : "Cell raised an error", !result.ok);
     } catch (error) {
       announce(error.message, true);
+      elements.conflictFlag.hidden = false;
+      elements.conflictFlag.textContent = error.message;
+      setTimeout(() => { elements.conflictFlag.hidden = true; }, 6000);
     } finally {
       if (button.isConnected) {
         button.disabled = false;
@@ -459,6 +480,26 @@
     elements.notebookTitle.addEventListener("change", () => void saveTitle());
     const restartButton = document.getElementById("restartKernelButton");
     if (restartButton) restartButton.addEventListener("click", () => void restartKernel());
+
+    // Delegated handling for every cell action: buttons survive full list
+    // re-renders, and a click can never be silently swallowed.
+    elements.cellStack.addEventListener("click", (event) => {
+      const button = event.target.closest("button[data-action]");
+      if (!button || button.disabled) return;
+      const actions = button.closest("[data-cell-id]");
+      const cellId = actions ? actions.dataset.cellId : "";
+      const cell = state.cells.find((item) => item.id === cellId);
+      if (!cell) return;
+      const action = button.dataset.action;
+      if (action === "run") void runCell(cell, button);
+      else if (action === "toggle") {
+        cell.mode = cell.mode === "edit" ? "preview" : "edit";
+        renderCells();
+      } else if (action === "up") void moveCell(cell.id, "up");
+      else if (action === "down") void moveCell(cell.id, "down");
+      else if (action === "delete") void deleteCell(cell.id);
+    });
+
     document.querySelectorAll("[data-add-kind]").forEach((button) => {
       button.addEventListener("click", () => void addCell(button.dataset.addKind));
     });
@@ -487,7 +528,12 @@
     });
   }
 
-  async function init() {
+  window.onerror = function (message, source, line) {
+    const sub = document.getElementById("studySub");
+    if (sub) sub.textContent = "JS ERROR: " + message + " @" + line;
+  };
+
+async function init() {
     cacheElements();
     wireEvents();
     try {

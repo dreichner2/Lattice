@@ -1,59 +1,65 @@
-/* Study Lab — classic explicit-cell notebooks (latex | python). */
+/* Study Lab — styled to sit natively inside Lattice's design system. */
 
 .study-lab-body {
   display: flex;
   min-height: 100vh;
   flex-direction: column;
-  background: var(--bg, #101319);
-  color: var(--ink, #eef0f4);
+  background: #0d1017;
+  color: var(--ink);
 }
 
 .study-toolbar {
   display: flex;
   align-items: center;
   gap: 18px;
-  padding: 14px 22px;
-  border-bottom: 1px solid var(--line, rgba(255, 255, 255, 0.09));
+  padding: 13px 24px;
+  border-bottom: 1px solid var(--line);
+  background: var(--panel-solid, #12151d);
 }
 
 .study-back {
-  color: var(--muted, #9aa1ad);
-  font-size: 12px;
+  flex: 0 0 auto;
+  color: var(--muted);
+  font-size: 11.5px;
   font-weight: 680;
   text-decoration: none;
+  padding: 5px 10px;
+  border-radius: 8px;
 }
 
-.study-back:hover { color: var(--accent, #7d88e9); }
+.study-back:hover { background: var(--panel-muted); color: var(--accent-ink); }
 
-.study-title-wrap { flex: 1 1 auto; }
+.study-title-wrap { flex: 1 1 auto; min-width: 0; }
 
 .study-toolbar h1 {
   margin: 0;
   font-family: var(--serif);
-  font-size: 20px;
-  font-weight: 660;
+  font-size: 19px;
+  font-weight: 650;
   letter-spacing: -0.01em;
 }
 
 .study-sub {
   margin: 2px 0 0;
-  color: var(--muted, #9aa1ad);
-  font-size: 10.5px;
+  color: var(--faint);
+  font-size: 10px;
 }
+
+/* ------------------------------------------------------------- layout */
 
 .study-layout {
   display: grid;
   flex: 1 1 auto;
-  grid-template-columns: 230px minmax(0, 1fr);
-  gap: 0;
+  grid-template-columns: 250px minmax(0, 1fr);
 }
 
 .study-sidebar {
-  padding: 18px 14px;
-  border-right: 1px solid var(--line, rgba(255, 255, 255, 0.09));
+  padding: 20px 12px;
+  border-right: 1px solid var(--line);
+  background: var(--panel, rgba(255, 255, 255, 0.02));
 }
 
-.study-notebook-list { display: grid; gap: 4px; }
+.study-notebook-list { display: grid; gap: 3px; }
 
 .notebook-item {
   display: flex;
@@ -61,32 +67,40 @@
   align-items: center;
   justify-content: space-between;
   gap: 8px;
-  padding: 8px 10px;
+  padding: 9px 12px;
   border: 0;
-  border-radius: 9px;
+  border-left: 2px solid transparent;
+  border-radius: 0 10px 10px 0;
   background: transparent;
-  color: var(--ink-soft, #c7ccd6);
+  color: var(--ink-soft);
   cursor: pointer;
-  font-size: 11.5px;
-  font-weight: 640;
+  font-size: 12px;
+  font-weight: 600;
   text-align: left;
+  transition: background 130ms ease, color 130ms ease;
 }
 
-.notebook-item:hover { background: var(--panel-muted, rgba(255, 255, 255, 0.05)); }
+.notebook-item:hover { background: var(--panel-muted); color: var(--ink); }
 
 .notebook-item.is-active {
-  background: var(--accent-soft, rgba(125, 136, 233, 0.16));
-  color: var(--accent-ink, #b9bffb);
+  border-left-color: var(--accent);
+  background: var(--accent-soft);
+  color: var(--accent-ink);
+  font-weight: 680;
 }
 
-.notebook-item small { color: var(--faint, #6d7480); font-size: 9px; }
+.notebook-item small { color: var(--faint); font-size: 9px; font-weight: 700; }
+
+/* ------------------------------------------------------------- editor */
 
 .study-editor {
   display: flex;
   flex-direction: column;
-  gap: 14px;
-  max-width: 860px;
-  padding: 22px 28px 64px;
+  gap: 16px;
+  max-width: 900px;
+  width: 100%;
+  margin: 0 auto;
+  padding: 26px 34px 80px;
 }
 
 .study-notebook-head {
@@ -94,134 +108,188 @@
   flex-wrap: wrap;
   align-items: center;
   gap: 10px;
+  padding: 10px 0 8px;
 }
 
 .study-notebook-title {
-  flex: 1 1 240px;
+  flex: 1 1 260px;
+  min-width: 0;
   border: 1px solid transparent;
-  border-radius: 9px;
+  border-radius: 10px;
   outline: none;
   background: transparent;
-  color: var(--ink, #eef0f4);
+  color: var(--ink);
   cursor: text;
   font-family: var(--serif);
-  font-size: 21px;
-  font-weight: 660;
-  padding: 6px 10px;
+  font-size: 23px;
+  font-weight: 650;
+  letter-spacing: -0.015em;
+  padding: 7px 12px;
 }
 
-.study-notebook-title:hover { border-color: var(--line, rgba(255, 255, 255, 0.09)); }
-.study-notebook-title:focus { border-color: var(--accent, #7d88e9); }
+.study-notebook-title:hover { border-color: var(--line); }
+.study-notebook-title:focus { border-color: var(--accent); background: var(--panel-muted); }
 
 .study-work-link {
-  color: var(--faint, #6d7480);
+  color: var(--faint);
   cursor: pointer;
-  font-size: 10px;
+  font-size: 10.5px;
+  white-space: nowrap;
 }
 
-.study-work-link:hover { color: var(--accent, #7d88e9); text-decoration: underline; }
+.study-work-link:hover { color: var(--accent-ink); text-decoration: underline; }
+
+#restartKernelButton { white-space: nowrap; }
+.cell-run { color: #7fd3a4 !important; font-weight: 750 !important; }
 
 .study-conflict {
-  padding: 3px 8px;
+  padding: 4px 10px;
   border-radius: 999px;
-  background: color-mix(in srgb, var(--danger, #e5484d) 16%, transparent);
-  color: var(--danger, #e5484d);
+  background: color-mix(in srgb, var(--danger) 15%, transparent);
+  color: var(--danger);
   font-size: 9.5px;
   font-weight: 720;
 }
 
-.cell-stack { display: grid; gap: 14px; }
+/* ------------------------------------------------------------- cells */
+
+.cell-stack { display: grid; gap: 16px; }
 
 .cell {
-  border: 1px solid var(--line, rgba(255, 255, 255, 0.09));
-  border-radius: 13px;
+  border: 1px solid var(--line);
+  border-radius: 14px;
   background: var(--panel, rgba(255, 255, 255, 0.03));
   overflow: hidden;
+  box-shadow: 0 1px 0 rgba(255, 255, 255, 0.03), 0 10px 26px rgba(0, 0, 0, 0.22);
 }
 
 .cell.is-python .cell-kind-chip { background: rgba(63, 132, 96, 0.22); color: #7fd3a4; }
-.cell.is-latex .cell-kind-chip { background: rgba(125, 136, 233, 0.2); color: #b9bffb; }
+.cell.is-latex .cell-kind-chip { background: var(--accent-soft); color: var(--accent-ink); }
 
 .cell-bar {
   display: flex;
   align-items: center;
   gap: 8px;
-  padding: 6px 10px;
-  border-bottom: 1px solid var(--line, rgba(255, 255, 255, 0.07));
+  padding: 7px 10px 6px;
+  border-bottom: 1px solid var(--line);
+  background: rgba(255, 255, 255, 0.02);
 }
 
 .cell-kind-chip {
-  padding: 2px 8px;
+  padding: 3px 9px;
   border-radius: 999px;
-  font-size: 8.5px;
-  font-weight: 800;
-  letter-spacing: 0.07em;
+  font-size: 8px;
+  font-weight: 830;
+  letter-spacing: 0.09em;
   text-transform: uppercase;
 }
 
-.cell-actions { display: flex; margin-left: auto; gap: 2px; }
+.cell-actions { display: flex; margin-left: auto; gap: 2px; align-items: center; }
 
 .cell-action {
   border: 0;
-  border-radius: 6px;
+  border-radius: 7px;
   background: transparent;
-  color: var(--faint, #6d7480);
+  color: var(--faint);
   cursor: pointer;
   font-size: 10.5px;
-  padding: 3px 7px;
+  padding: 4px 8px;
 }
 
-.cell-action:hover { background: var(--panel-muted, rgba(255, 255, 255, 0.06)); color: var(--ink, #eef0f4); }
-.cell-action:disabled { opacity: 0.35; cursor: default; }
+.cell-action:hover:not(:disabled) { background: var(--panel-muted); color: var(--ink); }
+.cell-action:disabled { opacity: 0.3; cursor: default; }
 
 .cell textarea {
   display: block;
   width: 100%;
   box-sizing: border-box;
-  min-height: 88px;
+  min-height: 110px;
   border: 0;
   outline: none;
   resize: vertical;
-  background: transparent;
-  color: var(--ink, #eef0f4);
+  background:
+    linear-gradient(transparent calc(var(--line-h, 21px) - 1px), var(--line) 0)
+    0 0 / 100% var(--line-h, 21px),
+    transparent;
+  color: var(--ink);
   font-family: ui-monospace, "Cascadia Code", Consolas, monospace;
-  font-size: 12px;
-  line-height: 1.55;
-  padding: 12px 14px;
+  font-size: 12.5px;
+  line-height: var(--line-h, 21px);
+  padding: 14px 16px;
   white-space: pre;
 }
 
 .cell-preview {
-  padding: 14px 16px;
-  font-size: 13.5px;
-  line-height: 1.65;
+  padding: 16px 18px;
+  font-size: 14px;
+  line-height: 1.68;
   overflow-x: auto;
 }
 
-.cell-preview .katex-display {
-  margin: 0.55em 0;
-  overflow-x: auto;
-  overflow-y: hidden;
+.cell-preview code {
+  display: block;
+  white-space: pre-wrap;
+  font-family: ui-monospace, "Cascadia Code", Consolas, monospace;
+  font-size: 12px;
+  line-height: 1.6;
+  color: var(--ink-soft);
 }
+
+.cell-run-note {
+  margin: 10px 0 0;
+  color: var(--faint);
+  font-size: 9.5px;
+  letter-spacing: 0.02em;
+}
+
+.cell-preview .katex-display { margin: 0.45em 0; overflow-x: auto; overflow-y: hidden; }
+.cell-preview .katex { font-size: 1.06em; }
+
+/* ------------------------------------------------------- run outputs */
+
+.cell-outputs {
+  border-top: 1px solid var(--line);
+  background: rgba(0, 0, 0, 0.28);
+}
+
+.cell-output {
+  margin: 0;
+  padding: 10px 16px;
+  font-family: ui-monospace, "Cascadia Code", Consolas, monospace;
+  font-size: 11.5px;
+  line-height: 1.55;
+  white-space: pre-wrap;
+  word-break: break-word;
+}
+
+.stream-stderr { color: #e8b26a; }
+.cell-result { color: var(--accent-ink); }
+.cell-result::before { content: "→ "; color: var(--faint); }
+
+.cell-error { color: #ff9494; }
+.cell-error strong { display: block; font-size: 11.5px; margin-bottom: 4px; }
+.cell-error pre { margin: 0; font-size: 10px; opacity: 0.8; max-height: 240px; overflow-y: auto; }
+
+.cell-image { display: block; max-width: 100%; height: auto; padding: 12px 14px; background: #ffffff; }
+
+/* --------------------------------------------------------- adder/empty */
 
 .cell-adder {
   display: flex;
-  position: sticky;
-  bottom: 14px;
   align-items: center;
   gap: 8px;
-  margin-top: 6px;
-  padding: 9px 12px;
-  border: 1px dashed var(--line-strong, rgba(255, 255, 255, 0.16));
-  border-radius: 12px;
-  background: var(--panel-solid, #161a22);
+  margin-top: 4px;
+  padding: 10px 14px;
+  border: 1px solid var(--line-strong);
+  border-radius: 13px;
+  background: var(--panel-solid, #141822);
 }
 
 .cell-adder-label {
-  color: var(--faint, #6d7480);
+  color: var(--faint);
   font-size: 9px;
-  font-weight: 750;
-  letter-spacing: 0.08em;
+  font-weight: 780;
+  letter-spacing: 0.09em;
   text-transform: uppercase;
   margin-right: 2px;
 }
@@ -234,25 +302,25 @@
 }
 
 .study-dialog {
-  border: 1px solid var(--line-strong, rgba(255, 255, 255, 0.16));
-  border-radius: 15px;
+  border: 1px solid var(--line-strong);
+  border-radius: 16px;
   background: var(--panel-solid, #161a22);
-  color: var(--ink, #eef0f4);
-  padding: 20px 22px;
-  min-width: 340px;
+  color: var(--ink);
+  padding: 22px 24px;
+  min-width: 360px;
 }
 
-.study-dialog h3 { margin: 0 0 6px; font-size: 15px; }
-.study-dialog-hint { margin: 0 0 12px; color: var(--muted, #9aa1ad); font-size: 11px; }
+.study-dialog h3 { margin: 0 0 6px; font-family: var(--serif); font-size: 16px; }
+.study-dialog-hint { margin: 0 0 12px; color: var(--muted); font-size: 11px; }
 
 .study-dialog input {
   width: 100%;
   box-sizing: border-box;
-  padding: 8px 10px;
-  border: 1px solid var(--line-strong, rgba(255, 255, 255, 0.16));
-  border-radius: 9px;
-  background: var(--bg, #101319);
-  color: var(--ink, #eef0f4);
+  padding: 9px 11px;
+  border: 1px solid var(--line-strong);
+  border-radius: 10px;
+  background: #0d1017;
+  color: var(--ink);
   font-size: 12px;
 }
 
@@ -260,40 +328,14 @@
   display: flex;
   justify-content: flex-end;
   gap: 8px;
-  margin: 14px 0 0;
+  margin: 16px 0 0;
   padding: 0;
 }
 
 .study-dialog menu button:first-child {
   border: 0;
   background: transparent;
-  color: var(--muted, #9aa1ad);
+  color: var(--muted);
   cursor: pointer;
   font-size: 11.5px;
 }
-
-.cell-outputs {
-  border-top: 1px solid var(--line, rgba(255, 255, 255, 0.07));
-  background: rgba(0, 0, 0, 0.22);
-}
-
-.cell-output {
-  margin: 0;
-  padding: 9px 14px;
-  font-family: ui-monospace, "Cascadia Code", Consolas, monospace;
-  font-size: 11px;
-  line-height: 1.5;
-  white-space: pre-wrap;
-  word-break: break-word;
-}
-
-.stream-stderr { color: #e8b26a; }
-.cell-result { color: var(--ink-soft, #c7ccd6); }
-
-.cell-error { color: #ff8f8f; }
-.cell-error strong { display: block; font-size: 11px; margin-bottom: 4px; }
-.cell-error pre { margin: 0; font-size: 10px; opacity: 0.85; max-height: 220px; overflow-y: auto; }
-
-.cell-image { display: block; max-width: 100%; height: auto; padding: 10px 12px; background: #ffffff; }
-
-.cell-run { color: #7fd3a4; font-weight: 700; }

@@ -3300,7 +3300,8 @@ class LibraryRequestHandler(BaseHTTPRequestHandler):
     server_version = "CSLibrary/1.0"
 
     def log_message(self, _format: str, *_args: Any) -> None:
-        return
+        if os.environ.get("LATTICE_LOG_REQUESTS"):
+            sys.stderr.write("REQ " + (_format % _args) + "\n")
 
     def _valid_host(self) -> bool:
         host = self.headers.get("Host", "").rsplit(":", 1)[0].strip("[]").lower()
