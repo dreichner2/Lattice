@@ -8,7 +8,6 @@ import sqlite3
 import sys
 import tempfile
 import threading
-import tomllib
 import unittest
 from unittest import mock
 
@@ -374,16 +373,22 @@ class TutorManagerTests(unittest.TestCase):
         self.assertEqual(observed["schema_parent"], workspace)
         self.assertNotEqual(workspace, self.root)
         self.assertFalse(workspace.exists())
-        permission = next(
-            value for value in captured if value.startswith("permissions.lattice-tutor.filesystem=")
+        self.assertEqual(captured[captured.index("--sandbox") + 1], "read-only")
+        self.assertNotIn("default_permissions=\"lattice-tutor\"", captured)
+        self.assertFalse(
+            any(value.startswith("permissions.lattice-tutor.") for value in captured)
         )
-        profile = tomllib.loads(f"value={permission.split('=', 1)[1]}")["value"]
-        self.assertEqual(
-            profile,
-            {":minimal": "read", ":workspace_roots": {".": "read"}},
+        disabled_features = {
+            captured[index + 1]
+            for index, value in enumerate(captured[:-1])
+            if value == "--disable"
+        }
+        self.assertGreaterEqual(
+            disabled_features,
+            {"shell_tool", "unified_exec", "code_mode"},
         )
         self.assertNotIn(str(self.root), "\n".join(captured))
-        self.assertNotIn(str(external_source), permission)
+        self.assertNotIn(str(external_source), "\n".join(captured))
 
     def test_child_environment_drops_api_keys_and_proxy_credentials(self) -> None:
         with mock.patch.dict(

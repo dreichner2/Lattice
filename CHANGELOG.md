@@ -1,5 +1,22 @@
 # Changelog
 
+## Unreleased
+
+### Fixed
+
+- Windows Tutor now uses Codex's standard read-only sandbox for its disposable
+  excerpt workspace instead of a custom split-read filesystem permission map,
+  which the unelevated Windows restricted-token sandbox refuses to enforce.
+  Tutor turns therefore reach the model instead of exiting during sandbox
+  initialization.
+
+### Security
+
+- Windows Tutor disables shell, unified-exec, and code-mode access for the
+  Codex child. Only the bounded prompt and response schema are present in the
+  temporary workspace; the original library and private Tutor index remain
+  outside the turn.
+
 ## 2.3.2 — 2026-08-23
 
 ### Fixed

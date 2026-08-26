@@ -130,9 +130,10 @@ latest bounded stderr diagnostic under
 `%LOCALAPPDATA%\Lattice\Tutor\<library-id>\last-codex-stderr.log`. Keep that
 local diagnostic private because it can contain library paths. Tutor source
 files may remain on the external SSD: Lattice stages only the bounded selected
-context under `%TEMP%` and gives Codex one read-only temporary workspace instead
-of direct grants to one or more library volumes. A sandbox launch failure is not
-a corrupt conversation, so clearing the Tutor session is not a repair.
+context under `%TEMP%`, runs Codex in its standard read-only sandbox with local
+shell and code tools disabled, and grants no direct access to library volumes.
+A sandbox launch failure is not a corrupt conversation, so clearing the Tutor
+session is not a repair.
 
 ## Updates and rollback
 
