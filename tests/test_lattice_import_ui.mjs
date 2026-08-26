@@ -8,6 +8,7 @@ const STYLES = fs.readFileSync(new URL("../ui/styles.css", import.meta.url), "ut
 const MAC_APP = fs.readFileSync(new URL("../native/CSLibraryApp.swift", import.meta.url), "utf8");
 const MAC_BRIDGE = fs.readFileSync(new URL("../native/ReaderBridge.swift", import.meta.url), "utf8");
 const MAC_BUILD = fs.readFileSync(new URL("../scripts/build-macos-app.sh", import.meta.url), "utf8");
+const MAC_OCR = fs.readFileSync(new URL("../native/PDFOCRService.swift", import.meta.url), "utf8");
 const MAC_UPDATE = fs.readFileSync(new URL("../native/MacUpdateChecker.swift", import.meta.url), "utf8");
 const MAC_INSTALLER = fs.readFileSync(new URL("../native/MacUpdateInstaller.swift", import.meta.url), "utf8");
 const PDF_HTML = fs.readFileSync(new URL("../ui/pdf-reader.html", import.meta.url), "utf8");
@@ -227,6 +228,34 @@ test("PDFs use the same embedded reader in native and web app modes", () => {
     APP,
     /state\.readerMode === "pdf"[\s\S]*?sendPdfReaderMessage\("shortcut", \{ key: Number\(direction\) < 0 \? "ArrowLeft" : "ArrowRight" \}\)/,
   );
+  const nativeArrowHandler = APP.slice(
+    APP.indexOf("function handleNativeReaderArrow"),
+    APP.indexOf("window.csLibraryHandleNativeArrow"),
+  );
+  assert.doesNotMatch(nativeArrowHandler, /IS_NATIVE_APP/);
+});
+
+test("macOS reader keyboard handling preserves page turns and standard clipboard actions", () => {
+  assert.match(MAC_APP, /modifiers == \[\.control\][\s\S]*?case "c": action = #selector\(NSText\.copy\(_:\)\)[\s\S]*?case "v": action = #selector\(NSText\.paste\(_:\)\)/);
+  assert.match(MAC_APP, /let editMenu = NSMenu\(title: "Edit"\)/);
+  assert.match(MAC_APP, /addResponderMenuItem\(editMenu, "Copy", #selector\(NSText\.copy\(_:\)\), "c"\)/);
+  assert.match(MAC_APP, /addResponderMenuItem\(editMenu, "Paste", #selector\(NSText\.paste\(_:\)\), "v"\)/);
+  assert.match(MAC_APP, /item\.target = nil/);
+});
+
+test("image-only PDF pages receive a local selectable OCR layer in the macOS app", () => {
+  assert.match(PDF_HTML, /id="ocrButton"[\s\S]*?Make text selectable/);
+  assert.match(PDF_READER, /pdfPage\.getTextContent\(\)/);
+  assert.match(PDF_READER, /postToShelf\("ocr-request", \{ path: documentPath, page, requestId \}\)/);
+  assert.match(PDF_READER, /layer\.className = "ocrTextLayer"/);
+  assert.match(PDF_STYLES, /\.ocrTextLayer\s*\{[\s\S]*?user-select:\s*text/);
+  assert.match(PDF_STYLES, /\.ocrTextLayer span\s*\{[\s\S]*?-webkit-user-select:\s*text/);
+  assert.match(APP, /csLibraryNativeCall\("pdf\.ocrPage"/);
+  assert.match(MAC_BRIDGE, /action == "pdf\.ocrPage"/);
+  assert.match(MAC_OCR, /VNRecognizeTextRequest\(\)/);
+  assert.match(MAC_OCR, /\["zh-Hans", "zh-Hant", "en-US"\]/);
+  assert.match(MAC_BUILD, /-framework Vision/);
+  assert.match(MAC_BUILD, /PDFOCRService\.swift/);
 });
 
 test("the embedded PDF reader exposes the shared audio shelf at every width", () => {

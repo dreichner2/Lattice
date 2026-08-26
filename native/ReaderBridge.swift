@@ -32,6 +32,7 @@ final class ReaderBridge: NSObject, WKScriptMessageHandlerWithReply {
     private var activeDocumentID: String?
     var appInfoProvider: (() -> [String: Any])?
     var appActionHandler: ((String) -> Void)?
+    var pdfOCRProvider: ((String, Int, @escaping (Result<[String: Any], Error>) -> Void) -> Void)?
     var allowedServerOrigin: URL?
     weak var coordinator: ImmersiveReaderCoordinator?
     weak var webView: WKWebView?
@@ -59,6 +60,30 @@ final class ReaderBridge: NSObject, WKScriptMessageHandlerWithReply {
             let payload = request["payload"] as? [String: Any]
         else {
             replyHandler(nil, "Malformed reader bridge request")
+            return
+        }
+
+        if action == "pdf.ocrPage" {
+            do {
+                let path = try requiredString(payload, "path")
+                guard isSafeReaderPath(path), path.lowercased().hasSuffix(".pdf") else {
+                    throw BridgeError.invalid("path")
+                }
+                guard let page = integer(payload, "page"), page >= 1 else {
+                    throw BridgeError.invalid("page")
+                }
+                guard let pdfOCRProvider else { throw BridgeError.unavailable(action) }
+                pdfOCRProvider(path, page) { result in
+                    DispatchQueue.main.async {
+                        switch result {
+                        case .success(let payload): replyHandler(payload, nil)
+                        case .failure(let error): replyHandler(nil, error.localizedDescription)
+                        }
+                    }
+                }
+            } catch {
+                replyHandler(nil, error.localizedDescription)
+            }
             return
         }
 

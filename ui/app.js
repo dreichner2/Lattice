@@ -1446,6 +1446,42 @@ function sendPdfReaderMessage(type, detail = {}) {
   );
 }
 
+async function recognizePdfPageText(message) {
+  const page = Math.max(1, Math.trunc(Number(message.page)) || 1);
+  const requestId = String(message.requestId || "").slice(0, 120);
+  if (typeof window.csLibraryNativeCall !== "function") {
+    sendPdfReaderMessage("ocr-result", {
+      requestId,
+      page,
+      lines: [],
+      error: "On-device text recognition is available in the Lattice macOS app.",
+    });
+    return;
+  }
+  try {
+    const result = await window.csLibraryNativeCall("pdf.ocrPage", {
+      path: state.readerPath,
+      page,
+    });
+    sendPdfReaderMessage("ocr-result", {
+      requestId,
+      page,
+      lines: Array.isArray(result?.lines) ? result.lines : [],
+      cached: result?.cached === true,
+    });
+  } catch (error) {
+    const detail = IS_WINDOWS
+      ? "This scan has no embedded text. On-device text recognition is currently available in Lattice for macOS."
+      : String(error?.message || error || "Text recognition failed").slice(0, 500);
+    sendPdfReaderMessage("ocr-result", {
+      requestId,
+      page,
+      lines: [],
+      error: detail,
+    });
+  }
+}
+
 function syncReaderBookmarkButton(bookmarked) {
   const active = Boolean(bookmarked);
   if (state.readerMode === "epub") {
@@ -1553,6 +1589,8 @@ function handlePdfReaderMessage(event) {
   } else if (message.type === "selection") {
     const page = Math.max(1, Math.trunc(Number(message.page)) || 1);
     state.readerDesk?.setSelection(message.text, { type: "pdf", page }, `Page ${page}`);
+  } else if (message.type === "ocr-request") {
+    void recognizePdfPageText(message);
   } else if (message.type === "open-desk") {
     state.readerDesk?.open(message.view === "bookmarks" ? "bookmarks" : "notes");
   } else if (message.type === "open-audio") {
@@ -2173,7 +2211,12 @@ function handleEpubKeydown(event) {
 }
 
 function handleNativeReaderArrow(direction) {
-  if (!IS_NATIVE_APP || !document.body.classList.contains("reader-open")) return false;
+  // This function is invoked only by the native shell. Do not depend on the
+  // `?app=1` presentation hint here: redirects and restored WebKit sessions can
+  // legitimately omit that query string while the native bridge is still
+  // active. The old gate caused macOS to consume Left/Right and then silently
+  // refuse to turn the page.
+  if (!document.body.classList.contains("reader-open")) return false;
   const active = document.activeElement;
   const tag = active?.tagName?.toLowerCase();
   if (["input", "textarea", "select"].includes(tag) || active?.isContentEditable) return false;
