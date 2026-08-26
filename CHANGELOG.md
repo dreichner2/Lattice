@@ -2,6 +2,14 @@
 
 ## 2.3.3 — 2026-08-25
 
+### Changed
+
+- Move Library is now labeled **Move Reading Library** across macOS, Windows,
+  and the shared interface. Its confirmation and documentation explicitly state
+  that only the library checkout moves; the installed app, updater, WebView
+  profile, private reader database, Tutor cache, and runtimes remain on internal
+  storage.
+
 ### Fixed
 
 - Windows Tutor now uses Codex's standard read-only sandbox for its disposable

@@ -407,7 +407,7 @@ static void AcceptsOnlyExactPortableMirror()
     WithTemporaryRoot(root =>
     {
         var installRoot = Path.Combine(root, "installed");
-        var versionRoot = Path.Combine(installRoot, "versions", "2.3.2");
+        var versionRoot = Path.Combine(installRoot, "versions", "2.3.3");
         Directory.CreateDirectory(versionRoot);
         var current = Path.Combine(versionRoot, "Lattice.exe");
         var mirror = Path.Combine(root, "Desktop", "Lattice.exe");
@@ -418,7 +418,7 @@ static void AcceptsOnlyExactPortableMirror()
             installRoot,
             Path.Combine(installRoot, "versions"),
             versionRoot,
-            StableSemanticVersion.Parse("2.3.2"));
+            StableSemanticVersion.Parse("2.3.3"));
 
         Equal(
             Path.GetFullPath(mirror),
@@ -441,7 +441,7 @@ static void ReplacesVerifiedPortableLauncher()
     WithTemporaryRoot(root =>
     {
         var installRoot = Path.Combine(root, "installed");
-        var versionRoot = Path.Combine(installRoot, "versions", "2.3.2");
+        var versionRoot = Path.Combine(installRoot, "versions", "2.3.3");
         Directory.CreateDirectory(versionRoot);
         var source = Path.Combine(versionRoot, "Lattice.exe");
         var target = Path.Combine(root, "Desktop", "Lattice.exe");
