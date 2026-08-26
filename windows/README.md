@@ -32,7 +32,7 @@ You can also double-click `windows\setup\Install Lattice and Connect.cmd` after
 cloning. The script:
 
 1. validates the clone and its complete empty library scaffold;
-2. downloads the pinned public `v2.3.3` release and verifies its SHA-256;
+2. downloads the pinned public `v2.4.0` release and verifies its SHA-256;
 3. installs Lattice for the current user under
    `%LOCALAPPDATA%\Programs\Lattice`;
 4. installs official Syncthing `2.1.3` with WinGet when needed;
@@ -56,7 +56,7 @@ powershell.exe -NoProfile -ExecutionPolicy Bypass -File .\windows\setup\Setup-La
 ```
 
 The pinned release can also be downloaded directly from
-[`v2.3.3/Lattice-Windows-win-x64.zip`](https://github.com/dreichner2/Lattice/releases/download/v2.3.3/Lattice-Windows-win-x64.zip).
+[`v2.4.0/Lattice-Windows-win-x64.zip`](https://github.com/dreichner2/Lattice/releases/download/v2.4.0/Lattice-Windows-win-x64.zip).
 See [`windows/setup/README.md`](setup/README.md) for offline/test inputs and the
 full switch list.
 
@@ -75,7 +75,7 @@ show **Up to Date** before expecting the complete shelf. A Device ID is not a
 password, but it should still be exchanged privately; no hub password or API
 key is needed on Windows.
 
-Do not add `books/`, `papers/`, or `lectures/` as separate Syncthing folders.
+Do not add `books/`, `papers/`, `lectures/`, or `audio/` as separate Syncthing folders.
 The repository root is the one shared folder, and the checked-in `.stignore`
 keeps the public Git source separate from private payloads and sidecars.
 

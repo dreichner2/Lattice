@@ -10,6 +10,8 @@
     <link rel="stylesheet" href="/vendor/katex/katex.min.css">
     <link rel="stylesheet" href="/video-styles.css">
     <link rel="stylesheet" href="/tutor-styles.css">
+    <link rel="stylesheet" href="/reader-desk.css">
+    <link rel="stylesheet" href="/audio-player.css">
   </head>
   <body>
     <div class="app-shell">
@@ -347,13 +349,13 @@
       </main>
     </div>
 
-    <input id="addFilesInput" type="file" accept=".pdf,.epub,.txt,application/pdf,application/epub+zip,text/plain" multiple hidden>
+    <input id="addFilesInput" type="file" accept=".pdf,.epub,.txt,.mp3,.m4a,.wav,.flac,application/pdf,application/epub+zip,text/plain,audio/mpeg,audio/mp4,audio/wav,audio/flac" multiple hidden>
 
     <div class="drop-overlay" id="dropOverlay" aria-hidden="true">
       <div class="drop-overlay-card">
         <span class="drop-overlay-icon" aria-hidden="true">＋</span>
         <strong>Drop files into Lattice</strong>
-        <p>PDF, EPUB, and TXT files stay on your computers.</p>
+        <p>Books, papers, notes, and audio stay on your computers.</p>
       </div>
     </div>
 
@@ -374,12 +376,13 @@
             <label><input type="radio" name="importKind" value="book" checked><span aria-hidden="true">▥</span><strong>Books</strong><small>Textbooks and ebooks</small></label>
             <label><input type="radio" name="importKind" value="paper"><span aria-hidden="true">▤</span><strong>Papers</strong><small>Articles and research</small></label>
             <label><input type="radio" name="importKind" value="lecture"><span aria-hidden="true">▷</span><strong>Lecture notes</strong><small>Course handouts and notes</small></label>
+            <label><input type="radio" name="importKind" value="audio"><span aria-hidden="true">♫</span><strong>Audio</strong><small>Listen beside your reading</small></label>
           </fieldset>
 
           <button class="import-drop-zone" id="importDropZone" type="button">
             <span class="import-drop-mark" aria-hidden="true">＋</span>
             <strong>Choose files or drop them here</strong>
-            <small>PDF, EPUB, or TXT · multiple files welcome</small>
+            <small>PDF, EPUB, TXT, MP3, M4A, WAV, or FLAC · multiple files welcome</small>
           </button>
 
           <div class="ai-readiness" id="aiReadiness" data-status="checking" role="status">
@@ -419,6 +422,12 @@
             <h2 id="readerTitle">Reader</h2>
           </div>
           <div class="reader-actions">
+            <button class="reader-tool-button reader-desk-toolbar-button" id="readerDeskButton" type="button"
+                    aria-controls="readerDesk" aria-expanded="false" title="Open Reading Desk" hidden>
+              <span aria-hidden="true">✎</span> Desk
+            </button>
+            <button class="reader-tool-button reader-audio-button" id="readerAudioButton" type="button"
+                    title="Choose audio to play beside this book" hidden><span aria-hidden="true">♫</span> Audio</button>
             <button class="reader-tool-button reader-tutor-button" id="readerTutorButton" type="button" title="Open a compact Tutor for this book" hidden><span aria-hidden="true">✦</span> Tutor</button>
             <button class="reader-tool-button reader-focus-button" id="readerFocusButton" type="button" aria-label="Focus on the page" aria-pressed="false" title="Focus on the page" hidden>⛶</button>
             <button class="reader-tool-button reader-bookmark-button" id="readerBookmarkButton" type="button" aria-label="Bookmark this position" title="Bookmark this position" hidden>☆</button>
@@ -429,6 +438,7 @@
           </div>
         </header>
         <div class="reader-stage" id="readerStage">
+          <div class="reader-content-pane" id="readerContentPane">
           <button class="reader-tutor-peek-button" id="readerTutorPeekButton" type="button" aria-label="Open compact Tutor for this book" title="Open compact Tutor for this book" hidden><span aria-hidden="true">✦</span></button>
           <div class="reader-loading" id="readerLoading"><span></span><p>Preparing your reading desk…</p></div>
           <iframe class="pdf-reader" id="pdfReader" title="PDF reader" allow="fullscreen" allowfullscreen hidden></iframe>
@@ -503,6 +513,72 @@
               <button class="epub-reset-button" id="epubResetSettings" type="button">Reset reading appearance</button>
             </aside>
           </div>
+          </div>
+
+          <button class="reader-desk-scrim" id="readerDeskScrim" type="button"
+                  aria-label="Close Reading Desk" hidden></button>
+          <aside class="reader-desk" id="readerDesk" aria-label="Reading Desk" aria-hidden="true" inert>
+            <header class="reader-desk-header">
+              <div class="reader-desk-heading">
+                <span>Think beside the page</span>
+                <strong id="readerDeskTitle">Reading Desk</strong>
+              </div>
+              <button class="reader-desk-close" id="readerDeskClose" type="button" aria-label="Close Reading Desk">×</button>
+            </header>
+
+            <nav class="reader-desk-tabs" role="tablist" aria-label="Reading Desk views">
+              <button id="readerDeskNotesTab" type="button" role="tab" aria-selected="true"
+                      aria-controls="readerDeskNotesView" data-reader-desk-tab="notes">
+                Notes <span class="reader-desk-count" id="readerDeskNoteCount">0</span>
+              </button>
+              <button id="readerDeskLabTab" type="button" role="tab" aria-selected="false"
+                      aria-controls="readerDeskLabView" data-reader-desk-tab="lab">Study Lab</button>
+              <button id="readerDeskBookmarksTab" type="button" role="tab" aria-selected="false"
+                      aria-controls="readerDeskBookmarksView" data-reader-desk-tab="bookmarks">
+                Places <span class="reader-desk-count" id="readerDeskBookmarkCount">0</span>
+              </button>
+            </nav>
+
+            <div class="reader-desk-body">
+              <section class="reader-desk-view" id="readerDeskNotesView" role="tabpanel"
+                       aria-labelledby="readerDeskNotesTab" data-reader-desk-view="notes">
+                <div class="reader-note-composer">
+                  <div class="reader-note-context">
+                    <span id="readerDeskLocation">Current reading position</span>
+                    <span class="reader-note-markdown-badge">Markdown</span>
+                  </div>
+                  <div class="reader-note-quote">
+                    <span id="readerDeskQuote"></span>
+                    <button id="readerDeskQuoteClear" type="button" aria-label="Clear captured passage">×</button>
+                  </div>
+                  <label class="sr-only" for="readerDeskDraft">Reading note in Markdown</label>
+                  <textarea id="readerDeskDraft" maxlength="100000" spellcheck="true"
+                            placeholder="What clicked? What still feels uncertain? Write it in your own words…"></textarea>
+                  <div class="reader-note-compose-footer">
+                    <small id="readerDeskDraftStatus">Drafts stay on this device.</small>
+                    <button class="reader-note-save" id="readerDeskNoteSave" type="button">Save note</button>
+                  </div>
+                </div>
+                <div class="reader-note-list" id="readerDeskNoteList" aria-live="polite"></div>
+              </section>
+
+              <section class="reader-desk-view reader-desk-lab-view" id="readerDeskLabView" role="tabpanel"
+                       aria-labelledby="readerDeskLabTab" data-reader-desk-view="lab" hidden>
+                <p class="reader-desk-lab-status" id="readerDeskLabStatus">Open the full local notebook without leaving your source.</p>
+                <iframe class="reader-study-lab" id="readerStudyLab" src="about:blank"
+                        title="Study Lab for this source"></iframe>
+              </section>
+
+              <section class="reader-desk-view" id="readerDeskBookmarksView" role="tabpanel"
+                       aria-labelledby="readerDeskBookmarksTab" data-reader-desk-view="bookmarks" hidden>
+                <div class="reader-bookmark-view-header">
+                  <div><span>Return exactly</span><strong>Saved places</strong></div>
+                  <button class="reader-bookmark-add" id="readerDeskAddBookmark" type="button">Bookmark this spot</button>
+                </div>
+                <div class="reader-bookmark-list" id="readerDeskBookmarkList" aria-live="polite"></div>
+              </section>
+            </div>
+          </aside>
         </div>
       </section>
     </div>
@@ -668,6 +744,8 @@
     <script src="/videos.js?v=lattice-20260821" defer></script>
     <script src="/vendor/katex/katex.min.js" defer></script>
     <script src="/tutor.js?v=lattice-artifacts-1" defer></script>
+    <script src="/reader-desk.js?v=lattice-reader-desk-1" defer></script>
+    <script src="/audio-player.js?v=lattice-audio-1" defer></script>
     <script src="/app.js?v=lattice-20260823" defer></script>
   </body>
 </html>

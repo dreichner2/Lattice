@@ -76,6 +76,7 @@ LOOPBACK_HOSTS = frozenset({"127.0.0.1", "localhost", "::1"})
 PRIVATE_TOKEN_PATTERN = re.compile(r"^[A-Za-z0-9_-]{43,128}$")
 HEALTH_CHALLENGE_PATTERN = re.compile(r"^[0-9a-f]{64}$")
 MATERIAL_LABELS = {
+    "audio": "Audio",
     "book": "Books",
     "lecture": "Lectures",
     "course-volume": "Course volumes",
@@ -83,12 +84,25 @@ MATERIAL_LABELS = {
     "specification": "Specifications",
     "standard": "Standards",
 }
-READABLE_SUFFIXES = frozenset({".epub", ".pdf", ".txt"})
+DOCUMENT_SUFFIXES = frozenset({".epub", ".pdf", ".txt"})
+AUDIO_SUFFIXES = frozenset({".flac", ".m4a", ".mp3", ".wav"})
+SUPPORTED_PAYLOAD_SUFFIXES = DOCUMENT_SUFFIXES | AUDIO_SUFFIXES
+AUDIO_CONTENT_TYPES = {
+    ".flac": "audio/flac",
+    ".m4a": "audio/mp4",
+    ".mp3": "audio/mpeg",
+    ".wav": "audio/wav",
+}
 PDFJS_VENDOR_SUFFIXES = frozenset(
     {".bcmap", ".css", ".gif", ".icc", ".js", ".mjs", ".pfb", ".svg", ".ttf", ".wasm", ""}
 )
-CONTENT_DIRECTORIES = ("books", "papers", "lectures")
-IMPORT_KINDS = {"book": "books", "paper": "papers", "lecture": "lectures"}
+CONTENT_DIRECTORIES = ("books", "papers", "lectures", "audio")
+IMPORT_KINDS = {
+    "book": "books",
+    "paper": "papers",
+    "lecture": "lectures",
+    "audio": "audio",
+}
 SIDECAR_SUFFIX = ".library.json"
 MAX_SIDECAR_BYTES = 256 * 1024
 MAX_IMPORT_BYTES = 4 * 1024 * 1024 * 1024
@@ -98,6 +112,7 @@ AI_MODEL = "gpt-5.6-luna"
 AI_REASONING_EFFORT = "medium"
 AI_TIMEOUT_SECONDS = 60
 AI_INPUT_POLICY = "filename-and-embedded-bibliographic-metadata-only"
+AUDIO_AI_INPUT_POLICY = "audio-playback-only-no-model-input"
 IMPORTED_ACCESS = "User-provided local copy; redistribution not authorized"
 AI_QUEUE_CAPACITY = 16
 IMPORT_JOB_HISTORY_LIMIT = 100
@@ -130,6 +145,8 @@ EPUB_DOCUMENT_TYPES = frozenset({"application/xhtml+xml", "text/html"})
 EPUB_RENDERER_VERSION = 2
 EPUB_OPS_NAMESPACE = "http://www.idpf.org/2007/ops"
 YOUTUBE_VIDEO_ID = re.compile(r"^[A-Za-z0-9_-]{11}$")
+MAX_AUDIO_METADATA_BYTES = 32 * 1024 * 1024
+MAX_AUDIO_CONTAINER_BOXES = 10_000
 LECTURE_SOURCE_ALIASES = {
     "MIT": ("mit", "MIT"),
     "MIT OpenCourseWare": ("mit", "MIT"),
@@ -509,10 +526,12 @@ def _validate_synced_sidecar(
     if record.get("path") != relative_payload:
         raise ValueError("metadata path does not match its adjacent payload")
     suffix = payload.suffix.lower()
-    if suffix not in READABLE_SUFFIXES:
-        raise ValueError("metadata does not have a readable adjacent payload")
+    if suffix not in SUPPORTED_PAYLOAD_SUFFIXES:
+        raise ValueError("metadata does not have a supported adjacent payload")
 
     shelf = PurePosixPath(relative_payload).parts[0]
+    if not _payload_suffix_allowed_for_shelf(shelf, suffix):
+        raise ValueError("payload format does not match its shelf")
     expected_material = next(
         (kind for kind, directory in IMPORT_KINDS.items() if directory == shelf),
         None,
@@ -632,12 +651,30 @@ def _validate_synced_sidecar(
 
     ai = record.get("ai")
     required_ai = {"status", "model", "inputPolicy"}
+    ai_status = ai.get("status") if isinstance(ai, dict) else None
+    ai_identity_is_valid = bool(
+        isinstance(ai, dict)
+        and (
+            (
+                ai_status == "not-applicable"
+                and expected_material == "audio"
+                and metadata_status in {"local-fallback", "manual"}
+                and ai.get("model") == ""
+                and ai.get("inputPolicy") == AUDIO_AI_INPUT_POLICY
+            )
+            or (
+                ai_status != "not-applicable"
+                and ai.get("model") == AI_MODEL
+                and ai.get("inputPolicy") == AI_INPUT_POLICY
+            )
+        )
+    )
     if (
         not isinstance(ai, dict)
         or not required_ai <= set(ai)
         or bool(set(ai) - (required_ai | {"completedAt", "error"}))
-        or not isinstance(ai.get("status"), str)
-        or ai.get("status")
+        or not isinstance(ai_status, str)
+        or ai_status
         not in {
             "pending",
             "unavailable",
@@ -645,9 +682,9 @@ def _validate_synced_sidecar(
             "complete",
             "failed",
             "superseded-by-manual-edit",
+            "not-applicable",
         }
-        or ai.get("model") != AI_MODEL
-        or ai.get("inputPolicy") != AI_INPUT_POLICY
+        or not ai_identity_is_valid
     ):
         raise ValueError("AI status is invalid")
     if "completedAt" in ai:
@@ -748,7 +785,7 @@ def _read_synced_sidecars(
                 warnings.append(
                     f"Resolve synchronized metadata conflict: {relative_conflict}"
                 )
-            elif conflict.suffix.lower() in READABLE_SUFFIXES:
+            elif conflict.suffix.lower() in SUPPORTED_PAYLOAD_SUFFIXES:
                 warnings.append(f"Resolve synchronized payload conflict: {relative_conflict}")
         for path in sorted(directory.rglob(f"*{SIDECAR_SUFFIX}")):
             relative_sidecar = path.relative_to(root).as_posix()
@@ -811,13 +848,16 @@ def _file_record(
 ) -> dict[str, Any]:
     payload = root / path
     exists = payload.is_file()
-    suffix = payload.suffix.lower().lstrip(".") or "file"
+    payload_suffix = payload.suffix.lower()
+    suffix = payload_suffix.lstrip(".") or "file"
     stat = payload.stat() if exists else None
     license_note = str(metadata.get("license") or "Not recorded")
     privacy_note = str(metadata.get("privacy_note") or "")
     normalized_policy = f"{license_note} {privacy_note}".casefold()
     tutor_restriction = ""
-    if privacy_note:
+    if payload_suffix in AUDIO_SUFFIXES:
+        tutor_restriction = "Audio files are playback-only and are not sent to Tutor."
+    elif privacy_note:
         tutor_restriction = "This personalized or private edition stays on this device."
     elif any(marker in normalized_policy for marker in TUTOR_RESTRICTED_LICENSE_MARKERS):
         tutor_restriction = "Publisher terms reserve this work for human study."
@@ -831,6 +871,8 @@ def _file_record(
         "title": metadata.get("title") or _display_title(path),
         "path": path,
         "format": suffix.upper(),
+        "contentType": AUDIO_CONTENT_TYPES.get(payload_suffix, ""),
+        "isAudio": payload_suffix in AUDIO_SUFFIXES,
         "bytes": stat.st_size if stat else int(metadata.get("bytes") or 0),
         "sha256": metadata.get("sha256") or "",
         "license": license_note,
@@ -848,7 +890,7 @@ def _file_record(
 
 
 def _discover_payload_paths(root: Path) -> set[str]:
-    """Return readable, in-repository payload paths currently on disk."""
+    """Return supported, in-repository payload paths currently on disk."""
     resolved_root = root.resolve()
     discovered: set[str] = set()
     for shelf_name in CONTENT_DIRECTORIES:
@@ -858,7 +900,10 @@ def _discover_payload_paths(root: Path) -> set[str]:
         for candidate in shelf.rglob("*"):
             if (
                 not candidate.is_file()
-                or candidate.suffix.lower() not in READABLE_SUFFIXES
+                or not _payload_suffix_allowed_for_shelf(
+                    shelf_name,
+                    candidate.suffix.lower(),
+                )
                 or ".sync-conflict-" in candidate.name
                 or any(part.startswith(".") for part in candidate.relative_to(root).parts)
             ):
@@ -870,6 +915,33 @@ def _discover_payload_paths(root: Path) -> set[str]:
             if resolved.is_relative_to(resolved_root):
                 discovered.add(candidate.relative_to(root).as_posix())
     return discovered
+
+
+def _payload_suffix_allowed_for_shelf(shelf: str, suffix: str) -> bool:
+    """Keep document-reader inputs and playback-only media in separate roots."""
+    if shelf == IMPORT_KINDS["audio"]:
+        return suffix in AUDIO_SUFFIXES
+    if shelf in {IMPORT_KINDS["book"], IMPORT_KINDS["paper"], IMPORT_KINDS["lecture"]}:
+        return suffix in DOCUMENT_SUFFIXES
+    return False
+
+
+def import_config_payload() -> dict[str, Any]:
+    """Describe the import contract so native and web clients need no parallel allowlist."""
+    return {
+        "maxBytes": MAX_IMPORT_BYTES,
+        "kinds": [
+            {
+                "id": kind,
+                "root": root,
+                "payloadClass": "audio" if kind == "audio" else "document",
+                "extensions": sorted(
+                    AUDIO_SUFFIXES if kind == "audio" else DOCUMENT_SUFFIXES
+                ),
+            }
+            for kind, root in IMPORT_KINDS.items()
+        ],
+    }
 
 
 def _display_title(path: str) -> str:
@@ -888,7 +960,7 @@ def _display_title(path: str) -> str:
             rendered.append(lowered)
         else:
             rendered.append(lowered.capitalize())
-    return " ".join(rendered) or "New local book"
+    return " ".join(rendered) or "New local item"
 
 
 def _metadata_authors(metadata: dict[str, Any]) -> str:
@@ -907,6 +979,8 @@ def _classify_work(work_id: str, local_path: str) -> str:
         return "specification"
     if work_id in {"rfc-791", "acm-code"}:
         return "standard"
+    if local_path.startswith("audio/"):
+        return "audio"
     if local_path.startswith("lectures/"):
         return "lecture"
     if local_path.startswith("papers/"):
@@ -1140,7 +1214,9 @@ def build_library(
                 or "local-" + hashlib.sha256((digest or path).encode("utf-8")).hexdigest()[:16]
             )
             default_material = (
-                "paper"
+                "audio"
+                if path.startswith("audio/")
+                else "paper"
                 if path.startswith("papers/")
                 else "lecture" if path.startswith("lectures/") else "book"
             )
@@ -1296,6 +1372,7 @@ def build_library(
             vault_status = {"available": False, "checkedOut": {}}
     return {
         "name": "Lattice",
+        "importConfig": import_config_payload(),
         "works": works,
         "materials": materials,
         "materialTypes": [
@@ -1825,8 +1902,10 @@ def _safe_import_name(raw_name: str) -> tuple[str, str]:
     ):
         raise ValueError("Invalid import filename")
     suffix = Path(decoded).suffix.lower()
-    if suffix not in READABLE_SUFFIXES:
-        raise ValueError("Lattice accepts PDF, EPUB, and TXT files")
+    if suffix not in SUPPORTED_PAYLOAD_SUFFIXES:
+        raise ValueError(
+            "Lattice accepts PDF, EPUB, TXT, MP3, M4A, WAV, and FLAC files"
+        )
     stem = slugify(Path(decoded).stem)[:80].strip("-") or "untitled"
     return stem, suffix
 
@@ -1865,6 +1944,248 @@ def _import_destination_directory(root: Path, directory_name: str) -> Path:
     return resolved_destination
 
 
+def _validate_mp3(path: Path) -> None:
+    """Require an ID3/MPEG Layer III structure without decoding untrusted audio."""
+    size = path.stat().st_size
+    if size < 8:
+        raise ValueError("The MP3 file is too small")
+
+    def frame_size(header: bytes) -> int | None:
+        if len(header) != 4 or header[0] != 0xFF or header[1] & 0xE0 != 0xE0:
+            return None
+        version = (header[1] >> 3) & 0x03
+        layer = (header[1] >> 1) & 0x03
+        bitrate_index = (header[2] >> 4) & 0x0F
+        sample_index = (header[2] >> 2) & 0x03
+        if version == 0x01 or layer != 0x01 or bitrate_index in {0, 0x0F} or sample_index == 0x03:
+            return None
+        bitrates = (
+            (32, 40, 48, 56, 64, 80, 96, 112, 128, 160, 192, 224, 256, 320)
+            if version == 0x03
+            else (8, 16, 24, 32, 40, 48, 56, 64, 80, 96, 112, 128, 144, 160)
+        )
+        sample_rates = {
+            0x03: (44_100, 48_000, 32_000),
+            0x02: (22_050, 24_000, 16_000),
+            0x00: (11_025, 12_000, 8_000),
+        }
+        bitrate = bitrates[bitrate_index - 1] * 1000
+        sample_rate = sample_rates[version][sample_index]
+        coefficient = 144 if version == 0x03 else 72
+        return coefficient * bitrate // sample_rate + ((header[2] >> 1) & 0x01)
+
+    with path.open("rb") as handle:
+        header = handle.read(10)
+        start = 0
+        if header.startswith(b"ID3"):
+            if len(header) != 10 or header[3] not in {2, 3, 4}:
+                raise ValueError("The MP3 ID3 header is invalid")
+            encoded_size = header[6:10]
+            if any(value & 0x80 for value in encoded_size):
+                raise ValueError("The MP3 ID3 size is invalid")
+            tag_size = sum(value << shift for value, shift in zip(encoded_size, (21, 14, 7, 0)))
+            footer_size = 10 if header[3] == 4 and header[5] & 0x10 else 0
+            start = 10 + tag_size + footer_size
+            if start > min(size - 4, MAX_AUDIO_METADATA_BYTES):
+                raise ValueError("The MP3 metadata block is invalid or too large")
+
+        scan_end = min(size - 4, start + 64 * 1024)
+        position = start
+        while position <= scan_end:
+            handle.seek(position)
+            first_header = handle.read(4)
+            first_size = frame_size(first_header)
+            if first_size is not None:
+                second_position = position + first_size
+                if second_position + 4 <= size:
+                    handle.seek(second_position)
+                    if frame_size(handle.read(4)) is not None:
+                        return
+            position += 1
+    raise ValueError("The file extension says MP3 but MPEG audio frames were not found")
+
+
+def _iso_boxes(handle: Any, start: int, end: int) -> list[tuple[bytes, int, int]]:
+    """Parse bounded ISO-BMFF box headers and return payload ranges."""
+    boxes: list[tuple[bytes, int, int]] = []
+    position = start
+    while position < end:
+        if len(boxes) >= MAX_AUDIO_CONTAINER_BOXES or end - position < 8:
+            raise ValueError("The M4A box structure is invalid or too complex")
+        handle.seek(position)
+        header = handle.read(8)
+        if len(header) != 8:
+            raise ValueError("The M4A box header is truncated")
+        box_size = int.from_bytes(header[:4], "big")
+        box_type = header[4:8]
+        header_size = 8
+        if box_size == 1:
+            extended = handle.read(8)
+            if len(extended) != 8:
+                raise ValueError("The M4A extended box header is truncated")
+            box_size = int.from_bytes(extended, "big")
+            header_size = 16
+        elif box_size == 0:
+            box_size = end - position
+        if box_type == b"uuid":
+            header_size += 16
+        if box_size < header_size or box_size > end - position:
+            raise ValueError("The M4A box size is invalid")
+        box_end = position + box_size
+        boxes.append((box_type, position + header_size, box_end))
+        position = box_end
+    return boxes
+
+
+def _validate_m4a(path: Path) -> None:
+    """Validate an ISO-BMFF audio container and require an audio handler track."""
+    size = path.stat().st_size
+    if size < 32:
+        raise ValueError("The M4A file is too small")
+    known_brands = {b"M4A ", b"M4B ", b"isom", b"iso2", b"mp41", b"mp42", b"qt  "}
+    found_ftyp = False
+    found_audio = False
+    found_media = False
+    with path.open("rb") as handle:
+        for box_type, payload_start, box_end in _iso_boxes(handle, 0, size):
+            if box_type == b"ftyp":
+                payload_size = box_end - payload_start
+                if payload_size < 8 or payload_size > 1024 * 1024 or payload_size % 4:
+                    raise ValueError("The M4A file-type box is invalid")
+                handle.seek(payload_start)
+                brands = handle.read(payload_size)
+                declared = {brands[:4], *(brands[index : index + 4] for index in range(8, len(brands), 4))}
+                if not declared & known_brands:
+                    raise ValueError("The M4A file does not declare a supported media brand")
+                found_ftyp = True
+            elif box_type == b"mdat" and box_end > payload_start:
+                found_media = True
+            elif box_type == b"moov":
+                for child_type, child_start, child_end in _iso_boxes(handle, payload_start, box_end):
+                    if child_type != b"trak":
+                        continue
+                    for track_type, track_start, track_end in _iso_boxes(
+                        handle, child_start, child_end
+                    ):
+                        if track_type != b"mdia":
+                            continue
+                        for media_type, media_start, media_end in _iso_boxes(
+                            handle, track_start, track_end
+                        ):
+                            if media_type != b"hdlr" or media_end - media_start < 12:
+                                continue
+                            handle.seek(media_start + 8)
+                            if handle.read(4) == b"soun":
+                                found_audio = True
+    if not found_ftyp or not found_audio or not found_media:
+        raise ValueError("The file extension says M4A but no playable audio track was found")
+
+
+def _validate_wav(path: Path) -> None:
+    """Validate a RIFF/WAVE chunk table without loading audio data into memory."""
+    size = path.stat().st_size
+    if size < 44:
+        raise ValueError("The WAV file is too small")
+    found_format = False
+    found_data = False
+    with path.open("rb") as handle:
+        header = handle.read(12)
+        if header[:4] != b"RIFF" or header[8:12] != b"WAVE":
+            raise ValueError("The file extension says WAV but the RIFF/WAVE header is invalid")
+        declared_end = int.from_bytes(header[4:8], "little") + 8
+        if declared_end < 12 or declared_end > size:
+            raise ValueError("The WAV container size is invalid")
+        position = 12
+        chunks = 0
+        while position < declared_end:
+            if chunks >= MAX_AUDIO_CONTAINER_BOXES or declared_end - position < 8:
+                raise ValueError("The WAV chunk structure is invalid or too complex")
+            chunks += 1
+            handle.seek(position)
+            chunk_header = handle.read(8)
+            chunk_type = chunk_header[:4]
+            chunk_size = int.from_bytes(chunk_header[4:8], "little")
+            data_start = position + 8
+            data_end = data_start + chunk_size
+            if data_end > declared_end:
+                raise ValueError("The WAV chunk size is invalid")
+            if chunk_type == b"fmt ":
+                if chunk_size < 16:
+                    raise ValueError("The WAV format chunk is incomplete")
+                handle.seek(data_start)
+                description = handle.read(16)
+                format_tag = int.from_bytes(description[0:2], "little")
+                channels = int.from_bytes(description[2:4], "little")
+                sample_rate = int.from_bytes(description[4:8], "little")
+                block_align = int.from_bytes(description[12:14], "little")
+                bits_per_sample = int.from_bytes(description[14:16], "little")
+                if (
+                    format_tag not in {1, 3, 0xFFFE}
+                    or not 1 <= channels <= 32
+                    or not 1_000 <= sample_rate <= 768_000
+                    or block_align < 1
+                    or not 1 <= bits_per_sample <= 64
+                ):
+                    raise ValueError("The WAV audio format is unsupported or invalid")
+                found_format = True
+            elif chunk_type == b"data" and chunk_size > 0:
+                found_data = True
+            position = data_end + (chunk_size & 1)
+            if position > declared_end:
+                raise ValueError("The WAV chunk padding is invalid")
+    if not found_format or not found_data:
+        raise ValueError("The WAV file is missing its format or audio data chunk")
+
+
+def _validate_flac(path: Path) -> None:
+    """Validate FLAC metadata framing and a plausible STREAMINFO block."""
+    size = path.stat().st_size
+    if size < 42:
+        raise ValueError("The FLAC file is too small")
+    with path.open("rb") as handle:
+        if handle.read(4) != b"fLaC":
+            raise ValueError("The file extension says FLAC but the stream marker is invalid")
+        position = 4
+        block_count = 0
+        metadata_bytes = 0
+        last = False
+        while not last:
+            if block_count >= 128 or position + 4 > size:
+                raise ValueError("The FLAC metadata is invalid or too complex")
+            handle.seek(position)
+            header = handle.read(4)
+            last = bool(header[0] & 0x80)
+            block_type = header[0] & 0x7F
+            block_size = int.from_bytes(header[1:4], "big")
+            data_start = position + 4
+            data_end = data_start + block_size
+            metadata_bytes += 4 + block_size
+            if data_end > size or metadata_bytes > MAX_AUDIO_METADATA_BYTES:
+                raise ValueError("The FLAC metadata size is invalid or too large")
+            if block_count == 0:
+                if block_type != 0 or block_size != 34:
+                    raise ValueError("The FLAC STREAMINFO block is missing or invalid")
+                streaminfo = handle.read(34)
+                minimum_block = int.from_bytes(streaminfo[0:2], "big")
+                maximum_block = int.from_bytes(streaminfo[2:4], "big")
+                packed = int.from_bytes(streaminfo[10:18], "big")
+                sample_rate = (packed >> 44) & 0xFFFFF
+                channels = ((packed >> 41) & 0x07) + 1
+                bits_per_sample = ((packed >> 36) & 0x1F) + 1
+                if (
+                    minimum_block < 16
+                    or maximum_block < minimum_block
+                    or sample_rate < 1
+                    or not 1 <= channels <= 8
+                    or not 4 <= bits_per_sample <= 32
+                ):
+                    raise ValueError("The FLAC STREAMINFO values are invalid")
+            position = data_end
+            block_count += 1
+        if position >= size:
+            raise ValueError("The FLAC stream contains no audio frames")
+
+
 def _validate_import_payload(path: Path, suffix: str) -> dict[str, Any]:
     """Validate actual bytes and return safe embedded bibliographic metadata."""
     if suffix == ".pdf":
@@ -1900,6 +2221,22 @@ def _validate_import_payload(path: Path, suffix: str) -> dict[str, Any]:
             ],
             "language": str(package.get("language") or ""),
         }
+
+    audio_validators: dict[str, Callable[[Path], None]] = {
+        ".flac": _validate_flac,
+        ".m4a": _validate_m4a,
+        ".mp3": _validate_mp3,
+        ".wav": _validate_wav,
+    }
+    if suffix in audio_validators:
+        audio_validators[suffix](path)
+        # Rich media tags and artwork remain untrusted and are deliberately not
+        # parsed or sent to the optional metadata model. The editable filename
+        # fallback is enough to complete every audio import offline.
+        return {}
+
+    if suffix != ".txt":
+        raise ValueError("Unsupported import format")
 
     decoder = codecs.getincrementaldecoder("utf-8")("strict")
     try:
@@ -1955,7 +2292,7 @@ def _initial_import_metadata(
         if isinstance(raw_authors, list)
         else []
     )
-    return {
+    metadata = {
         "schema_version": 2,
         "work_id": f"local-{digest[:16]}",
         "path": relative,
@@ -1979,6 +2316,22 @@ def _initial_import_metadata(
             "inputPolicy": AI_INPUT_POLICY,
         },
     }
+    return _audio_metadata_without_enrichment(metadata) if kind == "audio" else metadata
+
+
+def _audio_metadata_without_enrichment(metadata: dict[str, Any]) -> dict[str, Any]:
+    """Make playback-only audio terminal without sending even its filename to a model."""
+    result = dict(metadata)
+    result["metadata_status"] = (
+        "manual" if metadata.get("metadata_status") == "manual" else "local-fallback"
+    )
+    result["ai"] = {
+        "status": "not-applicable",
+        "model": "",
+        "inputPolicy": AUDIO_AI_INPUT_POLICY,
+        "completedAt": datetime.now(timezone.utc).isoformat(),
+    }
+    return result
 
 
 def _is_windows_platform() -> bool:
@@ -2345,6 +2698,8 @@ def enrich_metadata_with_codex(
     library_root: Path = REPO_ROOT,
 ) -> dict[str, Any]:
     """Use the local authenticated Codex CLI without sending publication bytes."""
+    if metadata.get("material_type") == "audio":
+        raise ValueError("Audio metadata is local-only and cannot be sent for enrichment")
     with tempfile.TemporaryDirectory(prefix="lattice-ai-") as temporary_name:
         temporary = Path(temporary_name)
         schema_path = temporary / "metadata-schema.json"
@@ -2908,6 +3263,16 @@ class LibraryHTTPServer(ThreadingHTTPServer):
             finally:
                 self._enrichment_queue.task_done()
 
+    def _finalize_audio_without_enrichment_locked(
+        self,
+        relative: str,
+        metadata: dict[str, Any],
+    ) -> dict[str, Any]:
+        updated = _audio_metadata_without_enrichment(metadata)
+        _atomic_write_json(sidecar_path_for(self.root / relative), updated)
+        self._snapshot = ()
+        return updated
+
     def _recover_pending_enrichment(self) -> None:
         records, _warnings = _read_synced_sidecars(self.root)
         for relative, metadata in sorted(records.items()):
@@ -2915,9 +3280,15 @@ class LibraryHTTPServer(ThreadingHTTPServer):
                 metadata.get("metadata_status") == "pending-ai"
                 and (self.root / relative).is_file()
             ):
-                self._start_enrichment(relative)
+                if metadata.get("material_type") == "audio":
+                    with self._import_lock:
+                        self._finalize_audio_without_enrichment_locked(relative, metadata)
+                else:
+                    self._start_enrichment(relative)
 
     def _start_enrichment(self, relative: str) -> str:
+        if PurePosixPath(relative).parts[:1] == (IMPORT_KINDS["audio"],):
+            return ""
         with self._job_lock:
             existing = next(
                 (
@@ -3041,10 +3412,14 @@ class LibraryHTTPServer(ThreadingHTTPServer):
         kind: str,
     ) -> dict[str, Any]:
         if kind not in IMPORT_KINDS:
-            raise ValueError("Import kind must be book, paper, or lecture")
+            raise ValueError("Import kind must be book, paper, lecture, or audio")
         if content_length < 1 or content_length > MAX_IMPORT_BYTES:
             raise ValueError("Invalid or oversized import")
         stem, suffix = _safe_import_name(encoded_filename)
+        if not _payload_suffix_allowed_for_shelf(IMPORT_KINDS[kind], suffix):
+            if kind == "audio":
+                raise ValueError("Audio imports must be MP3, M4A, WAV, or FLAC files")
+            raise ValueError("MP3, M4A, WAV, and FLAC files must use the Audio kind")
         original_name = urllib.parse.unquote(encoded_filename)
         destination_directory = _import_destination_directory(
             self.root,
@@ -3097,11 +3472,15 @@ class LibraryHTTPServer(ThreadingHTTPServer):
                                 "or resolve that sidecar before importing again."
                             ) from exc
                         else:
-                            job_id = (
-                                self._start_enrichment(duplicate)
-                                if metadata.get("metadata_status") == "pending-ai"
-                                else ""
-                            )
+                            job_id = ""
+                            if metadata.get("metadata_status") == "pending-ai":
+                                if metadata.get("material_type") == "audio":
+                                    metadata = self._finalize_audio_without_enrichment_locked(
+                                        duplicate,
+                                        metadata,
+                                    )
+                                else:
+                                    job_id = self._start_enrichment(duplicate)
                             return {
                                 "ok": True,
                                 "path": duplicate,
@@ -3149,7 +3528,11 @@ class LibraryHTTPServer(ThreadingHTTPServer):
                     if created_destination:
                         destination.unlink(missing_ok=True)
                     raise
-            job_id = self._start_enrichment(relative)
+            job_id = (
+                ""
+                if metadata.get("material_type") == "audio"
+                else self._start_enrichment(relative)
+            )
             self._snapshot = ()
             return {
                 "ok": True,
@@ -3198,11 +3581,14 @@ class LibraryHTTPServer(ThreadingHTTPServer):
                 descriptive["subject_ids"] = []
             metadata = _merge_descriptive_metadata(metadata, descriptive, self.taxonomy)
             metadata["metadata_status"] = "manual"
-            metadata["ai"] = {
-                **metadata.get("ai", {}),
-                "status": "superseded-by-manual-edit",
-                "completedAt": datetime.now(timezone.utc).isoformat(),
-            }
+            if metadata.get("material_type") == "audio":
+                metadata = _audio_metadata_without_enrichment(metadata)
+            else:
+                metadata["ai"] = {
+                    **metadata.get("ai", {}),
+                    "status": "superseded-by-manual-edit",
+                    "completedAt": datetime.now(timezone.utc).isoformat(),
+                }
             _atomic_write_json(sidecar, metadata)
             with self._job_lock:
                 for job in self._import_jobs.values():
@@ -3944,11 +4330,15 @@ class LibraryRequestHandler(BaseHTTPRequestHandler):
             "/styles.css": ("styles.css", "text/css; charset=utf-8", False),
             "/video-styles.css": ("video-styles.css", "text/css; charset=utf-8", False),
             "/tutor-styles.css": ("tutor-styles.css", "text/css; charset=utf-8", False),
+            "/reader-desk.css": ("reader-desk.css", "text/css; charset=utf-8", False),
+            "/audio-player.css": ("audio-player.css", "text/css; charset=utf-8", False),
             "/study-lab.css": ("study-lab.css", "text/css; charset=utf-8", False),
             "/study-lab.html": ("study-lab.html", "text/html; charset=utf-8", True),
             "/study-lab.js": ("study-lab.js", "text/javascript; charset=utf-8", False),
             "/videos.js": ("videos.js", "text/javascript; charset=utf-8", False),
             "/tutor.js": ("tutor.js", "text/javascript; charset=utf-8", False),
+            "/reader-desk.js": ("reader-desk.js", "text/javascript; charset=utf-8", False),
+            "/audio-player.js": ("audio-player.js", "text/javascript; charset=utf-8", False),
             "/app.js": ("app.js", "text/javascript; charset=utf-8", False),
             "/pdf-reader.html": ("pdf-reader.html", "text/html; charset=utf-8", True),
             "/pdf-reader.css": ("pdf-reader.css", "text/css; charset=utf-8", False),
@@ -4115,10 +4505,13 @@ class LibraryRequestHandler(BaseHTTPRequestHandler):
                 self.end_headers()
                 return
 
-        content_type = mimetypes.guess_type(path.name)[0] or "application/octet-stream"
-        if path.suffix.lower() == ".epub":
+        suffix = path.suffix.lower()
+        content_type = AUDIO_CONTENT_TYPES.get(suffix)
+        if content_type is None:
+            content_type = mimetypes.guess_type(path.name)[0] or "application/octet-stream"
+        if suffix == ".epub":
             content_type = "application/epub+zip"
-        elif path.suffix.lower() == ".tgz":
+        elif suffix == ".tgz":
             content_type = "application/gzip"
         content_length = end - start + 1
         self.send_response(status)

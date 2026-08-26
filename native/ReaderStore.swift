@@ -97,6 +97,123 @@ final class ReaderStore {
         )
     }
 
+    /// Moves reader state from the former work-scoped document identity to the
+    /// payload-scoped identity used by the shared reader. The old schema could
+    /// only retain one path for a multi-format work, so migration deliberately
+    /// accepts only records whose stored path exactly matches this payload.
+    func migrateLegacyDocuments(to document: ReaderDocument) throws {
+        let pathFallbackID = LibraryIdentity.documentID(workID: nil, path: document.path, sha256: nil)
+        let candidateIDs = Set([pathFallbackID, LibraryIdentity.legacyWorkDocumentID(workID: document.workID)].compactMap { $0 })
+            .filter { $0 != document.id }
+        let legacyDocuments = try candidateIDs.compactMap { identifier -> ReaderDocument? in
+            guard let candidate = try self.document(id: identifier) else { return nil }
+            if identifier == pathFallbackID {
+                guard candidate.path == document.path else { return nil }
+            } else {
+                let expectedWork = document.workID?.trimmingCharacters(in: .whitespacesAndNewlines) ?? ""
+                let candidateWork = candidate.workID?.trimmingCharacters(in: .whitespacesAndNewlines) ?? ""
+                guard !expectedWork.isEmpty, candidateWork == expectedWork else { return nil }
+            }
+            return candidate
+        }
+        guard !legacyDocuments.isEmpty else { return }
+
+        try transaction {
+            try upsertDocument(document)
+            for legacy in legacyDocuments {
+                let exactPathFallback = legacy.id == pathFallbackID
+                if let oldPosition = try position(documentID: legacy.id) {
+                    if locatorFormat(oldPosition.locator) == document.format.lowercased() {
+                        let migrated = migratedPDFLocator(oldPosition.locator, legacyNativeRecord: nil)
+                        let migratedPosition = ReaderPosition(
+                            documentID: document.id,
+                            locator: migrated.locator,
+                            page: migrated.didChange ? oldPosition.page.map { $0 + 1 } : oldPosition.page,
+                            progress: oldPosition.progress,
+                            updatedAt: oldPosition.updatedAt
+                        )
+                        let current = try position(documentID: document.id)
+                        if current == nil || migratedPosition.updatedAt > (current?.updatedAt ?? 0) {
+                            try savePosition(migratedPosition)
+                            try execute("DELETE FROM reading_positions WHERE document_id=?", [.text(legacy.id)])
+                        }
+                    }
+                }
+
+                for bookmark in try bookmarks(documentID: legacy.id) {
+                    guard locatorFormat(bookmark.locator) == document.format.lowercased() else { continue }
+                    let migrated = migratedPDFLocator(
+                        bookmark.locator,
+                        legacyNativeRecord: bookmark.id.hasPrefix("pdf-bookmark:")
+                    )
+                    try execute(
+                        "UPDATE bookmarks SET document_id=?, locator_json=? WHERE id=?",
+                        [.text(document.id), .text(migrated.locator), .text(bookmark.id)]
+                    )
+                    try execute(
+                        "UPDATE search_items SET document_id=?, body=? WHERE id=?",
+                        [.text(document.id), .text(migrated.locator), .text("bookmark:\(bookmark.id)")]
+                    )
+                    try execute(
+                        "UPDATE search_items_fts SET document_id=?, body=? WHERE id=?",
+                        [.text(document.id), .text(migrated.locator), .text("bookmark:\(bookmark.id)")]
+                    )
+                }
+
+                for annotation in try annotations(documentID: legacy.id) {
+                    guard locatorFormat(annotation.locator) == document.format.lowercased() else { continue }
+                    let isNative = annotation.id.hasPrefix("pdf-note:") || annotation.id.hasPrefix("pdf-highlight:")
+                    let migrated = migratedPDFLocator(annotation.locator, legacyNativeRecord: isNative)
+                    try execute(
+                        "UPDATE annotations SET document_id=?, locator_json=? WHERE id=?",
+                        [.text(document.id), .text(migrated.locator), .text(annotation.id)]
+                    )
+                    try execute(
+                        "UPDATE search_items SET document_id=?, body=? WHERE id=?",
+                        [.text(document.id), .text(annotation.note), .text("annotation:\(annotation.id)")]
+                    )
+                    try execute(
+                        "UPDATE search_items_fts SET document_id=?, body=? WHERE id=?",
+                        [.text(document.id), .text(annotation.note), .text("annotation:\(annotation.id)")]
+                    )
+                }
+
+                if exactPathFallback {
+                    try execute("UPDATE reading_sessions SET document_id=? WHERE document_id=?", [.text(document.id), .text(legacy.id)])
+                    try execute("UPDATE search_items SET document_id=? WHERE document_id=?", [.text(document.id), .text(legacy.id)])
+                    try execute("UPDATE search_items_fts SET document_id=? WHERE document_id=?", [.text(document.id), .text(legacy.id)])
+                } else {
+                    let matchingKind = document.format.lowercased() == "pdf" ? "page" : "chapter"
+                    try execute(
+                        "UPDATE search_items SET document_id=? WHERE document_id=? AND kind=?",
+                        [.text(document.id), .text(legacy.id), .text(matchingKind)]
+                    )
+                    try execute(
+                        "UPDATE search_items_fts SET document_id=? WHERE document_id=? AND kind=?",
+                        [.text(document.id), .text(legacy.id), .text(matchingKind)]
+                    )
+                }
+
+                let preferences = try query(
+                    "SELECT key, value FROM preferences WHERE key LIKE ?",
+                    [.text("%\(legacy.id)%")]
+                ) { statement in (text(statement, 0), text(statement, 1)) }
+                for (key, value) in preferences {
+                    guard exactPathFallback || key.lowercased().hasPrefix("\(document.format.lowercased()).") else { continue }
+                    let migratedKey = key.replacingOccurrences(of: legacy.id, with: document.id)
+                    try execute(
+                        "INSERT OR IGNORE INTO preferences(key, value) VALUES(?, ?)",
+                        [.text(migratedKey), .text(value)]
+                    )
+                    try execute("DELETE FROM preferences WHERE key=?", [.text(key)])
+                }
+                if try documentReferenceCount(legacy.id) == 0 {
+                    try execute("DELETE FROM documents WHERE id=?", [.text(legacy.id)])
+                }
+            }
+        }
+    }
+
     func document(id: String) throws -> ReaderDocument? {
         try queryOne(
             "SELECT id, work_id, path, sha256, title, format, updated_at FROM documents WHERE id=?",
@@ -565,6 +682,63 @@ final class ReaderStore {
     private func optionalText(_ value: String?) -> SQLiteValue { value.map(SQLiteValue.text) ?? .null }
     private func optionalInteger(_ value: Int?) -> SQLiteValue { value.map { .integer(Int64($0)) } ?? .null }
     private func clamp(_ value: Double) -> Double { min(max(value, 0), 1) }
+
+    private func locatorFormat(_ locator: String) -> String? {
+        guard
+            let data = locator.data(using: .utf8),
+            let object = (try? JSONSerialization.jsonObject(with: data)) as? [String: Any]
+        else { return nil }
+        return (object["type"] as? String)?.trimmingCharacters(in: .whitespacesAndNewlines).lowercased()
+    }
+
+    private func documentReferenceCount(_ identifier: String) throws -> Int64 {
+        try queryOne(
+            """
+            SELECT
+              (SELECT COUNT(*) FROM reading_positions WHERE document_id=?) +
+              (SELECT COUNT(*) FROM bookmarks WHERE document_id=?) +
+              (SELECT COUNT(*) FROM annotations WHERE document_id=?) +
+              (SELECT COUNT(*) FROM reading_sessions WHERE document_id=?) +
+              (SELECT COUNT(*) FROM search_items WHERE document_id=?)
+            """,
+            Array(repeating: .text(identifier), count: 5)
+        ) { sqlite3_column_int64($0, 0) } ?? 0
+    }
+
+    /// Native PDFKit locators written before the shared reader used zero-based
+    /// pages. Web locators have always included their layout, while native
+    /// bookmarks/annotations have stable prefixes, so conversion is precise
+    /// and idempotent rather than guessing from the page number itself.
+    private func migratedPDFLocator(
+        _ locator: String,
+        legacyNativeRecord: Bool?
+    ) -> (locator: String, didChange: Bool) {
+        guard
+            let data = locator.data(using: .utf8),
+            var object = (try? JSONSerialization.jsonObject(with: data)) as? [String: Any],
+            (object["type"] as? String)?.lowercased() == "pdf",
+            object["pageBase"] == nil,
+            let page = (object["page"] as? NSNumber)?.intValue
+        else { return (locator, false) }
+
+        let isLegacyNative: Bool
+        if let legacyNativeRecord {
+            isLegacyNative = legacyNativeRecord
+        } else {
+            isLegacyNative = object["layout"] == nil
+                && object["scaleValue"] == nil
+                && object["rotation"] == nil
+        }
+        guard isLegacyNative else { return (locator, false) }
+        object["page"] = max(0, page) + 1
+        object["pageBase"] = 1
+        guard
+            JSONSerialization.isValidJSONObject(object),
+            let migrated = try? JSONSerialization.data(withJSONObject: object, options: [.sortedKeys]),
+            let value = String(data: migrated, encoding: .utf8)
+        else { return (locator, false) }
+        return (value, true)
+    }
 }
 
 private func text(_ statement: OpaquePointer, _ column: Int32) -> String {

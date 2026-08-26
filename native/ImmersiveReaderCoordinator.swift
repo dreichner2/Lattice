@@ -44,16 +44,18 @@ final class ImmersiveReaderCoordinator {
             let rawTitle = (value as? String)?.trimmingCharacters(in: .whitespacesAndNewlines) ?? ""
             let title = rawTitle.isEmpty ? fileURL.deletingPathExtension().lastPathComponent : rawTitle
             guard let relativePath = LibraryIdentity.relativePath(for: fileURL, root: self.libraryRoot) else { return }
+            let previous = try? self.store.document(path: relativePath)
             let fallbackRecord = ReaderDocument(
-                id: LibraryIdentity.documentID(workID: nil, path: relativePath),
-                workID: nil,
+                id: LibraryIdentity.documentID(workID: previous?.workID, path: relativePath, sha256: previous?.sha256),
+                workID: previous?.workID,
                 path: relativePath,
-                sha256: nil,
+                sha256: previous?.sha256,
                 title: title,
                 format: "pdf",
                 updatedAt: Date().timeIntervalSince1970
             )
-            let record = (try? self.store.document(path: relativePath)) ?? fallbackRecord
+            try? self.store.migrateLegacyDocuments(to: fallbackRecord)
+            let record = (try? self.store.document(id: fallbackRecord.id)) ?? fallbackRecord
             try? self.store.upsertDocument(record)
             self.pdfReader?.close(notifyWeb: false)
             let reader = NativePDFReaderController(

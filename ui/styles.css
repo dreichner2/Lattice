@@ -707,7 +707,7 @@ body.import-open {
 
 .import-shell {
   position: fixed;
-  z-index: 150;
+  z-index: 190;
   inset: 0;
   visibility: hidden;
   opacity: 0;

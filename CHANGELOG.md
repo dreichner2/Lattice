@@ -1,5 +1,47 @@
 # Changelog
 
+## 2.4.0 — 2026-08-25
+
+### Added
+
+- Reading Desk: a calm, collapsible workspace beside PDF and EPUB books with
+  local Markdown notes, one-click quote capture, exact-location bookmarks, and
+  an embedded compact Study Lab. Notes and bookmarks stay attached to the
+  current work without covering the page.
+- Audio shelf and player: import local MP3, M4A, WAV, and FLAC files, then keep
+  listening while reading, taking notes, or working in Study Lab.
+- Study Workspace: a complete responsive redesign with first-class Markdown,
+  LaTeX, and persistent Python cells; clearer notebook navigation and execution
+  state; and compact layouts that remain useful in a reader split view.
+
+### Changed
+
+- PDF and EPUB reading state now records precise page or EPUB locations and
+  stable edition identities, with migration for existing path-based records.
+- Study autosave now retries transient failures, preserves the latest local
+  edit during conflicts and page exit, and commits legacy notebook migrations
+  transactionally.
+- Imports, readers, Study Lab, and audio now share one responsive workspace
+  vocabulary across the browser, macOS app, and packaged Windows app.
+
+### Fixed
+
+- PDF Reader controls remain usable at compact widths and always expose the
+  Audio and Reading Desk controls without collapsing the document viewport.
+- Closing the Reading Desk now removes it from focus and accessibility order;
+  import and Tutor overlays similarly isolate the content behind them.
+- Editing a captured note preserves its original source label and reading
+  location, while PDF quote capture records the selected page.
+- Study cell save failures retain the failing cell identity, and changing an
+  import from Audio back to another kind cannot leave the Audio picker active.
+
+### Security
+
+- Audio imports use bounded validation, safe local paths, and byte-range
+  responses, and remain outside Tutor and Codex source-access boundaries.
+- macOS and Windows update validation now requires the Reading Desk, Study
+  Workspace, and audio runtime assets introduced in 2.4.0.
+
 ## 2.3.3 — 2026-08-25
 
 ### Added

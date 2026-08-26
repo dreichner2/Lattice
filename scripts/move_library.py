@@ -150,7 +150,14 @@ def _validate_library_root(source: Path, folder_id: str) -> None:
         raise LibraryMoveError("The current library root is missing or is an unsupported link.")
 
     required_files = ("CATALOG.md", "library-layout.json", "library-taxonomy.json")
-    required_directories = ("metadata", "ui", "books", "papers", "lectures")
+    required_directories = (
+        "metadata",
+        "ui",
+        "books",
+        "papers",
+        "lectures",
+        "audio",
+    )
     for relative in required_files:
         if not (source / relative).is_file():
             raise LibraryMoveError(f"The current library is missing {relative}.")

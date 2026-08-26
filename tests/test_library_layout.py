@@ -34,6 +34,7 @@ class LibraryLayoutTests(unittest.TestCase):
                 "papers",
                 "papers/mit-6006",
                 "lectures",
+                "audio",
             ],
         )
 
@@ -49,6 +50,7 @@ class LibraryLayoutTests(unittest.TestCase):
                 "books",
                 "papers",
                 "lectures",
+                "audio",
             },
         )
         self.assertTrue(

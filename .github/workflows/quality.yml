@@ -17,6 +17,7 @@ on:
       - "books/**"
       - "papers/**"
       - "lectures/**"
+      - "audio/**"
       - ".github/workflows/quality.yml"
   pull_request:
     paths:
@@ -32,6 +33,7 @@ on:
       - "books/**"
       - "papers/**"
       - "lectures/**"
+      - "audio/**"
       - ".github/workflows/quality.yml"
   workflow_dispatch:
 
@@ -74,6 +76,8 @@ jobs:
           node --check ui/tutor.js
           node --check ui/study-lab.js
           node --check ui/pdf-reader.js
+          node --check ui/reader-desk.js
+          node --check ui/audio-player.js
           node --check native/ImmersiveEPUB.js
           node --check native/LibraryWorkspace.js
           node --check native/SharedReaderState.js

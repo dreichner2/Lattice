@@ -95,6 +95,7 @@ SESSION_IDLE_SECONDS = 2 * 60 * 60
 SESSION_LIMIT = 24
 INDEX_SCHEMA_VERSION = 1
 EXTRACTOR_VERSION = 1
+TUTOR_INDEXABLE_LIBRARY_SUFFIXES = frozenset({".epub", ".pdf", ".txt"})
 
 INDEXABLE_ARCHIVE_SUFFIXES = frozenset(
     {
@@ -477,6 +478,8 @@ def extract_source_chunks(path: Path, stop: threading.Event) -> list[dict[str, s
         [".tar", ".xz"],
     ):
         return _extract_tar(path, stop)
+    if suffix not in {".md", ".txt"}:
+        raise RuntimeError("This source format is not text-indexable")
     if path.stat().st_size > MAX_SOURCE_TEXT_CHARS:
         raise RuntimeError("Plain-text source exceeds the safe indexing limit")
     text = _decode_text(path.read_bytes())
@@ -1157,6 +1160,8 @@ class TutorManager:
                 if not file.get("exists") or file.get("tutorEligible") is False:
                     continue
                 relative = str(file.get("path") or "")
+                if PurePosixPath(relative).suffix.lower() not in TUTOR_INDEXABLE_LIBRARY_SUFFIXES:
+                    continue
                 if _contained_source_path(self.root, relative) is None:
                     continue
                 sources.append(

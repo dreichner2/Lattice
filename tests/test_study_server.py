@@ -165,11 +165,11 @@ class StudyServerTests(unittest.TestCase):
                 self.assertEqual(status, 403)
                 self.assertIn("private Study token", payload["error"])
 
-    def test_status_lists_only_latex_and_python_kinds(self) -> None:
+    def test_status_lists_supported_study_cell_kinds(self) -> None:
         status, payload = self.get("/api/study/status")
         self.assertEqual(status, 200)
         self.assertTrue(payload["available"])
-        self.assertEqual(payload["cellKinds"], ["latex", "python"])
+        self.assertEqual(payload["cellKinds"], ["markdown", "latex", "python"])
 
     def test_full_notebook_lifecycle_over_http(self) -> None:
         status, created = self.post(
@@ -254,6 +254,21 @@ class StudyServerTests(unittest.TestCase):
             },
         )
         self.assertEqual(status, 400)
+
+    def test_markdown_cell_kind_is_accepted(self) -> None:
+        status, created = self.post("/api/study/notebooks", {"title": "Reading notes"})
+        self.assertEqual(status, 201)
+        notebook = created["notebook"]
+        status, body = self.post(
+            f"/api/study/notebook/{notebook['id']}/cells",
+            {
+                "kind": "markdown",
+                "source": "## Key idea\n\nWrite it in your own words.",
+                "baseUpdatedAt": notebook["updatedAt"],
+            },
+        )
+        self.assertEqual(status, 200)
+        self.assertEqual(body["cell"]["kind"], "markdown")
 
     def test_link_requires_revision_and_exact_catalog_path(self) -> None:
         status, created = self.post("/api/study/notebooks", {"title": "Links"})

@@ -92,6 +92,7 @@ final class ReaderBridge: NSObject, WKScriptMessageHandlerWithReply {
 
         case "document.upsert":
             let document = try document(from: payload)
+            try store.migrateLegacyDocuments(to: document)
             try store.upsertDocument(document)
             try activate(documentID: document.id)
             return try object(document)

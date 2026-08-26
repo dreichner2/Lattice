@@ -38,7 +38,7 @@ class WindowsOnboardingSetupTests(unittest.TestCase):
             self.entry,
         )
         self.assertIn('-LibraryRoot "%~dp0..\\.."', self.launcher)
-        self.assertRegex(self.entry, r'\$LatticeVersion\s*=\s*"v2\.3\.3"')
+        self.assertRegex(self.entry, r'\$LatticeVersion\s*=\s*"v2\.4\.0"')
         self.assertIn("-PlanOnly", self.guide)
         self.assertIn("Lattice-Windows-win-x64.zip", self.module)
         self.assertIn(".sha256", self.module)

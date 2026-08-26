@@ -1,9 +1,49 @@
-/* Study Lab — classic Jupyter-style notebooks with explicit latex|python cells.
-   No automatic segmentation: the user picks the cell kind, always. */
+/* Lattice Study Workspace — local notebooks for prose, math, and trusted Python. */
 (() => {
   "use strict";
 
+  function createSaveTracker() {
+    const dirty = new Set();
+    let failure = null;
+    return {
+      markDirty(cellId) {
+        if (cellId) dirty.add(cellId);
+      },
+      markFailed(cellId, error) {
+        if (cellId) dirty.add(cellId);
+        failure = { cellId: cellId || "", error };
+      },
+      markSucceeded(cellId, complete = true) {
+        if (complete && cellId) dirty.delete(cellId);
+        if (failure?.cellId === cellId) failure = null;
+      },
+      reset() {
+        dirty.clear();
+        failure = null;
+      },
+      dirtyIds() {
+        return [...dirty];
+      },
+      shouldWarn(pending = 0) {
+        return dirty.size > 0 || pending > 0 || Boolean(failure);
+      },
+      get dirtyCount() { return dirty.size; },
+      get failure() { return failure; },
+    };
+  }
+
+  if (typeof module !== "undefined" && module.exports) {
+    module.exports = { createSaveTracker };
+  }
+  if (typeof window === "undefined" || typeof document === "undefined") return;
+
   const PRIVATE_ACCESS_STORAGE = "lattice:private-access";
+  const THEME_STORAGE = "cs-library:theme";
+  const RAIL_STORAGE = "lattice:study-rail-collapsed";
+  const EMBED_VERSION = 1;
+  const EMBED_READY = "lattice-study-ready";
+  const EMBED_CONTEXT = "lattice-study-context";
+  const EMBED_STATUS = "lattice-study-status";
 
   function capturePrivateAccessToken() {
     try {
@@ -27,6 +67,14 @@
     }
   }
 
+  function readBooleanStorage(key) {
+    try { return window.localStorage.getItem(key) === "true"; } catch { return false; }
+  }
+
+  function isEmbeddedFrame() {
+    try { return window.parent !== window; } catch { return true; }
+  }
+
   const state = {
     token: "",
     privateToken: capturePrivateAccessToken(),
@@ -36,9 +84,16 @@
     revision: "",
     saving: new Map(),
     saveQueue: Promise.resolve(),
-    saveError: null,
+    saveTracker: createSaveTracker(),
     pendingMutations: 0,
     catalogMaterials: [],
+    notebookQuery: "",
+    railCollapsed: readBooleanStorage(RAIL_STORAGE),
+    embedded: isEmbeddedFrame(),
+    embedContext: null,
+    contextResolving: false,
+    resolvedContextKey: "",
+    initialized: false,
   };
 
   const elements = {};
@@ -46,15 +101,30 @@
   function cacheElements() {
     for (const id of [
       "studyHeading",
+      "studySub",
+      "workspaceHeader",
       "editorLayout",
       "emptyLayout",
+      "studySidebar",
       "notebookList",
+      "noSearchResults",
+      "notebookSearch",
+      "sidebarCount",
       "cellStack",
+      "notebookStart",
       "notebookTitle",
+      "notebookCellCount",
       "workLink",
       "conflictFlag",
+      "saveStatus",
+      "saveStatusText",
+      "railToggleButton",
       "newNotebookButton",
+      "railNewButton",
       "emptyNewButton",
+      "readerContext",
+      "readerContextTitle",
+      "readerContextPath",
       "linkDialog",
       "linkPathInput",
       "linkSaveButton",
@@ -64,8 +134,60 @@
       "newNotebookTitleInput",
       "deleteNotebookDialog",
       "deleteNotebookName",
+      "shortcutButton",
+      "shortcutDialog",
+      "restartKernelButton",
     ]) {
       elements[id] = document.getElementById(id);
+    }
+  }
+
+  function applyTheme(theme) {
+    const resolved = theme === "light" || theme === "dark"
+      ? theme
+      : window.matchMedia("(prefers-color-scheme: dark)").matches ? "dark" : "light";
+    document.documentElement.dataset.theme = resolved;
+  }
+
+  function initializeTheme() {
+    let saved = "";
+    try { saved = window.localStorage.getItem(THEME_STORAGE) || ""; } catch { /* unavailable */ }
+    applyTheme(saved);
+  }
+
+  function hasPendingWork() {
+    return state.saving.size > 0
+      || state.pendingMutations > 0
+      || state.saveTracker.dirtyCount > 0;
+  }
+
+  function postEmbeddedStatus(overrides = {}) {
+    if (!state.embedded) return;
+    const dirty = hasPendingWork();
+    window.parent.postMessage({
+      type: EMBED_STATUS,
+      version: EMBED_VERSION,
+      dirty,
+      saved: !dirty && !state.saveTracker.failure,
+      ...(state.currentId ? { notebookId: state.currentId } : {}),
+      ...overrides,
+    }, window.location.origin);
+  }
+
+  function setSaveStatus(kind, message) {
+    if (!elements.saveStatus) return;
+    elements.saveStatus.className = `save-status is-${kind}`;
+    elements.saveStatusText.textContent = message;
+    postEmbeddedStatus({ saved: kind === "saved" && !state.saveTracker.failure });
+  }
+
+  function settleSaveStatus() {
+    if (state.saveTracker.failure) {
+      setSaveStatus("error", "Could not save");
+    } else if (hasPendingWork()) {
+      setSaveStatus("saving", "Saving…");
+    } else {
+      setSaveStatus("saved", "Saved locally");
     }
   }
 
@@ -84,30 +206,41 @@
   }
 
   function announce(message, isError = false) {
-    // Quiet inline status in the toolbar subtitle; errors stay visible.
-    const sub = document.getElementById("studySub");
-    sub.textContent = message;
-    sub.style.color = isError ? "var(--danger)" : "";
-    if (!isError) {
-      clearTimeout(announce.timer);
-      announce.timer = setTimeout(() => { sub.textContent = "LaTeX & Python notes linked to your library"; }, 2400);
-    }
+    elements.studySub.textContent = message;
+    elements.studySub.classList.toggle("is-error", isError);
+    if (isError) return;
+    clearTimeout(announce.timer);
+    announce.timer = setTimeout(() => {
+      elements.studySub.textContent = state.embedded
+        ? "Notes that stay beside your reading."
+        : "Think on the page. Keep the source close.";
+      elements.studySub.classList.remove("is-error");
+    }, 2600);
   }
 
-  function handleStudyError(error, blockSaves = false) {
-    if (blockSaves) state.saveError = error;
+  function handleStudyError(error, blockSaves = false, cell = null) {
+    if (blockSaves) state.saveTracker.markFailed(cell?.id || "", error);
     if (/another window|fresh notebook revision/i.test(error.message)) {
       elements.conflictFlag.hidden = false;
+      setSaveStatus("conflict", "Needs review");
+    } else {
+      setSaveStatus("error", blockSaves ? "Could not save" : "Action failed");
     }
     announce(error.message, true);
   }
 
   function enqueueMutation(operation) {
     state.pendingMutations += 1;
+    setSaveStatus("saving", "Saving…");
     const pending = state.saveQueue.then(operation);
+    let failed = false;
     state.saveQueue = pending
-      .catch(() => undefined)
-      .finally(() => { state.pendingMutations -= 1; });
+      .catch(() => { failed = true; })
+      .finally(() => {
+        state.pendingMutations -= 1;
+        if (failed) postEmbeddedStatus({ saved: false });
+        else settleSaveStatus();
+      });
     return pending;
   }
 
@@ -118,16 +251,191 @@
       .forEach((control) => { control.disabled = disabled; });
   }
 
-  // ------------------------------------------------------------------ katex
+  // ---------------------------------------------------------- safe rendering
 
-  function renderLatex(container, source) {
-    container.classList.add("cell-preview");
-    container.innerHTML = "";
+  function renderInlineMarkdown(container, source) {
+    const pattern = /(`[^`\n]+`|\*\*[^*\n]+\*\*|\*[^*\n]+\*|\$[^$\n]+\$|\[[^\]\n]+\]\(https?:\/\/[^\s)]+\))/g;
+    let cursor = 0;
+    for (const match of source.matchAll(pattern)) {
+      if (match.index > cursor) container.append(document.createTextNode(source.slice(cursor, match.index)));
+      const token = match[0];
+      if (token.startsWith("`")) {
+        const code = document.createElement("code");
+        code.textContent = token.slice(1, -1);
+        container.append(code);
+      } else if (token.startsWith("**")) {
+        const strong = document.createElement("strong");
+        strong.textContent = token.slice(2, -2);
+        container.append(strong);
+      } else if (token.startsWith("*")) {
+        const emphasis = document.createElement("em");
+        emphasis.textContent = token.slice(1, -1);
+        container.append(emphasis);
+      } else if (token.startsWith("$")) {
+        const math = document.createElement("span");
+        try {
+          window.katex.render(token.slice(1, -1), math, {
+            displayMode: false,
+            throwOnError: false,
+            strict: false,
+            trust: false,
+          });
+        } catch {
+          math.textContent = token;
+        }
+        container.append(math);
+      } else {
+        const parts = token.match(/^\[([^\]]+)\]\((https?:\/\/[^\s)]+)\)$/);
+        if (parts) {
+          const link = document.createElement("a");
+          link.textContent = parts[1];
+          link.href = parts[2];
+          link.target = "_blank";
+          link.rel = "noopener noreferrer";
+          container.append(link);
+        } else {
+          container.append(document.createTextNode(token));
+        }
+      }
+      cursor = match.index + token.length;
+    }
+    if (cursor < source.length) container.append(document.createTextNode(source.slice(cursor)));
+  }
+
+  function isMarkdownBoundary(line) {
+    return !line.trim()
+      || /^#{1,6}\s/.test(line)
+      || /^```/.test(line)
+      || /^\$\$/.test(line)
+      || /^>\s?/.test(line)
+      || /^\s*(?:[-+*]|\d+\.)\s+/.test(line)
+      || /^\s*(?:---+|___+|\*\*\*+)\s*$/.test(line);
+  }
+
+  function renderMarkdown(container, source) {
+    container.classList.add("cell-preview", "markdown-preview");
+    container.replaceChildren();
     if (!source.trim()) {
       const hint = document.createElement("p");
       hint.className = "cell-preview-empty";
-      hint.style.cssText = "color:var(--faint);font-size:11px;margin:0;";
-      hint.textContent = "Empty LaTeX cell";
+      hint.textContent = "An empty note — choose Edit and capture the idea in your own words.";
+      container.append(hint);
+      return;
+    }
+
+    const lines = source.replace(/\r\n?/g, "\n").split("\n");
+    let index = 0;
+    while (index < lines.length) {
+      const line = lines[index];
+      if (!line.trim()) { index += 1; continue; }
+
+      const fence = line.match(/^```\s*([^\s`]*)/);
+      if (fence) {
+        const codeLines = [];
+        index += 1;
+        while (index < lines.length && !/^```\s*$/.test(lines[index])) {
+          codeLines.push(lines[index]);
+          index += 1;
+        }
+        if (index < lines.length) index += 1;
+        const pre = document.createElement("pre");
+        const code = document.createElement("code");
+        if (fence[1]) code.dataset.language = fence[1];
+        code.textContent = codeLines.join("\n");
+        pre.append(code);
+        container.append(pre);
+        continue;
+      }
+
+      if (/^\$\$/.test(line)) {
+        const mathLines = [line.replace(/^\$\$\s*/, "")];
+        let closed = /\$\$\s*$/.test(mathLines[0]);
+        if (closed) mathLines[0] = mathLines[0].replace(/\$\$\s*$/, "");
+        index += 1;
+        while (!closed && index < lines.length) {
+          const next = lines[index];
+          closed = /\$\$\s*$/.test(next);
+          mathLines.push(next.replace(/\$\$\s*$/, ""));
+          index += 1;
+        }
+        const math = document.createElement("div");
+        math.className = "markdown-math";
+        try {
+          window.katex.render(mathLines.join("\n"), math, {
+            displayMode: true,
+            throwOnError: false,
+            strict: false,
+            trust: false,
+          });
+        } catch {
+          math.textContent = `$$${mathLines.join("\n")}$$`;
+        }
+        container.append(math);
+        continue;
+      }
+
+      const heading = line.match(/^(#{1,6})\s+(.+)$/);
+      if (heading) {
+        const node = document.createElement(`h${heading[1].length}`);
+        renderInlineMarkdown(node, heading[2]);
+        container.append(node);
+        index += 1;
+        continue;
+      }
+
+      if (/^\s*(?:---+|___+|\*\*\*+)\s*$/.test(line)) {
+        container.append(document.createElement("hr"));
+        index += 1;
+        continue;
+      }
+
+      if (/^>\s?/.test(line)) {
+        const quoted = [];
+        while (index < lines.length && /^>\s?/.test(lines[index])) {
+          quoted.push(lines[index].replace(/^>\s?/, ""));
+          index += 1;
+        }
+        const quote = document.createElement("blockquote");
+        renderInlineMarkdown(quote, quoted.join(" "));
+        container.append(quote);
+        continue;
+      }
+
+      const listMatch = line.match(/^\s*((?:[-+*])|(?:\d+\.))\s+(.+)$/);
+      if (listMatch) {
+        const ordered = /\d+\./.test(listMatch[1]);
+        const list = document.createElement(ordered ? "ol" : "ul");
+        while (index < lines.length) {
+          const itemMatch = lines[index].match(/^\s*((?:[-+*])|(?:\d+\.))\s+(.+)$/);
+          if (!itemMatch || /\d+\./.test(itemMatch[1]) !== ordered) break;
+          const item = document.createElement("li");
+          renderInlineMarkdown(item, itemMatch[2]);
+          list.append(item);
+          index += 1;
+        }
+        container.append(list);
+        continue;
+      }
+
+      const paragraphLines = [line.trim()];
+      index += 1;
+      while (index < lines.length && !isMarkdownBoundary(lines[index])) {
+        paragraphLines.push(lines[index].trim());
+        index += 1;
+      }
+      const paragraph = document.createElement("p");
+      renderInlineMarkdown(paragraph, paragraphLines.join(" "));
+      container.append(paragraph);
+    }
+  }
+
+  function renderLatex(container, source) {
+    container.classList.add("cell-preview", "latex-preview");
+    container.replaceChildren();
+    if (!source.trim()) {
+      const hint = document.createElement("p");
+      hint.className = "cell-preview-empty";
+      hint.textContent = "An empty math cell";
       container.append(hint);
       return;
     }
@@ -138,7 +446,7 @@
         strict: false,
         trust: false,
       });
-    } catch (error) {
+    } catch {
       const pre = document.createElement("pre");
       pre.textContent = source;
       container.append(pre);
@@ -146,93 +454,112 @@
   }
 
   function renderPythonPreview(container, source, hasRun) {
-    container.classList.add("cell-preview");
-    container.innerHTML = "";
+    container.classList.add("cell-preview", "python-preview");
+    container.replaceChildren();
     const code = document.createElement("code");
-    code.textContent = source && source.trim() ? source : "(empty python cell)";
+    code.textContent = source && source.trim() ? source : "# An empty Python cell";
     container.append(code);
     const note = document.createElement("p");
     note.className = "cell-run-note";
     note.textContent = hasRun
       ? "Ran — no output was produced"
-      : "Press Run ▶ to execute this cell in the Python kernel";
+      : "Run with ⌘ Enter when you are ready";
     container.append(note);
   }
 
   // ------------------------------------------------------------- rendering
 
+  function notebookLabel(notebook) {
+    return notebook.workTitle || notebook.workPath || "Unlinked notebook";
+  }
+
   function renderNotebookList() {
-    const list = elements.notebookList;
-    list.replaceChildren(
-      ...state.notebooks.map((notebook) => {
+    const query = state.notebookQuery.trim().toLocaleLowerCase();
+    const filtered = state.notebooks.filter((notebook) => (
+      `${notebook.title} ${notebook.workTitle || ""} ${notebook.workPath || ""}`
+        .toLocaleLowerCase()
+        .includes(query)
+    ));
+    elements.notebookList.replaceChildren(
+      ...filtered.map((notebook) => {
         const item = document.createElement("button");
         item.type = "button";
         item.className = `notebook-item${notebook.id === state.currentId ? " is-active" : ""}`;
-        const name = document.createElement("span");
+        item.setAttribute("aria-current", notebook.id === state.currentId ? "page" : "false");
+        const copy = document.createElement("span");
+        copy.className = "notebook-item-copy";
+        const name = document.createElement("strong");
         name.textContent = notebook.title;
-        const count = document.createElement("small");
+        const context = document.createElement("small");
+        context.textContent = notebookLabel(notebook);
+        copy.append(name, context);
+        const count = document.createElement("span");
+        count.className = "notebook-item-count";
         count.textContent = String(notebook.cellCount);
-        item.append(name, count);
+        count.setAttribute("aria-label", `${notebook.cellCount} cells`);
+        item.append(copy, count);
         item.addEventListener("click", () => void openNotebook(notebook.id));
         return item;
       }),
     );
+    elements.noSearchResults.hidden = filtered.length > 0 || !query;
+    elements.sidebarCount.textContent = `${state.notebooks.length} notebook${state.notebooks.length === 1 ? "" : "s"}`;
+  }
+
+  function cellKindLabel(kind) {
+    if (kind === "markdown") return "Note";
+    if (kind === "latex") return "Math";
+    return "Python";
+  }
+
+  function makeCellAction(label, action, ariaLabel = label) {
+    const button = document.createElement("button");
+    button.type = "button";
+    button.className = "cell-action";
+    button.textContent = label;
+    button.dataset.action = action;
+    button.setAttribute("aria-label", ariaLabel);
+    return button;
   }
 
   function cellBar(cell) {
     const bar = document.createElement("div");
     bar.className = "cell-bar";
+    const identity = document.createElement("div");
+    identity.className = "cell-identity";
+    const grip = document.createElement("span");
+    grip.className = "cell-grip";
+    grip.textContent = "⠿";
+    grip.setAttribute("aria-hidden", "true");
     const chip = document.createElement("span");
     chip.className = "cell-kind-chip";
-    chip.textContent = cell.kind;
-    bar.append(chip);
+    chip.textContent = cellKindLabel(cell.kind);
+    identity.append(grip, chip);
+
     const actions = document.createElement("div");
     actions.className = "cell-actions";
     actions.dataset.cellId = cell.id;
 
     if (cell.kind === "python") {
-      const runButton = document.createElement("button");
-      runButton.type = "button";
-      runButton.className = "cell-action cell-run";
-      runButton.textContent = "Run ▶";
-      runButton.dataset.action = "run";
+      const runButton = makeCellAction("Run", "run", "Run Python cell");
+      runButton.classList.add("cell-run");
       actions.append(runButton);
     }
-
-    const toggle = document.createElement("button");
-    toggle.type = "button";
-    toggle.className = "cell-action";
-    toggle.textContent = cell.mode === "edit" ? "Preview" : "Edit";
-    toggle.dataset.action = "toggle";
-    actions.append(toggle);
-
-    const up = document.createElement("button");
-    up.type = "button";
-    up.className = "cell-action";
-    up.textContent = "↑";
+    actions.append(makeCellAction(cell.mode === "edit" ? "Preview" : "Edit", "toggle"));
+    const up = makeCellAction("↑", "up", "Move cell up");
     up.disabled = cell.position === 0;
-    up.setAttribute("aria-label", "Move cell up");
-    up.dataset.action = "up";
-    actions.append(up);
-
-    const down = document.createElement("button");
-    down.type = "button";
-    down.className = "cell-action";
-    down.textContent = "↓";
+    const down = makeCellAction("↓", "down", "Move cell down");
     down.disabled = cell.position === state.cells.length - 1;
-    down.setAttribute("aria-label", "Move cell down");
-    down.dataset.action = "down";
-    actions.append(down);
-
-    const remove = document.createElement("button");
-    remove.type = "button";
-    remove.className = "cell-action";
-    remove.textContent = "Delete";
-    remove.dataset.action = "delete";
-    actions.append(remove);
-
-    bar.append(actions);
+    const remove = makeCellAction("×", "delete", "Delete cell");
+    remove.classList.add("cell-delete");
+    actions.append(up, down, remove);
+    bar.append(identity, actions);
     return bar;
+  }
+
+  function fitTextarea(textarea) {
+    textarea.style.height = "auto";
+    textarea.style.height = `${Math.max(112, Math.min(textarea.scrollHeight, 520))}px`;
   }
 
   function cellBody(cell) {
@@ -241,16 +568,25 @@
     if (cell.mode === "edit") {
       const editor = document.createElement("textarea");
       editor.value = cell.source;
-      editor.spellcheck = false;
-      editor.placeholder =
-        cell.kind === "latex"
-          ? "\\begin{equation} e^{i\\pi} + 1 = 0 \\end{equation}"
+      editor.dataset.cellId = cell.id;
+      editor.spellcheck = cell.kind === "markdown";
+      editor.setAttribute("aria-label", `Edit ${cellKindLabel(cell.kind)} cell`);
+      editor.setAttribute("aria-keyshortcuts", "Meta+Enter Control+Enter Escape");
+      editor.placeholder = cell.kind === "markdown"
+        ? "Write what this means in your own words…"
+        : cell.kind === "latex"
+          ? "e^{i\\pi} + 1 = 0"
           : "values = [1, 2, 3]\nsum(values)";
       editor.addEventListener("input", () => {
         cell.source = editor.value;
+        fitTextarea(editor);
         scheduleSave(cell);
       });
+      editor.addEventListener("keydown", (event) => handleEditorKeydown(event, cell));
       body.append(editor);
+      window.requestAnimationFrame(() => fitTextarea(editor));
+    } else if (cell.kind === "markdown") {
+      renderMarkdown(body, cell.source);
     } else if (cell.kind === "latex") {
       renderLatex(body, cell.source);
     } else if (cell.outputs && cell.outputs.length) {
@@ -267,36 +603,63 @@
     elements.cellStack.replaceChildren(
       ...state.cells.map((cell) => {
         const wrapper = document.createElement("article");
-        wrapper.className = `cell is-${cell.kind}`;
+        wrapper.className = `cell is-${cell.kind}${cell.mode === "edit" ? " is-editing" : ""}`;
         wrapper.dataset.cellId = cell.id;
         wrapper.append(cellBar(cell), cellBody(cell));
         return wrapper;
       }),
     );
-    const adder = document.querySelector(".cell-adder");
-    adder.hidden = !state.currentId;
+    document.querySelector(".cell-adder").hidden = !state.currentId;
+    elements.notebookStart.hidden = !state.currentId || state.cells.length > 0;
+    elements.notebookCellCount.textContent = `${state.cells.length} cell${state.cells.length === 1 ? "" : "s"}`;
   }
 
   function renderWorkLink() {
     const notebook = state.notebooks.find((item) => item.id === state.currentId);
-    const link = notebook && notebook.workPath;
-    elements.workLink.textContent = link ? `Linked: ${link} · change` : "Link a library work";
+    const label = notebook?.workTitle || notebook?.workPath;
+    elements.workLink.textContent = label ? `Linked to ${label}` : "Link a library work";
+    elements.workLink.title = notebook?.workPath || "";
+  }
+
+  function renderReaderContext() {
+    const context = state.embedContext;
+    elements.readerContext.hidden = !state.embedded || !context;
+    if (!context) return;
+    elements.readerContextTitle.textContent = context.workTitle || "Current reading";
+    elements.readerContextPath.textContent = context.workPath || "";
   }
 
   function refreshCurrentCellCount() {
     const notebook = state.notebooks.find((item) => item.id === state.currentId);
     if (notebook) notebook.cellCount = state.cells.length;
     renderNotebookList();
+    renderCells();
+  }
+
+  function applyRailState() {
+    document.body.classList.toggle("rail-collapsed", state.railCollapsed);
+    elements.railToggleButton.setAttribute("aria-expanded", String(!state.railCollapsed));
+    elements.railToggleButton.setAttribute(
+      "aria-label",
+      state.railCollapsed ? "Expand notebook rail" : "Collapse notebook rail",
+    );
+  }
+
+  function toggleRail() {
+    state.railCollapsed = !state.railCollapsed;
+    try { window.localStorage.setItem(RAIL_STORAGE, String(state.railCollapsed)); } catch { /* unavailable */ }
+    applyRailState();
   }
 
   async function openNotebook(notebookId) {
+    if (notebookId === state.currentId && state.cells.length) return;
     setEditorDisabled(true);
     try {
       await flushPendingSaves();
       const payload = await api(`/api/study/notebook/${encodeURIComponent(notebookId)}`);
       state.currentId = notebookId;
       state.revision = payload.notebook.updatedAt;
-      state.saveError = null;
+      state.saveTracker.reset();
       state.cells = payload.cells.map((cell) => ({ ...cell, mode: "preview" }));
       elements.notebookTitle.value = payload.notebook.title;
       elements.conflictFlag.hidden = true;
@@ -305,6 +668,7 @@
       renderNotebookList();
       renderWorkLink();
       renderCells();
+      settleSaveStatus();
     } catch (error) {
       handleStudyError(error);
     } finally {
@@ -312,50 +676,88 @@
     }
   }
 
-  async function refreshList() {
+  async function refreshList({ openFirst = true } = {}) {
     const payload = await api("/api/study/notebooks");
     state.notebooks = payload.notebooks;
     renderNotebookList();
-    if (!state.currentId && state.notebooks.length) await openNotebook(state.notebooks[0].id);
+    if (openFirst && !state.currentId && state.notebooks.length && !state.embedContext) {
+      await openNotebook(state.notebooks[0].id);
+    }
+    if (!state.notebooks.length && !state.currentId) {
+      elements.editorLayout.hidden = true;
+      elements.emptyLayout.hidden = false;
+    }
   }
 
   // ------------------------------------------------------------ mutations
 
-  function showNewNotebookDialog() {
+  function selectStarter(starter) {
+    const input = elements.newNotebookDialog.querySelector(`input[name="starter"][value="${starter}"]`);
+    if (input) input.checked = true;
+  }
+
+  function showNewNotebookDialog(starter = "notes") {
     elements.newNotebookDialog.returnValue = "";
-    elements.newNotebookTitleInput.value = "Untitled notebook";
+    elements.newNotebookTitleInput.value = state.embedContext?.workTitle
+      ? `${state.embedContext.workTitle} notes`.slice(0, 200)
+      : "Untitled notebook";
+    selectStarter(starter);
     elements.newNotebookDialog.showModal();
     elements.newNotebookTitleInput.select();
   }
 
-  async function createNotebook() {
+  function starterCells(starter) {
+    if (starter === "blank") return [];
+    if (starter === "worked") return [
+      { kind: "markdown", source: "" },
+      { kind: "latex", source: "" },
+    ];
+    if (starter === "experiment") return [
+      { kind: "markdown", source: "" },
+      { kind: "python", source: "" },
+    ];
+    return [{ kind: "markdown", source: "" }];
+  }
+
+  async function createNotebook({ title, starter = "notes", workPath = "" } = {}) {
     try {
-      const title = elements.newNotebookTitleInput.value.trim();
-      if (!title) return;
+      const resolvedTitle = (title || elements.newNotebookTitleInput.value).trim();
+      if (!resolvedTitle) return null;
       await flushPendingSaves();
       const created = await enqueueMutation(() => api("/api/study/notebooks", {
         method: "POST",
         mutate: true,
-        body: JSON.stringify({ title }),
+        body: JSON.stringify({ title: resolvedTitle }),
       }));
-      await refreshList();
+      await refreshList({ openFirst: false });
       await openNotebook(created.notebook.id);
+      if (workPath) await linkCurrentNotebook(workPath);
+      for (const cell of starterCells(starter)) {
+        await addCell(cell.kind, cell.source, { focus: false });
+      }
+      const firstEditor = elements.cellStack.querySelector("textarea");
+      if (firstEditor) firstEditor.focus();
+      return created.notebook;
     } catch (error) {
       handleStudyError(error);
+      return null;
     }
   }
 
   function scheduleSave(cell) {
+    state.saveTracker.markDirty(cell.id);
     const prior = state.saving.get(cell.id);
     if (prior) clearTimeout(prior.timer);
     const timer = setTimeout(() => {
       state.saving.delete(cell.id);
-      void persistCell(cell).catch((error) => handleStudyError(error, true));
+      void persistCell(cell).catch((error) => handleStudyError(error, true, cell));
     }, 650);
     state.saving.set(cell.id, { timer, cell });
+    setSaveStatus("saving", "Saving…");
   }
 
   function persistCell(cell) {
+    const source = cell.source;
     return enqueueMutation(async () => {
       if (cell.notebookId !== state.currentId) {
         throw new Error("Notebook changed before the pending cell save completed");
@@ -365,29 +767,43 @@
         mutate: true,
         body: JSON.stringify({
           cellId: cell.id,
-          source: cell.source,
+          source,
           baseUpdatedAt: state.revision,
         }),
       });
       state.revision = result.notebookUpdatedAt;
       cell.updatedAt = result.cell.updatedAt;
-      announce("Saved");
+      state.saveTracker.markSucceeded(cell.id, cell.source === source);
+      announce("Saved locally");
       return result;
     });
   }
 
   async function flushPendingSaves() {
-    if (state.saveError) throw state.saveError;
-    while (state.saving.size) {
+    while (state.saving.size || state.saveTracker.dirtyCount) {
       const pending = [...state.saving.values()];
       state.saving.clear();
+      const cells = new Map(pending.map((entry) => [entry.cell.id, entry.cell]));
+      for (const cellId of state.saveTracker.dirtyIds()) {
+        const cell = state.cells.find((item) => item.id === cellId);
+        if (cell) cells.set(cell.id, cell);
+      }
+      if (!cells.size) break;
       for (const entry of pending) {
         clearTimeout(entry.timer);
-        await persistCell(entry.cell);
+      }
+      for (const cell of cells.values()) {
+        try {
+          await persistCell(cell);
+        } catch (error) {
+          handleStudyError(error, true, cell);
+          throw error;
+        }
       }
     }
     await state.saveQueue;
-    if (state.saveError) throw state.saveError;
+    if (state.saveTracker.failure) throw state.saveTracker.failure.error;
+    settleSaveStatus();
   }
 
   async function moveCell(cellId, direction) {
@@ -424,14 +840,13 @@
       state.cells = state.cells.filter((cell) => cell.id !== cellId);
       state.cells.forEach((cell, position) => { cell.position = position; });
       refreshCurrentCellCount();
-      renderCells();
     } catch (error) {
       handleStudyError(error);
     }
   }
 
-  async function addCell(kind) {
-    if (!state.currentId) return;
+  async function addCell(kind = "markdown", source = "", { focus = true } = {}) {
+    if (!state.currentId || !["markdown", "latex", "python"].includes(kind)) return null;
     try {
       await flushPendingSaves();
       const result = await enqueueMutation(() => api(`/api/study/notebook/${encodeURIComponent(state.currentId)}/cells`, {
@@ -439,23 +854,26 @@
         mutate: true,
         body: JSON.stringify({
           kind,
-          source: "",
+          source,
           baseUpdatedAt: state.revision,
         }),
       }));
       state.revision = result.notebookUpdatedAt;
       state.cells.push({ ...result.cell, mode: "edit" });
       refreshCurrentCellCount();
-      renderCells();
-      const editors = elements.cellStack.querySelectorAll("textarea");
-      if (editors.length) editors[editors.length - 1].focus();
+      if (focus) {
+        const editor = elements.cellStack.querySelector(`[data-cell-id="${result.cell.id}"] textarea`);
+        editor?.focus();
+      }
+      return result.cell;
     } catch (error) {
       handleStudyError(error);
+      return null;
     }
   }
 
   function renderOutputs(container, cell) {
-    container.innerHTML = "";
+    container.replaceChildren();
     const outputs = cell.outputs || [];
     if (!outputs.length) return;
     const wrap = document.createElement("div");
@@ -498,8 +916,6 @@
   }
 
   async function runCell(cell, button) {
-    // If the page lost its notebook context (reload, stale state), reopen
-    // the first notebook instead of failing silently.
     if (!state.currentId && state.notebooks.length) {
       await openNotebook(state.notebooks[0].id);
       const reopened = state.cells.find((item) => item.id === cell.id);
@@ -517,7 +933,6 @@
     button.disabled = true;
     button.textContent = "Running…";
     try {
-      // Save first so the executed source matches what is on disk.
       await flushPendingSaves();
       if (state.currentId !== notebookId) {
         throw new Error("Notebook changed before the cell could run");
@@ -526,10 +941,7 @@
       const result = await api("/api/study/kernel/run", {
         method: "POST",
         mutate: true,
-        body: JSON.stringify({
-          notebookId,
-          source,
-        }),
+        body: JSON.stringify({ notebookId, source }),
       });
       const currentCell = state.currentId === notebookId
         ? state.cells.find((item) => item.id === cell.id)
@@ -540,16 +952,13 @@
         currentCell.mode = "preview";
         renderCells();
       }
-      announce(result.ok ? "Ran without errors" : "Cell raised an error", !result.ok);
+      announce(result.ok ? "Python finished" : "Python raised an error", !result.ok);
     } catch (error) {
       announce(error.message, true);
-      elements.conflictFlag.hidden = false;
-      elements.conflictFlag.textContent = error.message;
-      setTimeout(() => { elements.conflictFlag.hidden = true; }, 6000);
     } finally {
       if (button.isConnected) {
         button.disabled = false;
-        button.textContent = "Run ▶";
+        button.textContent = "Run";
       }
     }
   }
@@ -567,7 +976,7 @@
         for (const cell of state.cells) delete cell.outputs;
         renderCells();
       }
-      announce("Kernel restarted — variables cleared");
+      announce("Python restarted — variables cleared");
     } catch (error) {
       announce(error.message, true);
     }
@@ -587,7 +996,7 @@
       }));
       state.revision = result.notebookUpdatedAt;
       await refreshListPreservingSelection();
-      announce("Renamed");
+      announce("Notebook renamed");
     } catch (error) {
       handleStudyError(error);
     }
@@ -597,9 +1006,9 @@
     const current = state.currentId;
     const payload = await api("/api/study/notebooks");
     state.notebooks = payload.notebooks;
-    renderNotebookList();
     state.currentId = current;
     renderNotebookList();
+    renderWorkLink();
   }
 
   async function deleteNotebook() {
@@ -617,6 +1026,7 @@
       state.currentId = "";
       state.revision = "";
       state.cells = [];
+      state.resolvedContextKey = "";
       await refreshList();
       if (!state.notebooks.length) {
         elements.editorLayout.hidden = true;
@@ -626,6 +1036,24 @@
     } catch (error) {
       handleStudyError(error);
     }
+  }
+
+  async function linkCurrentNotebook(workPath) {
+    if (!state.currentId) return;
+    await flushPendingSaves();
+    const result = await enqueueMutation(() => api(`/api/study/notebook/${encodeURIComponent(state.currentId)}/link`, {
+      method: "POST",
+      mutate: true,
+      body: JSON.stringify({ workPath, baseUpdatedAt: state.revision }),
+    }));
+    state.revision = result.notebookUpdatedAt;
+    const notebook = state.notebooks.find((item) => item.id === state.currentId);
+    if (notebook) {
+      notebook.workPath = result.notebook.workPath;
+      notebook.workTitle = result.notebook.workTitle;
+    }
+    renderNotebookList();
+    renderWorkLink();
   }
 
   function renderLinkOptions() {
@@ -639,11 +1067,183 @@
     );
   }
 
-  // ------------------------------------------------------------------ init
+  // ------------------------------------------------------- reader embedding
+
+  function normalizeEmbedContext(value) {
+    if (!value || typeof value !== "object") return null;
+    const workPath = typeof value.workPath === "string" ? value.workPath.trim() : "";
+    const workTitle = typeof value.workTitle === "string" ? value.workTitle.trim().slice(0, 200) : "";
+    if (!workPath || workPath.length > 1024 || /[\0-\x1f]/.test(workPath)) return null;
+    return {
+      workPath,
+      workTitle,
+      mode: value.mode === "lab" ? "lab" : "notes",
+      compact: value.compact !== false,
+    };
+  }
+
+  function applyEmbeddedPresentation() {
+    document.body.classList.toggle("is-embedded", state.embedded);
+    document.body.classList.toggle("is-compact", Boolean(state.embedContext?.compact));
+    document.body.classList.toggle("reader-notes-mode", state.embedContext?.mode === "notes");
+    renderReaderContext();
+  }
+
+  async function resolveEmbeddedContext() {
+    const context = state.embedContext;
+    if (!state.initialized || !context || state.contextResolving) return;
+    const key = `${context.workPath}\n${context.mode}`;
+    if (state.resolvedContextKey === key && state.currentId) {
+      postEmbeddedStatus();
+      return;
+    }
+    state.contextResolving = true;
+    try {
+      const material = state.catalogMaterials.find((item) => item.path === context.workPath);
+      if (!material) throw new Error("This reader item is not available in the current library.");
+      const linked = state.notebooks.find((notebook) => notebook.workPath === context.workPath);
+      if (linked) {
+        await openNotebook(linked.id);
+      } else {
+        const titleBase = context.workTitle || material.title || "Reading";
+        await createNotebook({
+          title: `${titleBase} notes`.slice(0, 200),
+          starter: "notes",
+          workPath: context.workPath,
+        });
+      }
+      state.resolvedContextKey = key;
+      postEmbeddedStatus({ saved: !hasPendingWork() && !state.saveTracker.failure });
+    } catch (error) {
+      handleStudyError(error);
+      postEmbeddedStatus({ saved: false });
+    } finally {
+      state.contextResolving = false;
+      if (state.embedContext && state.embedContext !== context) {
+        void resolveEmbeddedContext();
+      }
+    }
+  }
+
+  function handleEmbeddedMessage(event) {
+    if (!state.embedded) return;
+    if (event.origin !== window.location.origin || event.source !== window.parent) return;
+    const message = event.data;
+    if (!message || message.type !== EMBED_CONTEXT || message.version !== EMBED_VERSION) return;
+    const context = normalizeEmbedContext(message.context);
+    if (!context) {
+      announce("The reader sent an invalid study context", true);
+      postEmbeddedStatus({ saved: false });
+      return;
+    }
+    state.embedContext = context;
+    if (message.context.theme === "light" || message.context.theme === "dark") {
+      applyTheme(message.context.theme);
+    }
+    applyEmbeddedPresentation();
+    void resolveEmbeddedContext();
+  }
+
+  function announceEmbeddedReady() {
+    if (!state.embedded) return;
+    window.parent.postMessage({ type: EMBED_READY, version: EMBED_VERSION }, window.location.origin);
+  }
+
+  // ---------------------------------------------------------- interactions
+
+  function toggleCellMode(cell) {
+    cell.mode = cell.mode === "edit" ? "preview" : "edit";
+    renderCells();
+    if (cell.mode === "edit") {
+      const editor = elements.cellStack.querySelector(`[data-cell-id="${cell.id}"] textarea`);
+      editor?.focus();
+    }
+  }
+
+  function handleEditorKeydown(event, cell) {
+    if (event.key === "Tab") {
+      event.preventDefault();
+      const editor = event.currentTarget;
+      editor.setRangeText("  ", editor.selectionStart, editor.selectionEnd, "end");
+      cell.source = editor.value;
+      scheduleSave(cell);
+      return;
+    }
+    if ((event.metaKey || event.ctrlKey) && event.key === "Enter") {
+      event.preventDefault();
+      if (cell.kind === "python") {
+        const runButton = elements.cellStack.querySelector(
+          `[data-cell-id="${cell.id}"] [data-action="run"]`,
+        );
+        if (runButton) void runCell(cell, runButton);
+      } else {
+        cell.mode = "preview";
+        renderCells();
+      }
+      return;
+    }
+    if (event.key === "Escape") {
+      event.preventDefault();
+      cell.mode = "preview";
+      renderCells();
+    }
+  }
+
+  function isTypingTarget(target) {
+    return target instanceof HTMLInputElement
+      || target instanceof HTMLTextAreaElement
+      || target instanceof HTMLSelectElement
+      || target?.isContentEditable;
+  }
+
+  function handleGlobalKeydown(event) {
+    const command = event.metaKey || event.ctrlKey;
+    if (command && event.key.toLowerCase() === "s") {
+      event.preventDefault();
+      // flushPendingSaves already records the exact cell that failed. Keep this
+      // outer handler display-only so it cannot replace that identity with an
+      // empty failure that a successful retry would never clear.
+      void flushPendingSaves().then(() => announce("Saved locally")).catch((error) => handleStudyError(error));
+      return;
+    }
+    if (command && event.key === "\\") {
+      event.preventDefault();
+      toggleRail();
+      return;
+    }
+    if (command && event.shiftKey && event.key.toLowerCase() === "n") {
+      event.preventDefault();
+      showNewNotebookDialog();
+      return;
+    }
+    if (command && event.altKey && ["m", "l", "p"].includes(event.key.toLowerCase())) {
+      event.preventDefault();
+      const kinds = { m: "markdown", l: "latex", p: "python" };
+      void addCell(kinds[event.key.toLowerCase()]);
+      return;
+    }
+    if (event.key === "/" && !isTypingTarget(event.target) && !state.embedded) {
+      event.preventDefault();
+      if (state.railCollapsed) toggleRail();
+      elements.notebookSearch.focus();
+    }
+  }
 
   function wireEvents() {
-    elements.newNotebookButton.addEventListener("click", showNewNotebookDialog);
-    elements.emptyNewButton.addEventListener("click", showNewNotebookDialog);
+    elements.newNotebookButton.addEventListener("click", () => showNewNotebookDialog());
+    elements.railNewButton.addEventListener("click", () => showNewNotebookDialog());
+    elements.emptyNewButton.addEventListener("click", () => showNewNotebookDialog("blank"));
+    elements.railToggleButton.addEventListener("click", toggleRail);
+    elements.shortcutButton.addEventListener("click", () => elements.shortcutDialog.showModal());
+    elements.notebookSearch.addEventListener("input", () => {
+      state.notebookQuery = elements.notebookSearch.value;
+      renderNotebookList();
+    });
+
+    document.querySelectorAll("[data-starter]").forEach((button) => {
+      button.addEventListener("click", () => showNewNotebookDialog(button.dataset.starter));
+    });
+
     elements.deleteNotebookButton.addEventListener("click", () => {
       const notebook = state.notebooks.find((item) => item.id === state.currentId);
       elements.deleteNotebookName.textContent = notebook?.title || "this notebook";
@@ -651,17 +1251,19 @@
       elements.deleteNotebookDialog.showModal();
     });
     elements.newNotebookDialog.addEventListener("close", () => {
-      if (elements.newNotebookDialog.returnValue === "confirm") void createNotebook();
+      if (elements.newNotebookDialog.returnValue !== "confirm") return;
+      const selected = elements.newNotebookDialog.querySelector('input[name="starter"]:checked');
+      void createNotebook({
+        starter: selected?.value || "notes",
+        workPath: state.embedContext?.workPath || "",
+      });
     });
     elements.deleteNotebookDialog.addEventListener("close", () => {
       if (elements.deleteNotebookDialog.returnValue === "confirm") void deleteNotebook();
     });
     elements.notebookTitle.addEventListener("change", () => void saveTitle());
-    const restartButton = document.getElementById("restartKernelButton");
-    if (restartButton) restartButton.addEventListener("click", () => void restartKernel());
+    elements.restartKernelButton.addEventListener("click", () => void restartKernel());
 
-    // Delegated handling for every cell action: buttons survive full list
-    // re-renders, and a click can never be silently swallowed.
     elements.cellStack.addEventListener("click", (event) => {
       const button = event.target.closest("button[data-action]");
       if (!button || button.disabled) return;
@@ -671,10 +1273,8 @@
       if (!cell) return;
       const action = button.dataset.action;
       if (action === "run") void runCell(cell, button);
-      else if (action === "toggle") {
-        cell.mode = cell.mode === "edit" ? "preview" : "edit";
-        renderCells();
-      } else if (action === "up") void moveCell(cell.id, "up");
+      else if (action === "toggle") toggleCellMode(cell);
+      else if (action === "up") void moveCell(cell.id, "up");
       else if (action === "down") void moveCell(cell.id, "down");
       else if (action === "delete") void deleteCell(cell.id);
     });
@@ -683,42 +1283,29 @@
       button.addEventListener("click", () => void addCell(button.dataset.addKind));
     });
     elements.workLink.addEventListener("click", () => {
-      elements.linkPathInput.value = "";
+      const notebook = state.notebooks.find((item) => item.id === state.currentId);
+      elements.linkPathInput.value = notebook?.workPath || "";
       elements.linkDialog.showModal();
     });
     elements.linkDialog.addEventListener("close", () => {
       if (elements.linkDialog.returnValue !== "confirm" || !state.currentId) return;
-      void (async () => {
-        try {
-          await flushPendingSaves();
-          const workPath = elements.linkPathInput.value.trim();
-          const result = await enqueueMutation(() => api(`/api/study/notebook/${encodeURIComponent(state.currentId)}/link`, {
-            method: "POST",
-            mutate: true,
-            body: JSON.stringify({ workPath, baseUpdatedAt: state.revision }),
-          }));
-          state.revision = result.notebookUpdatedAt;
-          const notebook = state.notebooks.find((item) => item.id === state.currentId);
-          if (notebook) {
-            notebook.workPath = result.notebook.workPath;
-            notebook.workTitle = result.notebook.workTitle;
-          }
-          renderWorkLink();
-        } catch (error) {
-          handleStudyError(error);
-        }
-      })();
+      void linkCurrentNotebook(elements.linkPathInput.value.trim()).catch((error) => handleStudyError(error));
     });
+    document.addEventListener("keydown", handleGlobalKeydown);
+    window.addEventListener("message", handleEmbeddedMessage);
   }
 
-  window.onerror = function (message, source, line) {
-    const sub = document.getElementById("studySub");
-    if (sub) sub.textContent = "JS ERROR: " + message + " @" + line;
+  window.onerror = function (message) {
+    if (elements.studySub) announce(`Study Workspace error: ${message}`, true);
   };
 
   async function init() {
     cacheElements();
+    initializeTheme();
     wireEvents();
+    applyRailState();
+    applyEmbeddedPresentation();
+    announceEmbeddedReady();
     try {
       const library = await api("/api/library");
       state.token = library.actionToken;
@@ -726,9 +1313,13 @@
         ? library.materials.filter((material) => typeof material.path === "string")
         : [];
       renderLinkOptions();
-      await refreshList();
+      await refreshList({ openFirst: !state.embedContext });
+      state.initialized = true;
+      await resolveEmbeddedContext();
+      settleSaveStatus();
     } catch (error) {
-      announce(error.message, true);
+      state.initialized = true;
+      handleStudyError(error);
     }
   }
 
@@ -739,7 +1330,7 @@
   }
 
   window.addEventListener("beforeunload", (event) => {
-    if (!state.saving.size && !state.pendingMutations) return;
+    if (!state.saveTracker.shouldWarn(state.saving.size + state.pendingMutations)) return;
     event.preventDefault();
     event.returnValue = "";
   });

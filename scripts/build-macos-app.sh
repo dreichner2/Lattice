@@ -68,6 +68,10 @@ for resource in \
   "$ui_root/tutor.js" \
   "$ui_root/styles.css" \
   "$ui_root/tutor-styles.css" \
+  "$ui_root/reader-desk.css" \
+  "$ui_root/reader-desk.js" \
+  "$ui_root/audio-player.css" \
+  "$ui_root/audio-player.js" \
   "$ui_root/study-lab.html" \
   "$ui_root/study-lab.css" \
   "$ui_root/study-lab.js" \
@@ -162,6 +166,10 @@ for bundled in \
   "$staged_app/Contents/Resources/ui/app.js" \
   "$staged_app/Contents/Resources/ui/tutor.js" \
   "$staged_app/Contents/Resources/ui/tutor-styles.css" \
+  "$staged_app/Contents/Resources/ui/reader-desk.css" \
+  "$staged_app/Contents/Resources/ui/reader-desk.js" \
+  "$staged_app/Contents/Resources/ui/audio-player.css" \
+  "$staged_app/Contents/Resources/ui/audio-player.js" \
   "$staged_app/Contents/Resources/ui/study-lab.html" \
   "$staged_app/Contents/Resources/ui/study-lab.css" \
   "$staged_app/Contents/Resources/ui/study-lab.js" \

@@ -53,6 +53,47 @@ def distinct_pdf(label: str) -> bytes:
     return f"%PDF-1.4\n% {label}\n1 0 obj<</Type/Catalog>>endobj\n%%EOF\n".encode()
 
 
+def mp3_bytes() -> bytes:
+    header = b"\xff\xfb\x90\x64"  # MPEG-1 Layer III, 128 kbps, 44.1 kHz.
+    frame = header + b"\0" * (417 - len(header))
+    return frame * 2
+
+
+def iso_box(box_type: bytes, payload: bytes) -> bytes:
+    return (len(payload) + 8).to_bytes(4, "big") + box_type + payload
+
+
+def m4a_bytes() -> bytes:
+    handler = iso_box(b"hdlr", b"\0" * 8 + b"soun" + b"\0" * 12)
+    movie = iso_box(b"moov", iso_box(b"trak", iso_box(b"mdia", handler)))
+    file_type = iso_box(b"ftyp", b"M4A " + b"\0" * 4 + b"M4A " + b"isom")
+    return file_type + movie + iso_box(b"mdat", b"\0" * 16)
+
+
+def wav_bytes() -> bytes:
+    audio = b"\x80\x90\xa0\xb0"
+    description = (
+        (1).to_bytes(2, "little")
+        + (1).to_bytes(2, "little")
+        + (8_000).to_bytes(4, "little")
+        + (8_000).to_bytes(4, "little")
+        + (1).to_bytes(2, "little")
+        + (8).to_bytes(2, "little")
+    )
+    chunks = b"fmt " + (16).to_bytes(4, "little") + description
+    chunks += b"data" + len(audio).to_bytes(4, "little") + audio
+    return b"RIFF" + (len(chunks) + 4).to_bytes(4, "little") + b"WAVE" + chunks
+
+
+def flac_bytes() -> bytes:
+    streaminfo = bytearray(34)
+    streaminfo[0:2] = (4096).to_bytes(2, "big")
+    streaminfo[2:4] = (4096).to_bytes(2, "big")
+    packed = (44_100 << 44) | (15 << 36) | 44_100  # mono, 16-bit, one second.
+    streaminfo[10:18] = packed.to_bytes(8, "big")
+    return b"fLaC" + b"\x80\x00\x00\x22" + bytes(streaminfo) + b"\xff\xf8\0\0"
+
+
 def ready_ai_status() -> dict[str, object]:
     return {
         "available": True,
@@ -91,7 +132,7 @@ def wait_for_job(
 
 def fixture_library(root: Path) -> Path:
     (root / "metadata").mkdir(parents=True)
-    for directory in ("books", "papers", "lectures"):
+    for directory in ("books", "papers", "lectures", "audio"):
         (root / directory).mkdir()
     (root / "CATALOG.md").write_text("# Empty catalog\n", encoding="utf-8")
     (root / "library-taxonomy.json").write_bytes((ROOT / "library-taxonomy.json").read_bytes())
@@ -261,6 +302,165 @@ class ImportPipelineTests(unittest.TestCase):
                 self.assertEqual(status, 400)
         self.assertEqual(list((self.root / "books").glob("*.part")), [])
         self.assertEqual(list((self.root / "books").glob(".syncthing.*.tmp")), [])
+
+    def test_audio_imports_use_a_separate_shelf_and_support_bounded_ranges(self) -> None:
+        fixtures = (
+            ("Study mix.mp3", mp3_bytes(), "audio/mpeg"),
+            ("Lecture track.m4a", m4a_bytes(), "audio/mp4"),
+            ("Language drill.wav", wav_bytes(), "audio/wav"),
+            ("Focus recording.flac", flac_bytes(), "audio/flac"),
+        )
+        imported: dict[str, tuple[bytes, str]] = {}
+        for filename, body, content_type in fixtures:
+            with self.subTest(filename=filename):
+                status, payload = self.request(
+                    body=body,
+                    filename=filename,
+                    kind="audio",
+                    token=self.server.action_token,
+                )
+                self.assertEqual(status, 201, payload)
+                self.assertEqual(payload["jobId"], "")
+                self.assertEqual(payload["metadata"]["metadata_status"], "local-fallback")
+                self.assertEqual(payload["metadata"]["ai"]["status"], "not-applicable")
+                self.assertEqual(payload["metadata"]["ai"]["model"], "")
+                self.assertEqual(
+                    payload["metadata"]["ai"]["inputPolicy"],
+                    library_ui.AUDIO_AI_INPUT_POLICY,
+                )
+                relative = str(payload["path"])
+                self.assertRegex(relative, rf"^audio/.+-[0-9a-f]{{10}}{Path(filename).suffix}$")
+                metadata = json.loads(
+                    library_ui.sidecar_path_for(self.root / relative).read_text(
+                        encoding="utf-8"
+                    )
+                )
+                self.assertEqual(metadata["material_type"], "audio")
+                self.assertEqual(metadata["embedded_metadata"], {})
+                self.assertEqual(metadata["bytes"], len(body))
+                self.assertEqual(metadata["sha256"], hashlib.sha256(body).hexdigest())
+                imported[relative] = (body, content_type)
+
+        status, duplicate = self.request(
+            body=mp3_bytes(),
+            filename="Same recording, new name.mp3",
+            kind="audio",
+            token=self.server.action_token,
+        )
+        self.assertEqual(status, 201)
+        self.assertTrue(duplicate["duplicate"])
+        self.assertEqual(duplicate["jobId"], "")
+        self.assertEqual(duplicate["metadata"]["ai"]["status"], "not-applicable")
+
+        deadline = time.monotonic() + 4
+        while not set(imported) <= set(self.server.allowed_paths) and time.monotonic() < deadline:
+            time.sleep(0.01)
+        self.assertTrue(set(imported) <= set(self.server.allowed_paths))
+
+        for relative, (body, content_type) in imported.items():
+            with self.subTest(relative=relative):
+                request = urllib.request.Request(
+                    self.base + "/content/" + urllib.parse.quote(relative),
+                    headers={"Range": "bytes=1-7"},
+                )
+                with urllib.request.urlopen(request, timeout=3) as response:
+                    self.assertEqual(response.status, 206)
+                    self.assertEqual(response.read(), body[1:8])
+                    self.assertEqual(response.headers["Accept-Ranges"], "bytes")
+                    self.assertEqual(response.headers["Content-Type"], content_type)
+                    self.assertEqual(
+                        response.headers["Content-Range"],
+                        f"bytes 1-7/{len(body)}",
+                    )
+
+        relative, (body, _content_type) = next(iter(imported.items()))
+        request = urllib.request.Request(
+            self.base + "/content/" + urllib.parse.quote(relative),
+            headers={"Range": f"bytes={len(body)}-"},
+        )
+        with self.assertRaises(urllib.error.HTTPError) as caught:
+            urllib.request.urlopen(request, timeout=3)
+        self.assertEqual(caught.exception.code, 416)
+        self.assertEqual(caught.exception.headers["Content-Range"], f"bytes */{len(body)}")
+        caught.exception.close()
+
+        with urllib.request.urlopen(self.base + "/api/library", timeout=3) as response:
+            library = json.loads(response.read())
+        audio_kind = next(
+            kind for kind in library["importConfig"]["kinds"] if kind["id"] == "audio"
+        )
+        self.assertEqual(audio_kind["root"], "audio")
+        self.assertEqual(audio_kind["payloadClass"], "audio")
+        self.assertEqual(audio_kind["extensions"], [".flac", ".m4a", ".mp3", ".wav"])
+        materials = {
+            material["path"]: material
+            for material in library["materials"]
+            if material["path"] in imported
+        }
+        self.assertEqual(set(materials), set(imported))
+        self.assertEqual(library["stats"]["materialCounts"]["audio"], 4)
+        self.assertTrue(all(material["materialType"] == "audio" for material in materials.values()))
+        self.assertTrue(all(material["isAudio"] for material in materials.values()))
+        self.assertTrue(all(not material["tutorEligible"] for material in materials.values()))
+
+    def test_audio_magic_and_shelf_pairing_are_fail_closed(self) -> None:
+        rejected = (
+            ("spoofed.mp3", PDF_BYTES, "audio"),
+            ("spoofed.m4a", b"\0" * 64, "audio"),
+            ("spoofed.wav", b"RIFF" + b"\0" * 64, "audio"),
+            ("spoofed.flac", b"fLaC" + b"\0" * 64, "audio"),
+            ("recording.mp3", mp3_bytes(), "book"),
+            ("notes.pdf", PDF_BYTES, "audio"),
+        )
+        for filename, body, kind in rejected:
+            with self.subTest(filename=filename, kind=kind):
+                status, payload = self.request(
+                    body=body,
+                    filename=filename,
+                    kind=kind,
+                    token=self.server.action_token,
+                )
+                self.assertEqual(status, 400, payload)
+        for shelf in ("books", "papers", "lectures", "audio"):
+            self.assertEqual(list((self.root / shelf).glob(".syncthing.*.tmp")), [])
+        self.assertEqual(library_ui._discover_payload_paths(self.root), set())
+
+        misplaced_audio = self.root / "books" / "misplaced.mp3"
+        misplaced_audio.write_bytes(mp3_bytes())
+        misplaced_document = self.root / "audio" / "misplaced.pdf"
+        misplaced_document.write_bytes(PDF_BYTES)
+        self.assertEqual(library_ui._discover_payload_paths(self.root), set())
+
+    def test_audio_metadata_edits_remain_local_and_ai_not_applicable(self) -> None:
+        status, imported = self.request(
+            body=mp3_bytes(),
+            filename="Editable recording.mp3",
+            kind="audio",
+            token=self.server.action_token,
+        )
+        self.assertEqual(status, 201)
+        relative = str(imported["path"])
+        updated = self.server.update_import_metadata(
+            {
+                "path": relative,
+                "title": "Edited recording",
+                "authors": ["Local narrator"],
+                "year": 2026,
+                "edition": "",
+                "subjectIds": ["other"],
+                "topics": ["review"],
+            }
+        )
+        self.assertEqual(updated["metadata_status"], "manual")
+        self.assertEqual(updated["ai"]["status"], "not-applicable")
+        self.assertEqual(updated["ai"]["model"], "")
+        validated, warnings = library_ui._validate_synced_sidecar(
+            self.root,
+            library_ui.sidecar_path_for(self.root / relative),
+            self.server.taxonomy,
+        )
+        self.assertEqual(warnings, [])
+        self.assertEqual(validated["title"], "Edited recording")
 
     def test_atomic_json_writes_use_syncthing_reserved_temporary_names(self) -> None:
         target = self.root / "books" / "fixture.pdf.library.json"
@@ -871,14 +1071,15 @@ class ImportLifecycleTests(unittest.TestCase):
         body: bytes | None = None,
         kind: str = "book",
     ) -> str:
-        payload_bytes = body or distinct_pdf(label)
+        suffix = ".mp3" if kind == "audio" else ".pdf"
+        payload_bytes = body or (mp3_bytes() if kind == "audio" else distinct_pdf(label))
         directory = library_ui.IMPORT_KINDS[kind]
-        relative = f"{directory}/{library_ui.slugify(label)}.pdf"
+        relative = f"{directory}/{library_ui.slugify(label)}{suffix}"
         payload = self.root / relative
         payload.write_bytes(payload_bytes)
         metadata = library_ui._initial_import_metadata(
             relative=relative,
-            original_name=f"{label}.pdf",
+            original_name=f"{label}{suffix}",
             kind=kind,
             size=len(payload_bytes),
             digest=hashlib.sha256(payload_bytes).hexdigest(),
@@ -886,6 +1087,19 @@ class ImportLifecycleTests(unittest.TestCase):
             taxonomy=library_ui.load_taxonomy(self.root),
         )
         library_ui._atomic_write_json(library_ui.sidecar_path_for(payload), metadata)
+        return relative
+
+    def make_legacy_pending_audio(self, label: str, *, body: bytes | None = None) -> str:
+        relative = self.seed_pending(label, body=body, kind="audio")
+        sidecar = library_ui.sidecar_path_for(self.root / relative)
+        metadata = json.loads(sidecar.read_text(encoding="utf-8"))
+        metadata["metadata_status"] = "pending-ai"
+        metadata["ai"] = {
+            "status": "pending",
+            "model": library_ui.AI_MODEL,
+            "inputPolicy": library_ui.AI_INPUT_POLICY,
+        }
+        library_ui._atomic_write_json(sidecar, metadata)
         return relative
 
     def wait_for_queue_idle(
@@ -1101,6 +1315,47 @@ class ImportLifecycleTests(unittest.TestCase):
                 wait_for_job(server, str(duplicate["jobId"]))["status"],
                 "complete",
             )
+
+    def test_pending_audio_is_closed_locally_on_restart_without_codex(self) -> None:
+        relative = self.make_legacy_pending_audio("audio-restart")
+        with mock.patch.object(library_ui, "codex_login_status") as login, mock.patch.object(
+            library_ui, "enrich_metadata_with_codex"
+        ) as enrich:
+            server = self.new_server()
+
+        metadata = json.loads(
+            library_ui.sidecar_path_for(self.root / relative).read_text(encoding="utf-8")
+        )
+        self.assertEqual(metadata["metadata_status"], "local-fallback")
+        self.assertEqual(metadata["ai"]["status"], "not-applicable")
+        self.assertEqual(metadata["ai"]["model"], "")
+        self.assertEqual(metadata["ai"]["inputPolicy"], library_ui.AUDIO_AI_INPUT_POLICY)
+        self.assertFalse(any(job.get("path") == relative for job in server._import_jobs.values()))
+        login.assert_not_called()
+        enrich.assert_not_called()
+
+    def test_duplicate_pending_audio_is_closed_locally_without_a_job(self) -> None:
+        server = self.new_server()
+        body = mp3_bytes()
+        relative = self.make_legacy_pending_audio("audio-duplicate", body=body)
+        with mock.patch.object(library_ui, "codex_login_status") as login, mock.patch.object(
+            library_ui, "enrich_metadata_with_codex"
+        ) as enrich:
+            duplicate = server.install_import(
+                io.BytesIO(body),
+                content_length=len(body),
+                encoded_filename="another-audio-name.mp3",
+                kind="audio",
+            )
+
+        self.assertTrue(duplicate["duplicate"])
+        self.assertEqual(duplicate["path"], relative)
+        self.assertEqual(duplicate["jobId"], "")
+        self.assertEqual(duplicate["metadata"]["metadata_status"], "local-fallback")
+        self.assertEqual(duplicate["metadata"]["ai"]["status"], "not-applicable")
+        self.assertFalse(any(job.get("path") == relative for job in server._import_jobs.values()))
+        login.assert_not_called()
+        enrich.assert_not_called()
 
     def test_unexpected_worker_and_fallback_write_failure_is_terminal(self) -> None:
         server = self.new_server()
@@ -1324,6 +1579,22 @@ class CodexCommandResolutionTests(unittest.TestCase):
 
 
 class CodexMetadataTests(unittest.TestCase):
+    def test_audio_metadata_cannot_enter_the_codex_enrichment_path(self) -> None:
+        taxonomy = library_ui.load_taxonomy(ROOT)
+        with mock.patch.object(library_ui.subprocess, "run") as run, self.assertRaisesRegex(
+            ValueError,
+            "Audio metadata is local-only",
+        ):
+            library_ui.enrich_metadata_with_codex(
+                {
+                    "path": "audio/private-recording.mp3",
+                    "material_type": "audio",
+                    "embedded_metadata": {},
+                },
+                taxonomy,
+            )
+        run.assert_not_called()
+
     def test_codex_schema_uses_supported_array_constraints(self) -> None:
         taxonomy = library_ui.load_taxonomy(ROOT)
         subject_ids = [subject["id"] for subject in taxonomy["subjects"]]

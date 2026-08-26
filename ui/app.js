@@ -23,7 +23,13 @@ const DEFAULT_EPUB_SETTINGS = Object.freeze({
   tone: "paper",
 });
 
-const IMPORT_ACCEPTED = /\.(pdf|epub|txt)$/i;
+const IMPORT_ACCEPTED = /\.(pdf|epub|txt|mp3|m4a|wav|flac)$/i;
+const AUDIO_ACCEPTED = /\.(mp3|m4a|wav|flac)$/i;
+const AUDIO_FORMATS = new Set(["MP3", "M4A", "WAV", "FLAC"]);
+const IMPORT_KINDS = new Set(["book", "paper", "lecture", "audio"]);
+const DEFAULT_IMPORT_KIND = "book";
+const IMPORT_FILE_ACCEPT = ".pdf,.epub,.txt,.mp3,.m4a,.wav,.flac,application/pdf,application/epub+zip,text/plain,audio/mpeg,audio/mp4,audio/wav,audio/flac";
+const AUDIO_FILE_ACCEPT = ".mp3,.m4a,.wav,.flac,audio/mpeg,audio/mp4,audio/wav,audio/flac";
 const IMPORT_STATUS_COMPLETE = new Set(["complete", "completed", "ready", "succeeded", "success", "fallback", "manual"]);
 const IMPORT_STATUS_FAILED = new Set(["failed", "error"]);
 // A bounded server queue can legitimately take several minutes for a large
@@ -84,6 +90,7 @@ const state = {
   readerPath: "",
   readerWorkId: "",
   readerMode: "",
+  audioPlayer: null,
   readerLastFocus: null,
   epubPackage: null,
   epubIndex: -1,
@@ -102,6 +109,7 @@ const state = {
   pdfState: readStorage(STORAGE.pdfState, {}) || {},
   pdfClosePending: false,
   pdfCloseTimer: 0,
+  readerDesk: null,
   videoCatalog: null,
   videoLibrary: null,
   tutor: null,
@@ -160,10 +168,13 @@ const elements = {
   pageTitle: $("#pageTitle"),
   random: $("#randomButton"),
   readerBack: $("#readerBackButton"),
+  readerAudio: $("#readerAudioButton"),
   readerBackdrop: $("#readerBackdrop"),
   readerBookmark: $("#readerBookmarkButton"),
   readerClose: $("#readerCloseButton"),
   readerDocument: $("#documentReader"),
+  readerDesk: $("#readerDesk"),
+  readerDeskButton: $("#readerDeskButton"),
   readerFinder: $("#readerFinderButton"),
   readerFocus: $("#readerFocusButton"),
   readerKicker: $("#readerKicker"),
@@ -393,6 +404,20 @@ function primaryFile(work) {
 
 function isBrowserReadable(file) {
   return ["EPUB", "PDF", "TXT"].includes(file.format);
+}
+
+function isAudioPlayable(file) {
+  return Boolean(file) && (
+    file.materialType === "audio"
+    || AUDIO_FORMATS.has(String(file.format || "").toUpperCase())
+    || AUDIO_ACCEPTED.test(String(file.path || ""))
+  );
+}
+
+function inAppActionLabel(file) {
+  if (isAudioPlayable(file)) return "Listen";
+  if (isBrowserReadable(file)) return "Read here";
+  return SYSTEM_OPEN_LABEL;
 }
 
 function contentUrl(path) {
@@ -630,7 +655,35 @@ async function responsePayload(response) {
 }
 
 function selectedImportKind() {
-  return elements.importKindPicker.querySelector('input[name="importKind"]:checked')?.value || "book";
+  const selected = elements.importKindPicker.querySelector('input[name="importKind"]:checked')?.value;
+  return IMPORT_KINDS.has(selected) ? selected : DEFAULT_IMPORT_KIND;
+}
+
+function setImportKind(kind) {
+  const normalized = IMPORT_KINDS.has(kind) ? kind : DEFAULT_IMPORT_KIND;
+  const option = elements.importKindPicker.querySelector(`input[name="importKind"][value="${normalized}"]`);
+  if (option) option.checked = true;
+  state.importKind = normalized;
+  elements.addFilesInput.accept = normalized === "audio" ? AUDIO_FILE_ACCEPT : IMPORT_FILE_ACCEPT;
+  return normalized;
+}
+
+function importKindForFile(file, preferredKind) {
+  if (AUDIO_ACCEPTED.test(String(file?.name || ""))) return "audio";
+  const normalized = IMPORT_KINDS.has(preferredKind) ? preferredKind : DEFAULT_IMPORT_KIND;
+  return normalized === "audio" ? DEFAULT_IMPORT_KIND : normalized;
+}
+
+function setImportBackgroundInert(inert) {
+  const regions = [
+    elements.appShell,
+    elements.drawer,
+    elements.readerShell,
+    document.querySelector("#latticeAudioPlayer"),
+    document.querySelector("#tutorScrim"),
+    document.querySelector("#tutorPanel"),
+  ];
+  regions.filter(Boolean).forEach((element) => { element.inert = inert; });
 }
 
 function setAIReadiness(status, title, detail) {
@@ -642,6 +695,11 @@ function setAIReadiness(status, title, detail) {
 }
 
 async function refreshAIStatus() {
+  if (selectedImportKind() === "audio") {
+    state.aiStatus = { ready: true, audio: true };
+    setAIReadiness("ready", "Local audio import", "Audio bytes stay local; only shelf details are indexed.");
+    return;
+  }
   setAIReadiness("checking", "Checking Luna metadata…", "Files are added even when AI is unavailable.");
   try {
     const response = await fetch("/api/ai/status", { cache: "no-store" });
@@ -660,10 +718,11 @@ async function refreshAIStatus() {
   }
 }
 
-function openImportDialog({ chooseImmediately = false } = {}) {
+function openImportDialog({ chooseImmediately = false, kind = DEFAULT_IMPORT_KIND } = {}) {
+  setImportKind(kind);
   if (!document.body.classList.contains("import-open")) state.importDialogLastFocus = document.activeElement;
   document.body.classList.add("import-open");
-  [elements.appShell, elements.drawer, elements.readerShell].forEach((element) => { element.inert = true; });
+  setImportBackgroundInert(true);
   elements.importShell.setAttribute("aria-hidden", "false");
   renderImportQueue();
   refreshAIStatus();
@@ -671,11 +730,16 @@ function openImportDialog({ chooseImmediately = false } = {}) {
   else elements.importClose.focus();
 }
 
+function openAudioImportDialog({ chooseImmediately = false } = {}) {
+  openImportDialog({ chooseImmediately, kind: "audio" });
+}
+
 function closeImportDialog() {
   document.body.classList.remove("import-open");
   elements.importShell.setAttribute("aria-hidden", "true");
-  [elements.appShell, elements.drawer, elements.readerShell].forEach((element) => { element.inert = false; });
+  setImportBackgroundInert(false);
   elements.addFilesInput.value = "";
+  setImportKind(DEFAULT_IMPORT_KIND);
   const target = state.importDialogLastFocus;
   state.importDialogLastFocus = null;
   const targetIsVisible = target
@@ -687,7 +751,7 @@ function closeImportDialog() {
 }
 
 function chooseImportFiles() {
-  state.importKind = selectedImportKind();
+  setImportKind(selectedImportKind());
   elements.addFilesInput.value = "";
   elements.addFilesInput.click();
 }
@@ -702,9 +766,15 @@ function runImportPrimaryAction() {
   }
   const kind = selectedImportKind();
   waiting.forEach((item) => {
-    item.kind = kind;
+    if (kind === "audio" && !AUDIO_ACCEPTED.test(String(item.file?.name || ""))) {
+      item.status = "failed";
+      item.error = "Choose an MP3, M4A, WAV, or FLAC file for the audio shelf.";
+      return;
+    }
+    item.kind = importKindForFile(item.file, kind);
     uploadImport(item);
   });
+  renderImportQueue();
 }
 
 function importStatusLabel(item) {
@@ -945,13 +1015,22 @@ function importItemForFile(file, kind) {
 
 function queueImportFiles(fileList) {
   const files = [...fileList];
-  const accepted = files.filter((file) => IMPORT_ACCEPTED.test(file.name));
+  const preferredKind = selectedImportKind();
+  const accepted = files.filter((file) => (
+    IMPORT_ACCEPTED.test(file.name)
+    && (preferredKind !== "audio" || AUDIO_ACCEPTED.test(file.name))
+  ));
   const rejected = files.length - accepted.length;
   if (rejected) announce(`${rejected} unsupported ${rejected === 1 ? "file was" : "files were"} skipped`, true);
   if (!accepted.length) return;
-  openImportDialog();
-  const kind = selectedImportKind();
-  const items = accepted.map((file) => importItemForFile(file, kind));
+  const dialogKind = accepted.every((file) => AUDIO_ACCEPTED.test(file.name))
+    ? "audio"
+    : importKindForFile(accepted[0], preferredKind);
+  openImportDialog({ kind: dialogKind });
+  const items = accepted.map((file) => importItemForFile(
+    file,
+    importKindForFile(file, preferredKind),
+  ));
   state.imports.unshift(...items);
   renderImportQueue();
   items.forEach((item) => uploadImport(item));
@@ -1108,7 +1187,7 @@ function openWorkMetadataEditor(work) {
     item.editing = true;
   }
   closeDrawer();
-  openImportDialog();
+  openImportDialog({ kind: item.kind });
   renderImportQueue();
 }
 
@@ -1134,7 +1213,10 @@ function bindImportEvents() {
   elements.importDropZone.addEventListener("click", chooseImportFiles);
   elements.importClose.addEventListener("click", closeImportDialog);
   elements.importBackdrop.addEventListener("click", closeImportDialog);
-  elements.importKindPicker.addEventListener("change", () => { state.importKind = selectedImportKind(); });
+  elements.importKindPicker.addEventListener("change", () => {
+    setImportKind(selectedImportKind());
+    void refreshAIStatus();
+  });
   elements.addFilesInput.addEventListener("change", () => queueImportFiles(elements.addFilesInput.files));
   elements.importShell.addEventListener("keydown", (event) => {
     if (event.key !== "Tab") return;
@@ -1191,6 +1273,8 @@ function showReaderShell(title, kicker, mode) {
   elements.readerToc.hidden = true;
   elements.readerSettings.hidden = true;
   elements.readerBookmark.hidden = true;
+  elements.readerDeskButton.hidden = true;
+  elements.readerAudio.hidden = true;
   elements.readerTutor.hidden = true;
   elements.readerTutorPeek.hidden = true;
   // The PDF reader supplies its own visible focus control. Keep this bridge
@@ -1216,6 +1300,7 @@ function finishReaderClose() {
   state.pdfClosePending = false;
   state.pdfCloseTimer = 0;
   saveEpubPosition();
+  state.readerDesk?.deactivate();
   window.dispatchEvent(new CustomEvent("cs-library-reader-closed"));
   window.clearTimeout(state.epubSaveTimer);
   window.clearTimeout(state.epubTurnTimer);
@@ -1238,6 +1323,8 @@ function finishReaderClose() {
   elements.readerToc.hidden = true;
   elements.readerSettings.hidden = true;
   elements.readerBookmark.hidden = true;
+  elements.readerDeskButton.hidden = true;
+  elements.readerAudio.hidden = true;
   elements.readerTutor.hidden = true;
   elements.readerTutorPeek.hidden = true;
   elements.readerFocus.hidden = true;
@@ -1319,8 +1406,12 @@ function configureLocalReaderActions(work, file) {
     workId: work.id,
     sha256: file.sha256 || "",
     title: file.title || work.title,
+    workTitle: work.title,
     format: file.format,
   };
+  elements.readerDeskButton.hidden = false;
+  elements.readerAudio.hidden = false;
+  state.readerDesk?.activate(descriptor);
   window.dispatchEvent(new CustomEvent("cs-library-reader-document", { detail: descriptor }));
   return descriptor;
 }
@@ -1355,12 +1446,58 @@ function sendPdfReaderMessage(type, detail = {}) {
   );
 }
 
+function syncReaderBookmarkButton(bookmarked) {
+  const active = Boolean(bookmarked);
+  if (state.readerMode === "epub") {
+    elements.readerBookmark.classList.toggle("is-bookmarked", active);
+    elements.readerBookmark.textContent = active ? "★" : "☆";
+    elements.readerBookmark.setAttribute("aria-label", active ? "Remove this bookmark" : "Bookmark this position");
+  } else if (state.readerMode === "pdf") {
+    sendPdfReaderMessage("bookmark-status", { bookmarked: active });
+  }
+}
+
+function navigateReaderDeskLocator(locator) {
+  if (!locator || typeof locator !== "object") return;
+  if (state.readerMode === "pdf" && locator.type === "pdf") {
+    sendPdfReaderMessage("navigate", { page: Math.max(1, Math.trunc(Number(locator.page)) || 1) });
+    return;
+  }
+  if (state.readerMode !== "epub" || locator.type !== "epub" || !state.epubPackage) return;
+  let index = state.epubPackage.chapters.findIndex((chapter) => chapter.entry === locator.entry);
+  if (index < 0) index = clamp(Number(locator.index) || 0, 0, state.epubPackage.chapters.length - 1);
+  navigateEpub(index, { ratio: clamp(Number(locator.ratio) || 0, 0, 1) });
+}
+
+function initializeReaderDesk() {
+  state.readerDesk = window.LatticeReaderDesk?.create({
+    root: elements.readerDesk,
+    shell: elements.readerShell,
+    toggle: elements.readerDeskButton,
+    onNavigate: navigateReaderDeskLocator,
+    onBookmarkState: syncReaderBookmarkButton,
+    onClose: () => {
+      if (state.readerMode === "pdf") {
+        elements.readerPdf.focus({ preventScroll: true });
+        sendPdfReaderMessage("focus");
+      }
+    },
+  }) || null;
+}
+
 function initializePdfReaderFrame() {
   if (!state.readerPath) return;
+  const localState = normalizePdfReaderState(state.pdfState[state.readerPath]);
+  const nativeLocator = state.nativeReaderRestore?.path === state.readerPath
+    ? state.nativeReaderRestore.locator
+    : null;
+  const initialState = nativeLocator?.type === "pdf"
+    ? { ...(localState || normalizePdfReaderState({})), page: Math.max(1, Math.trunc(Number(nativeLocator.page)) || 1) }
+    : localState;
   sendPdfReaderMessage("initialize", {
     path: state.readerPath,
     theme: document.documentElement.dataset.theme || "light",
-    state: normalizePdfReaderState(state.pdfState[state.readerPath]),
+    state: initialState,
   });
 }
 
@@ -1406,6 +1543,26 @@ function handlePdfReaderMessage(event) {
     sendPdfReaderMessage("focus");
   } else if (message.type === "state") {
     persistPdfReaderState(message.path, message.state);
+    state.readerDesk?.setLocation(
+      { type: "pdf", page: Math.max(1, Math.trunc(Number(message.state?.page)) || 1) },
+      `Page ${Math.max(1, Math.trunc(Number(message.state?.page)) || 1)}`,
+    );
+  } else if (message.type === "location") {
+    const page = Math.max(1, Math.trunc(Number(message.page)) || 1);
+    state.readerDesk?.setLocation({ type: "pdf", page }, `Page ${page}`);
+  } else if (message.type === "selection") {
+    const page = Math.max(1, Math.trunc(Number(message.page)) || 1);
+    state.readerDesk?.setSelection(message.text, { type: "pdf", page }, `Page ${page}`);
+  } else if (message.type === "open-desk") {
+    state.readerDesk?.open(message.view === "bookmarks" ? "bookmarks" : "notes");
+  } else if (message.type === "open-audio") {
+    if (state.audioPlayer) state.audioPlayer.openLibrary();
+    else openAudioImportDialog();
+  } else if (message.type === "toggle-bookmark") {
+    const page = Math.max(1, Math.trunc(Number(message.page)) || 1);
+    state.readerDesk?.setLocation({ type: "pdf", page }, `Page ${page}`);
+    const bookmarked = state.readerDesk?.toggleCurrentBookmark() || false;
+    syncReaderBookmarkButton(bookmarked);
   } else if (message.type === "focus-mode") {
     const focused = message.active === true;
     elements.readerFocus.setAttribute("aria-pressed", String(focused));
@@ -1806,14 +1963,19 @@ function updateEpubLocation() {
     item.classList.toggle("is-current", current);
     if (current) markedCurrent = true;
   });
-  const bookmarks = Array.isArray(state.epubBookmarks[state.readerPath]) ? state.epubBookmarks[state.readerPath] : [];
-  const isBookmarked = bookmarks.some((bookmark) => bookmark.entry === chapter.entry);
-  elements.readerBookmark.classList.toggle("is-bookmarked", isBookmarked);
-  elements.readerBookmark.textContent = isBookmarked ? "★" : "☆";
-  elements.readerBookmark.setAttribute("aria-label", isBookmarked ? "Remove chapter bookmark" : "Bookmark this position");
+  const locator = {
+    type: "epub",
+    entry: chapter.entry,
+    index: state.epubIndex,
+    ratio: safeRatio,
+    pageIndex: metrics.pageIndex,
+    pageCount: metrics.pageCount,
+  };
+  const isBookmarked = state.readerDesk?.setLocation(locator, chapter.label) || false;
+  syncReaderBookmarkButton(isBookmarked);
   window.dispatchEvent(new CustomEvent("cs-library-reader-position", {
     detail: {
-      locator: { type: "epub", entry: chapter.entry, index: state.epubIndex, ratio: safeRatio },
+      locator,
       page: metrics.pageIndex,
       progress: overall,
     },
@@ -1866,32 +2028,21 @@ function renderEpubToc() {
 }
 
 function renderEpubBookmarks() {
-  const raw = state.epubBookmarks[state.readerPath];
-  const bookmarks = (Array.isArray(raw) ? raw : [])
-    .filter((bookmark) => bookmark && typeof bookmark.entry === "string")
-    .sort((a, b) => Number(b.createdAt || 0) - Number(a.createdAt || 0));
-  elements.epubBookmarks.hidden = bookmarks.length === 0;
-  const rows = bookmarks.map((bookmark) => {
-    const row = node("div", "epub-bookmark-row");
-    const link = button("epub-bookmark-link", `${bookmark.label} · ${Math.round(clamp(bookmark.ratio || 0, 0, 1) * 100)}%`, () => {
-      const index = state.epubPackage.chapters.findIndex((chapter) => chapter.entry === bookmark.entry);
-      if (index >= 0) navigateEpub(index, { ratio: clamp(bookmark.ratio || 0, 0, 1) });
-    });
-    const remove = button("epub-bookmark-remove", "×", () => {
-      state.epubBookmarks[state.readerPath] = bookmarks.filter((candidate) => candidate.entry !== bookmark.entry);
-      writeStorage(STORAGE.epubBookmarks, state.epubBookmarks);
-      renderEpubBookmarks();
-      updateEpubLocation();
-    }, `Remove bookmark for ${bookmark.label}`);
-    row.append(link, remove);
-    return row;
-  });
-  elements.epubBookmarkList.replaceChildren(...rows);
+  // Bookmarks now live in the shared Reading Desk so PDF and EPUB use one
+  // non-invasive surface and multiple positions in one chapter stay distinct.
+  elements.epubBookmarks.hidden = true;
+  elements.epubBookmarkList.replaceChildren();
 }
 
 function toggleEpubBookmark() {
   const chapter = currentEpubChapter();
   if (!chapter || !state.readerPath) return;
+  if (state.readerDesk) {
+    const bookmarked = state.readerDesk.toggleCurrentBookmark();
+    syncReaderBookmarkButton(bookmarked);
+    announce(bookmarked ? `Bookmarked this position in ${chapter.label}` : `Removed this bookmark from ${chapter.label}`);
+    return;
+  }
   const bookmarks = Array.isArray(state.epubBookmarks[state.readerPath])
     ? [...state.epubBookmarks[state.readerPath]]
     : [];
@@ -2063,6 +2214,10 @@ function handleEpubFrameLoad() {
     documentRoot.addEventListener("keydown", handleEpubKeydown);
     documentRoot.addEventListener("wheel", preventEpubPanning, { passive: false });
     documentRoot.addEventListener("touchmove", preventEpubPanning, { passive: false });
+    documentRoot.addEventListener("mouseup", () => {
+      const text = view.getSelection()?.toString().trim() || "";
+      if (text) state.readerDesk?.setSelection(text);
+    });
     view.addEventListener("scroll", handleEpubScroll, { passive: true });
     const restoreRatio = state.epubRestoreRatio;
     state.epubRestoreRatio = null;
@@ -2140,7 +2295,11 @@ async function openFile(work, file) {
     announce("This book's local copy was released to the vault. Restore it to read here.", true);
     return;
   }
-  if (file.format === "EPUB") await showEpubReader(work, file);
+  if (isAudioPlayable(file)) {
+    recordOpen(work);
+    await state.audioPlayer?.playMaterial(file);
+    renderCards();
+  } else if (file.format === "EPUB") await showEpubReader(work, file);
   else if (file.format === "PDF") showPdfReader(work, file);
   else if (file.format === "TXT") await showTextReader(work, file);
   else await openOnMac(work, file);
@@ -2324,7 +2483,7 @@ function makeCard(work) {
   info.append(meta);
 
   const actions = node("div", "card-actions");
-  const primaryAction = button("button button-primary button-small", work.isCollection ? "Browse files" : isBrowserReadable(primaryFile(work)) ? "Read here" : SYSTEM_OPEN_LABEL, () => {
+  const primaryAction = button("button button-primary button-small", work.isCollection ? "Browse files" : inAppActionLabel(primaryFile(work)), () => {
       if (work.isCollection) showDrawer(work.id);
       else openFile(work, primaryFile(work));
     });
@@ -2353,7 +2512,7 @@ function makeMaterialCard(material) {
 
   const cover = node("button", "book-cover");
   cover.type = "button";
-  cover.setAttribute("aria-label", `${isBrowserReadable(material) ? "Read" : "Open"} ${material.title}`);
+  cover.setAttribute("aria-label", `${isAudioPlayable(material) ? "Listen to" : isBrowserReadable(material) ? "Read" : "Open"} ${material.title}`);
   cover.addEventListener("click", () => openFile(work, material));
   const top = node("div", "cover-top");
   top.append(node("span", "cover-shelf", material.materialLabel), node("span", "format-badge", material.format));
@@ -2375,7 +2534,7 @@ function makeMaterialCard(material) {
   }
   const actions = node("div", "card-actions");
   actions.append(
-    button("button button-primary button-small", isBrowserReadable(material) ? "Read here" : SYSTEM_OPEN_LABEL, () => openFile(work, material)),
+    button("button button-primary button-small", inAppActionLabel(material), () => openFile(work, material)),
     button("button button-quiet button-small", "Work details", () => showDrawer(work.id)),
   );
   if (material.availability === "away" || vaultPhase === "away") {
@@ -2754,10 +2913,10 @@ function renderDrawer(work) {
 
   const actions = node("div", "drawer-actions");
   const firstFile = primaryFile(work);
-  const readAction = button("button button-primary", isBrowserReadable(firstFile) ? "Read here" : (firstFile.format === "EPUB" && !IS_WINDOWS ? "Open in Books" : SYSTEM_OPEN_LABEL), () => openFile(work, firstFile));
+  const readAction = button("button button-primary", inAppActionLabel(firstFile), () => openFile(work, firstFile));
   readAction.disabled = !firstFile.exists;
   actions.append(readAction);
-  if (isBrowserReadable(firstFile)) {
+  if (isBrowserReadable(firstFile) || isAudioPlayable(firstFile)) {
     const macAction = button("button button-quiet", SYSTEM_OPEN_LABEL, () => openOnMac(work, firstFile));
     macAction.disabled = !firstFile.exists;
     actions.append(macAction);
@@ -2796,8 +2955,8 @@ function renderDrawer(work) {
     details.append(node("strong", "", file.title), node("small", "", `${file.format} · ${humanBytes(file.bytes)} · ${file.exists ? file.path : "Missing from this computer"}`));
     const fileActions = node("div", "file-actions");
     if (file.exists) {
-      fileActions.append(button("mini-action mini-action-primary", isBrowserReadable(file) ? "Read here" : "Open", () => openFile(work, file)));
-      if (isBrowserReadable(file)) fileActions.append(button("mini-action", COMPUTER_LABEL, () => openOnMac(work, file), `Open ${file.title} on this computer`));
+      fileActions.append(button("mini-action mini-action-primary", isAudioPlayable(file) ? "Listen" : isBrowserReadable(file) ? "Read here" : "Open", () => openFile(work, file)));
+      if (isBrowserReadable(file) || isAudioPlayable(file)) fileActions.append(button("mini-action", COMPUTER_LABEL, () => openOnMac(work, file), `Open ${file.title} on this computer`));
       fileActions.append(button("mini-action", FILE_MANAGER_LABEL, () => revealFile(file), `Reveal ${file.title} in ${FILE_MANAGER_LABEL}`));
     } else {
       fileActions.append(node("span", "missing-label", "Not on this computer"));
@@ -3018,11 +3177,24 @@ function bindEvents() {
   bindImportEvents();
   bindNativeAppMenuEvents();
   window.addEventListener("message", handlePdfReaderMessage);
+  window.addEventListener("message", (event) => {
+    if (
+      event.origin !== window.location.origin
+      || event.source !== elements.epubFrame.contentWindow
+      || state.readerMode !== "epub"
+      || event.data?.type !== "cs-library-reader-selection"
+    ) return;
+    state.readerDesk?.setSelection(event.data.text);
+  });
   window.addEventListener("cs-library-reader-restore", event => {
     const saved = event.detail;
     if (!saved || saved.path !== state.readerPath) return;
     state.nativeReaderRestore = saved;
     const locator = saved.locator;
+    if (state.readerMode === "pdf" && locator?.type === "pdf") {
+      sendPdfReaderMessage("navigate", { page: Math.max(1, Math.trunc(Number(locator.page)) || 1) });
+      return;
+    }
     if (state.readerMode !== "epub" || !state.epubPackage || locator?.type !== "epub") return;
     let index = state.epubPackage.chapters.findIndex(chapter => chapter.entry === locator.entry);
     if (index < 0) index = clamp(Number(locator.index) || 0, 0, state.epubPackage.chapters.length - 1);
@@ -3078,6 +3250,7 @@ function bindEvents() {
   elements.readerToc.addEventListener("click", () => toggleEpubPanel("toc"));
   elements.readerSettings.addEventListener("click", () => toggleEpubPanel("settings"));
   elements.readerBookmark.addEventListener("click", toggleEpubBookmark);
+  elements.readerAudio.addEventListener("click", () => state.audioPlayer?.openLibrary());
   const openReaderTutor = () => {
     if (state.readerWorkId) state.tutor?.peekForWork(state.readerWorkId);
   };
@@ -3189,6 +3362,7 @@ function initializeLibrary(payload) {
   state.revision = Number(payload.revision || state.revision || 0);
   state.workById = new Map(payload.works.map((work) => [work.id, work]));
   state.tutor?.setLibrary(payload);
+  state.audioPlayer?.setLibrary(payload.materials);
   elements.workStat.textContent = payload.stats.works;
   elements.artifactStat.textContent = payload.stats.artifacts;
   elements.sizeStat.textContent = humanBytes(payload.stats.bytes);
@@ -3334,6 +3508,11 @@ async function insertTutorArtifact(artifact) {
 
 async function start() {
   initializeTheme();
+  state.audioPlayer = window.LatticeAudioPlayer?.create({
+    announce,
+    onAddAudio: () => openAudioImportDialog({ chooseImmediately: true }),
+  }) || null;
+  initializeReaderDesk();
   state.tutor = window.LatticeTutor?.create({
     announce,
     onOpenCitation: openTutorCitation,

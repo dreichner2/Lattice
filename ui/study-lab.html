@@ -1,99 +1,238 @@
 <!DOCTYPE html>
-<html lang="en">
+<html lang="en" data-theme="dark">
 <head>
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
-  <meta name="color-scheme" content="dark">
-  <title>Study Lab · Lattice</title>
+  <meta name="color-scheme" content="dark light">
+  <title>Study Lab · Study Workspace · Lattice</title>
   <link rel="stylesheet" href="/styles.css">
   <link rel="stylesheet" href="/vendor/katex/katex.min.css">
   <link rel="stylesheet" href="/study-lab.css">
 </head>
 <body class="study-lab-body">
-  <header class="study-toolbar">
-    <a class="study-back" href="/">‹ Library</a>
-    <div class="study-title-wrap">
-      <h1 id="studyHeading">Study Lab</h1>
-      <p class="study-sub" id="studySub">LaTeX &amp; Python notes linked to your library</p>
+  <a class="study-skip-link" href="#notebookTitle">Skip to notebook</a>
+
+  <header class="study-toolbar" id="workspaceHeader">
+    <div class="study-toolbar-start">
+      <button class="study-icon-button" id="railToggleButton" type="button"
+              aria-controls="studySidebar" aria-expanded="true" aria-label="Collapse notebook rail"
+              title="Toggle notebooks (⌘\\)">
+        <span aria-hidden="true">☰</span>
+      </button>
+      <a class="study-back" id="studyBack" href="/" aria-label="Return to library">‹ Library</a>
+      <div class="study-brand-mark" aria-hidden="true">L</div>
+      <div class="study-title-wrap">
+        <h1 id="studyHeading">Study Workspace</h1>
+        <p class="study-sub" id="studySub">Think on the page. Keep the source close.</p>
+      </div>
     </div>
-    <button class="button button-primary button-small" id="newNotebookButton" type="button">New notebook</button>
+    <div class="study-toolbar-actions">
+      <div class="save-status is-saved" id="saveStatus" role="status" aria-live="polite">
+        <span class="save-status-dot" aria-hidden="true"></span>
+        <span id="saveStatusText">Saved locally</span>
+      </div>
+      <button class="study-icon-button" id="shortcutButton" type="button"
+              aria-label="Keyboard shortcuts" title="Keyboard shortcuts">⌘</button>
+      <button class="study-primary-button" id="newNotebookButton" type="button">
+        <span aria-hidden="true">＋</span> New notebook
+      </button>
+    </div>
   </header>
 
   <main class="study-layout" hidden id="editorLayout">
-    <aside class="study-sidebar">
-      <p class="nav-label">Notebooks</p>
+    <aside class="study-sidebar" id="studySidebar" aria-label="Notebook rail">
+      <div class="study-sidebar-head">
+        <div>
+          <p class="study-eyebrow">Your notebooks</p>
+          <p class="study-sidebar-count" id="sidebarCount">0 notebooks</p>
+        </div>
+        <button class="study-rail-new" id="railNewButton" type="button" aria-label="New notebook">＋</button>
+      </div>
+      <label class="study-search" for="notebookSearch">
+        <span aria-hidden="true">⌕</span>
+        <input id="notebookSearch" type="search" placeholder="Search notebooks" autocomplete="off">
+        <kbd>/</kbd>
+      </label>
       <nav id="notebookList" class="study-notebook-list" aria-label="Notebooks"></nav>
+      <p class="study-search-empty" id="noSearchResults" hidden>No notebooks match that search.</p>
+      <footer class="study-sidebar-foot">
+        <span aria-hidden="true">●</span>
+        Private and stored on this device
+      </footer>
     </aside>
 
-    <section class="study-editor" aria-label="Notebook editor">
-      <div class="study-notebook-head">
-        <input id="notebookTitle" class="study-notebook-title" type="text"
-               aria-label="Notebook title" placeholder="Untitled notebook" maxlength="200">
-        <span class="study-work-link" id="workLink"></span>
-        <button class="cell-action" id="restartKernelButton" type="button"
-                title="Stop the Python kernel and clear its variables">Restart kernel</button>
-        <span class="study-conflict" id="conflictFlag" hidden>Changed elsewhere — reload to continue</span>
-        <button class="button button-small study-delete-notebook" id="deleteNotebookButton"
-                type="button">Delete notebook</button>
+    <section class="study-editor" aria-labelledby="notebookTitle">
+      <div class="reader-context" id="readerContext" hidden>
+        <span class="reader-context-icon" aria-hidden="true">↗</span>
+        <span class="reader-context-copy">
+          <small>Taking notes on</small>
+          <strong id="readerContextTitle">Current reading</strong>
+        </span>
+        <span class="reader-context-path" id="readerContextPath"></span>
       </div>
-      <p class="study-kernel-warning">Python runs on this computer with your user permissions. Only run code you trust.</p>
-      <div id="cellStack" class="cell-stack"></div>
+
+      <div class="study-notebook-head">
+        <div class="study-notebook-heading">
+          <label class="study-eyebrow" for="notebookTitle">Notebook</label>
+          <input id="notebookTitle" class="study-notebook-title" type="text"
+                 aria-label="Notebook title" placeholder="Untitled notebook" maxlength="200">
+          <div class="study-notebook-meta">
+            <button class="study-work-link" id="workLink" type="button">Link a library work</button>
+            <span aria-hidden="true">·</span>
+            <span id="notebookCellCount">0 cells</span>
+          </div>
+        </div>
+        <div class="study-notebook-actions">
+          <button class="study-secondary-button" id="restartKernelButton" type="button"
+                  title="Stop the Python kernel and clear its variables">Restart Python</button>
+          <details class="study-manage-menu">
+            <summary class="study-icon-button" aria-label="Notebook options">•••</summary>
+            <div class="study-manage-popover">
+              <button id="deleteNotebookButton" type="button">Delete notebook</button>
+            </div>
+          </details>
+        </div>
+      </div>
+
+      <div class="study-conflict" id="conflictFlag" role="alert" hidden>
+        <strong>This notebook changed elsewhere.</strong>
+        <span>Reload it before making more edits so nothing is overwritten.</span>
+      </div>
+
+      <details class="study-kernel-note">
+        <summary>Python runs locally on this computer</summary>
+        <p>It uses your user permissions and is not sandboxed. Only run code you trust.</p>
+      </details>
+
+      <div class="notebook-start" id="notebookStart" hidden>
+        <div class="notebook-start-mark" aria-hidden="true">✦</div>
+        <h2>Start with the thought, not the tool.</h2>
+        <p>Capture an idea in your own words, work through the math, or test it with Python.</p>
+        <div class="notebook-start-actions">
+          <button class="study-primary-button" data-add-kind="markdown" type="button">Write a note</button>
+          <button class="study-secondary-button" data-add-kind="latex" type="button">Add math</button>
+          <button class="study-secondary-button" data-add-kind="python" type="button">Try Python</button>
+        </div>
+      </div>
+
+      <div id="cellStack" class="cell-stack" aria-label="Notebook cells"></div>
+
       <div class="cell-adder">
-        <span class="cell-adder-label">Add cell</span>
-        <button class="button button-small" data-add-kind="latex" type="button">𝐿𝑎𝑇𝑒𝑋</button>
-        <button class="button button-small" data-add-kind="python" type="button">Python</button>
+        <span class="cell-adder-copy">
+          <strong>Continue thinking</strong>
+          <small>Choose the right canvas for the next idea.</small>
+        </span>
+        <div class="cell-adder-actions">
+          <button class="cell-add-button is-primary" data-add-kind="markdown" type="button">
+            <span aria-hidden="true">¶</span> Note
+          </button>
+          <button class="cell-add-button" data-add-kind="latex" type="button">
+            <span aria-hidden="true">∑</span> Math
+          </button>
+          <button class="cell-add-button" data-add-kind="python" type="button">
+            <span aria-hidden="true">›_</span> Python
+          </button>
+        </div>
       </div>
     </section>
   </main>
 
   <main class="study-empty" id="emptyLayout">
-    <div class="empty-state">
-      <div class="empty-mark">✎</div>
-      <h3>No notebooks yet</h3>
-      <p>Create a notebook to keep LaTeX derivations and Python scratch work next to your books.</p>
-      <button class="button button-primary" id="emptyNewButton" type="button">Create your first notebook</button>
-    </div>
+    <section class="empty-state" aria-labelledby="emptyTitle">
+      <div class="empty-orbit" aria-hidden="true"><span>✦</span></div>
+      <p class="study-eyebrow">A calmer place to learn</p>
+      <h2 id="emptyTitle">Turn reading into understanding.</h2>
+      <p class="empty-lede">Keep notes, equations, and small experiments together—linked to the book or document that sparked them.</p>
+      <div class="empty-starters" aria-label="Notebook starters">
+        <button class="empty-starter" data-starter="notes" type="button">
+          <span class="empty-starter-icon" aria-hidden="true">¶</span>
+          <span><strong>Reading notes</strong><small>Capture ideas in your own words</small></span>
+          <span aria-hidden="true">→</span>
+        </button>
+        <button class="empty-starter" data-starter="worked" type="button">
+          <span class="empty-starter-icon" aria-hidden="true">∑</span>
+          <span><strong>Worked problem</strong><small>Explain the reasoning, then the math</small></span>
+          <span aria-hidden="true">→</span>
+        </button>
+        <button class="empty-starter" data-starter="experiment" type="button">
+          <span class="empty-starter-icon" aria-hidden="true">›_</span>
+          <span><strong>Python experiment</strong><small>Question, code, result, reflection</small></span>
+          <span aria-hidden="true">→</span>
+        </button>
+      </div>
+      <button class="study-primary-button empty-create" id="emptyNewButton" type="button">Create a blank notebook</button>
+      <p class="empty-private">Private by default · saved on this device</p>
+    </section>
   </main>
 
   <dialog id="newNotebookDialog" class="study-dialog">
     <form method="dialog">
-      <h3>New notebook</h3>
-      <p class="study-dialog-hint">Give this local notebook a short title. You can rename it later.</p>
+      <div class="study-dialog-mark" aria-hidden="true">✦</div>
+      <p class="study-eyebrow">New notebook</p>
+      <h2>What are you learning?</h2>
+      <p class="study-dialog-hint">Choose a name you will recognize when you return.</p>
+      <label for="newNotebookTitleInput">Notebook title</label>
       <input id="newNotebookTitleInput" type="text" value="Untitled notebook"
-             aria-label="New notebook title" maxlength="200" required>
+             maxlength="200" required autocomplete="off">
+      <fieldset class="starter-choice">
+        <legend>Start with</legend>
+        <label><input type="radio" name="starter" value="notes" checked> <span><strong>Note</strong><small>Markdown</small></span></label>
+        <label><input type="radio" name="starter" value="worked"> <span><strong>Worked problem</strong><small>Note + math</small></span></label>
+        <label><input type="radio" name="starter" value="experiment"> <span><strong>Experiment</strong><small>Note + Python</small></span></label>
+        <label><input type="radio" name="starter" value="blank"> <span><strong>Blank</strong><small>No cells</small></span></label>
+      </fieldset>
       <menu>
         <button value="cancel" type="submit">Cancel</button>
-        <button value="confirm" class="button button-primary button-small" type="submit">Create notebook</button>
+        <button value="confirm" class="study-primary-button" type="submit">Create notebook</button>
       </menu>
     </form>
   </dialog>
 
-  <dialog id="deleteNotebookDialog" class="study-dialog">
+  <dialog id="deleteNotebookDialog" class="study-dialog study-dialog-danger">
     <form method="dialog">
-      <h3>Delete notebook?</h3>
-      <p class="study-dialog-hint">Delete <strong id="deleteNotebookName">this notebook</strong> and all of its cells? This cannot be undone.</p>
+      <p class="study-eyebrow">Permanent action</p>
+      <h2>Delete notebook?</h2>
+      <p class="study-dialog-hint">Delete <strong id="deleteNotebookName">this notebook</strong> and every cell inside it? This cannot be undone.</p>
       <menu>
-        <button value="cancel" type="submit">Cancel</button>
-        <button value="confirm" class="button button-small study-delete-notebook" type="submit">Delete notebook</button>
+        <button value="cancel" type="submit">Keep notebook</button>
+        <button value="confirm" class="study-danger-button" type="submit">Delete notebook</button>
       </menu>
     </form>
   </dialog>
 
   <dialog id="linkDialog" class="study-dialog">
     <form method="dialog">
-      <h3>Link a library work</h3>
-      <p class="study-dialog-hint">Choose the exact catalog path of the library work this notebook belongs to. Leave it blank to unlink.</p>
+      <p class="study-eyebrow">Reading context</p>
+      <h2>Link a library work</h2>
+      <p class="study-dialog-hint">Link this notebook to the exact book or document it belongs to. Clear the field to unlink it.</p>
+      <label for="linkPathInput">Library path</label>
       <input id="linkPathInput" type="text" list="linkPathOptions"
              placeholder="books/example.pdf" spellcheck="false" maxlength="1024">
       <datalist id="linkPathOptions"></datalist>
       <menu>
         <button value="cancel" type="submit">Cancel</button>
-        <button id="linkSaveButton" value="confirm" class="button button-primary button-small" type="submit">Save link</button>
+        <button id="linkSaveButton" value="confirm" class="study-primary-button" type="submit">Save link</button>
       </menu>
     </form>
   </dialog>
 
+  <dialog id="shortcutDialog" class="study-dialog shortcut-dialog">
+    <form method="dialog">
+      <p class="study-eyebrow">Move at the speed of thought</p>
+      <h2>Keyboard shortcuts</h2>
+      <dl>
+        <div><dt>Save now</dt><dd><kbd>⌘</kbd><kbd>S</kbd></dd></div>
+        <div><dt>Preview or run a cell</dt><dd><kbd>⌘</kbd><kbd>Enter</kbd></dd></div>
+        <div><dt>Add a note</dt><dd><kbd>⌘</kbd><kbd>⌥</kbd><kbd>M</kbd></dd></div>
+        <div><dt>Add math</dt><dd><kbd>⌘</kbd><kbd>⌥</kbd><kbd>L</kbd></dd></div>
+        <div><dt>Add Python</dt><dd><kbd>⌘</kbd><kbd>⌥</kbd><kbd>P</kbd></dd></div>
+        <div><dt>Find a notebook</dt><dd><kbd>/</kbd></dd></div>
+      </dl>
+      <menu><button value="close" class="study-primary-button" type="submit">Done</button></menu>
+    </form>
+  </dialog>
+
   <script src="/vendor/katex/katex.min.js" defer></script>
-  <script src="/study-lab.js?v=2" defer></script>
+  <script src="/study-lab.js?v=3" defer></script>
 </body>
 </html>

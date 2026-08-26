@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import os
+import sqlite3
 import stat
 import sys
 import tempfile
@@ -210,15 +211,23 @@ class StudyLabTests(unittest.TestCase):
 
     # ------------------------------------------------------------------ cells
 
-    def test_add_latex_and_python_cells(self) -> None:
+    def test_add_markdown_latex_and_python_cells(self) -> None:
         created = self.make_notebook()
         notebook = created["notebook"]
+        markdown_cell = self.lab.add_cell(
+            notebook["id"],
+            {
+                "kind": "markdown",
+                "source": "## What I learned\n\nThe result follows from symmetry.",
+                "baseUpdatedAt": notebook["updatedAt"],
+            },
+        )
         latex_cell = self.lab.add_cell(
             notebook["id"],
             {
                 "kind": "latex",
                 "source": "\\begin{equation} e^{i\\pi} + 1 = 0 \\end{equation}",
-                "baseUpdatedAt": notebook["updatedAt"],
+                "baseUpdatedAt": markdown_cell["notebookUpdatedAt"],
             },
         )
         python_cell = self.lab.add_cell(
@@ -229,13 +238,99 @@ class StudyLabTests(unittest.TestCase):
                 "baseUpdatedAt": latex_cell["notebookUpdatedAt"],
             },
         )
+        self.assertEqual(markdown_cell["cell"]["kind"], "markdown")
         self.assertEqual(latex_cell["cell"]["kind"], "latex")
         self.assertEqual(python_cell["cell"]["kind"], "python")
         fetched = self.lab.get_notebook(notebook["id"])
         self.assertEqual(
             [cell["position"] for cell in fetched["cells"]],
-            [0, 1],
+            [0, 1, 2],
         )
+
+    def test_schema_one_migrates_without_losing_existing_cells(self) -> None:
+        legacy_root = self.base / "legacy-study"
+        legacy_root.mkdir(mode=0o700)
+        database = legacy_root / "Study.sqlite"
+        connection = sqlite3.connect(database)
+        connection.executescript(
+            """
+            CREATE TABLE meta (key TEXT PRIMARY KEY, value TEXT NOT NULL);
+            INSERT INTO meta VALUES ('schema_version', '1');
+            INSERT INTO meta VALUES ('library_identity', 'legacy-library');
+            CREATE TABLE notebooks (
+                id TEXT PRIMARY KEY,
+                title TEXT NOT NULL,
+                created_at TEXT NOT NULL,
+                updated_at TEXT NOT NULL
+            );
+            INSERT INTO notebooks VALUES (
+                'legacy-notebook', 'Preserved notes',
+                '2026-08-25T00:00:00.000000Z', '2026-08-25T00:00:00.000000Z'
+            );
+            CREATE TABLE cells (
+                id TEXT PRIMARY KEY,
+                notebook_id TEXT NOT NULL REFERENCES notebooks(id) ON DELETE CASCADE,
+                position INTEGER NOT NULL,
+                kind TEXT NOT NULL CHECK(kind IN ('latex', 'python')),
+                source TEXT NOT NULL DEFAULT '',
+                created_at TEXT NOT NULL,
+                updated_at TEXT NOT NULL,
+                UNIQUE(notebook_id, position)
+            );
+            INSERT INTO cells VALUES (
+                'legacy-cell', 'legacy-notebook', 0, 'latex', 'x^2',
+                '2026-08-25T00:00:00.000000Z', '2026-08-25T00:00:00.000000Z'
+            );
+            CREATE TABLE cells_v2 (
+                id TEXT PRIMARY KEY,
+                notebook_id TEXT NOT NULL REFERENCES notebooks(id) ON DELETE CASCADE,
+                position INTEGER NOT NULL,
+                kind TEXT NOT NULL CHECK(kind IN ('markdown', 'latex', 'python')),
+                source TEXT NOT NULL DEFAULT '',
+                created_at TEXT NOT NULL,
+                updated_at TEXT NOT NULL,
+                UNIQUE(notebook_id, position)
+            );
+            CREATE TABLE notebook_links (
+                notebook_id TEXT PRIMARY KEY REFERENCES notebooks(id) ON DELETE CASCADE,
+                work_path TEXT NOT NULL,
+                work_title TEXT NOT NULL DEFAULT ''
+            );
+            """
+        )
+        connection.commit()
+        connection.close()
+        if os.name != "nt":
+            os.chmod(database, 0o600)
+
+        migrated = StudyLab(
+            self.library,
+            "legacy-library",
+            study_root=legacy_root,
+        )
+        try:
+            notebook = migrated.get_notebook("legacy-notebook")
+            self.assertEqual(notebook["cells"][0]["source"], "x^2")
+            added = migrated.add_cell(
+                "legacy-notebook",
+                {
+                    "kind": "markdown",
+                    "source": "The old equation is still here.",
+                    "baseUpdatedAt": notebook["notebook"]["updatedAt"],
+                },
+            )
+            self.assertEqual(added["cell"]["kind"], "markdown")
+        finally:
+            migrated.close()
+
+        connection = sqlite3.connect(database)
+        try:
+            version = connection.execute(
+                "SELECT value FROM meta WHERE key = 'schema_version'"
+            ).fetchone()[0]
+        finally:
+            connection.close()
+        self.assertEqual(version, "2")
 
     def test_text_kind_is_not_supported(self) -> None:
         created = self.make_notebook()

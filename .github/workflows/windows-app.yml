@@ -21,6 +21,7 @@ on:
       - "books/**"
       - "papers/**"
       - "lectures/**"
+      - "audio/**"
       - ".github/workflows/windows-app.yml"
   push:
     branches:
@@ -44,6 +45,7 @@ on:
       - "books/**"
       - "papers/**"
       - "lectures/**"
+      - "audio/**"
       - ".github/workflows/windows-app.yml"
   workflow_dispatch:
 

@@ -39,7 +39,20 @@ test("Add controls expose the native bridge picker and a multiple file input", (
   assert.match(HTML, /name="importKind" value="book"/);
   assert.match(HTML, /name="importKind" value="paper"/);
   assert.match(HTML, /name="importKind" value="lecture"/);
+  assert.match(HTML, /name="importKind" value="audio"/);
   assert.match(APP, /window\.sharedLibraryChooseFiles\s*=\s*\(\)\s*=>\s*openImportDialog\(\)/);
+});
+
+test("generic Add and the audio picker keep file kinds fail closed", () => {
+  assert.match(APP, /const DEFAULT_IMPORT_KIND = "book"/);
+  assert.match(APP, /function openImportDialog\(\{ chooseImmediately = false, kind = DEFAULT_IMPORT_KIND \} = \{\}\)/);
+  assert.match(APP, /elements\.addFilesInput\.accept = normalized === "audio" \? AUDIO_FILE_ACCEPT : IMPORT_FILE_ACCEPT/);
+  assert.match(APP, /function openAudioImportDialog[\s\S]*?openImportDialog\(\{ chooseImmediately, kind: "audio" \}\)/);
+  assert.match(APP, /function closeImportDialog\(\)[\s\S]*?setImportKind\(DEFAULT_IMPORT_KIND\)/);
+  assert.match(APP, /preferredKind !== "audio" \|\| AUDIO_ACCEPTED\.test\(file\.name\)/);
+  assert.match(APP, /function importKindForFile[\s\S]*?normalized === "audio" \? DEFAULT_IMPORT_KIND : normalized/);
+  assert.match(APP, /item\.kind = importKindForFile\(item\.file, kind\)/);
+  assert.doesNotMatch(APP, /AUDIO_ACCEPTED\.test\(file\.name\) \? "audio" : selectedKind/);
 });
 
 test("imports use the authenticated raw-body API contract", () => {
@@ -66,7 +79,9 @@ test("macOS queues file-open imports until the local service is ready", () => {
   assert.match(MAC_APP, /currentServerURL = url[\s\S]*?pendingOpenURLs\.removeAll\(\)[\s\S]*?importFiles\(pending\)/);
   assert.match(MAC_APP, /guard webInterfaceReady else \{\s*pendingAddMaterials = true/);
   assert.match(MAC_APP, /didFinish navigation:[\s\S]*?pendingAddMaterials[\s\S]*?showAddMaterialsDialog\(\)/);
-  assert.match(MAC_APP, /chooseMaterialKind\(\)[\s\S]*?\["book", "paper", "lecture"\]/);
+  assert.match(MAC_APP, /picker\.addItems\(withTitles: \["Book", "Paper", "Lecture notes", "Audio"\]\)/);
+  assert.match(MAC_APP, /chooseMaterialKind\(\)[\s\S]*?\["book", "paper", "lecture", "audio"\]/);
+  assert.match(MAC_APP, /kind == "audio"[\s\S]*?\["mp3", "m4a", "wav", "flac"\][\s\S]*?: \["pdf", "epub", "txt"\]/);
   assert.match(MAC_APP, /let duplicate = payload\?\["duplicate"\] as\? Bool == true/);
 });
 
@@ -192,7 +207,7 @@ test("file drags cannot navigate the host and begin importing immediately", () =
   assert.match(HTML, /id="dropOverlay"/);
   assert.match(STYLES, /\.drop-overlay\s*\{/);
   assert.match(STYLES, /\.import-shell\s*\{/);
-  assert.match(APP, /element\.inert\s*=\s*true/);
+  assert.match(APP, /setImportBackgroundInert\(true\)/);
   assert.match(APP, /event\.key\s*!==\s*"Tab"[\s\S]*?event\.shiftKey[\s\S]*?last\.focus\(\)/);
   assert.match(APP, /!target\.closest\('\[aria-hidden="true"\], \[inert\]'\)/);
 });
@@ -212,6 +227,15 @@ test("PDFs use the same embedded reader in native and web app modes", () => {
     APP,
     /state\.readerMode === "pdf"[\s\S]*?sendPdfReaderMessage\("shortcut", \{ key: Number\(direction\) < 0 \? "ArrowLeft" : "ArrowRight" \}\)/,
   );
+});
+
+test("the embedded PDF reader exposes the shared audio shelf at every width", () => {
+  assert.match(PDF_HTML, /id="audioButton"[^>]*aria-label="Open audio shelf"[^>]*Choose audio to play while reading/);
+  assert.match(PDF_READER, /audio: \$\("#audioButton"\)/);
+  assert.match(PDF_READER, /elements\.audio\.addEventListener\("click", \(\) => postToShelf\("open-audio", \{ path: documentPath \}\)\)/);
+  assert.match(APP, /message\.type === "open-audio"[\s\S]*?state\.audioPlayer\.openLibrary\(\)/);
+  assert.match(PDF_STYLES, /\.text-action:not\(\.desk-action\):not\(\.audio-action\)/);
+  assert.match(PDF_STYLES, /\.desk-action,\s*\.audio-action\s*\{[\s\S]*?width:\s*34px/);
 });
 
 test("PDFs expose the same distraction-free focus mode as EPUBs", () => {

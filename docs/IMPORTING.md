@@ -1,12 +1,13 @@
 # Importing Material and Metadata Sidecars
 
-Lattice accepts local PDF, EPUB, and TXT reading material through the
-dedicated **Add** button or by dragging files onto the library window. The same
-workflow is available in the shared browser UI, macOS app, and Windows app.
+Lattice accepts local PDF, EPUB, and TXT reading material plus MP3, M4A, WAV,
+and FLAC audio through the dedicated **Add** button or by dragging files onto
+the library window. The same workflow is available in the shared browser UI,
+macOS app, and Windows app.
 
 ## What happens during import
 
-1. Choose `books`, `papers`, or `lectures` as the destination kind.
+1. Choose Book, Paper, or Lecture for a document, or Audio for a recording.
 2. Lattice validates the request, filename, supported format, size, and
    library boundary.
 3. The local server streams the payload to a Syncthing-reserved temporary
@@ -26,6 +27,15 @@ books/example.pdf.library.json
 
 The suffix is appended to the full payload filename. Consequently,
 `example.pdf` and `example.epub` have distinct sidecars.
+
+Audio is isolated under `audio/`; document formats are rejected from that root,
+and audio formats are rejected from the document roots. Before installation,
+Lattice performs bounded, extension-specific structure checks: consecutive
+MPEG Layer III frames for MP3, an ISO-BMFF audio track for M4A, RIFF/WAVE chunks
+for WAV, and FLAC STREAMINFO framing. It does not decode media, parse untrusted
+artwork, or claim that a structurally valid file's codec will play on every OS.
+Playback uses the same catalog allowlist and bounded HTTP Range route as reader
+payloads, with explicit audio MIME types.
 
 Kobo-style EPUBs may contain JavaScript or WebAssembly files. Lattice keeps
 those entries inside the original archive so otherwise-readable books import
@@ -98,6 +108,10 @@ as untrusted strings, and the ephemeral Codex run disables local execution,
 hosted web search, browser, app, image, and workspace tools before sending the
 request.
 
+Audio imports do not expose tags, artwork, audio bytes, or transcripts to
+Codex. They are playback-only and are excluded from both Tutor source selection
+and the lower-level Tutor text extractor.
+
 Codex is optional. If the executable is missing, the user is signed out, the
 model is unavailable, a timeout occurs, or output is invalid, import still
 finishes. Lattice derives a readable title locally, uses conservative unknown
@@ -132,9 +146,9 @@ or an ordered array of subject IDs.
 ## Sync and conflict expectations
 
 Sidecars are private library data. Git ignores them, while the repository-root
-`.stignore` includes them because they sit inside `books/`, `papers/`, or
-`lectures/`. The same rules exclude partial uploads, Git placeholders, and the
-curated lecture catalog. Wait for Syncthing to report **Up to Date** before
-editing the same item on the other computer. If Syncthing creates a conflict
-copy, keep the payload whose hash is authoritative and review the descriptive
-sidecar fields before removing either copy.
+`.stignore` includes them because they sit inside `books/`, `papers/`,
+`lectures/`, or `audio/`. The same rules exclude partial uploads, Git
+placeholders, and the curated lecture catalog. Wait for Syncthing to report
+**Up to Date** before editing the same item on the other computer. If Syncthing
+creates a conflict copy, keep the payload whose hash is authoritative and
+review the descriptive sidecar fields before removing either copy.

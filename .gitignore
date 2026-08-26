@@ -21,6 +21,10 @@ __pycache__/
 !/lectures/**/
 !/lectures/**/.gitkeep
 !/lectures/catalog.json
+/audio/**
+!/audio/
+!/audio/**/
+!/audio/**/.gitkeep
 
 # Local UI/runtime state never belongs in the repository. Keep the legacy app
 # name ignored while existing builds migrate to the Lattice display name.

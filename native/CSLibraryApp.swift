@@ -1113,7 +1113,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, WKNavigationDelegate, 
 
     private func chooseMaterialKind() -> String? {
         let picker = NSPopUpButton(frame: NSRect(x: 0, y: 0, width: 260, height: 28))
-        picker.addItems(withTitles: ["Book", "Paper", "Lecture notes"])
+        picker.addItems(withTitles: ["Book", "Paper", "Lecture notes", "Audio"])
         let alert = NSAlert()
         alert.messageText = "What kind of material are you adding?"
         alert.informativeText = "The selection controls which synchronized shelf receives these files."
@@ -1121,7 +1121,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, WKNavigationDelegate, 
         alert.addButton(withTitle: "Add")
         alert.addButton(withTitle: "Cancel")
         guard alert.runModal() == .alertFirstButtonReturn else { return nil }
-        return ["book", "paper", "lecture"][picker.indexOfSelectedItem]
+        return ["book", "paper", "lecture", "audio"][picker.indexOfSelectedItem]
     }
 
     private func importFiles(_ urls: [URL]) {
@@ -1206,7 +1206,10 @@ final class AppDelegate: NSObject, NSApplicationDelegate, WKNavigationDelegate, 
 
         let source = urls[index]
         let ext = source.pathExtension.lowercased()
-        guard ["pdf", "epub", "txt"].contains(ext), let endpoint = serverEndpoint("/api/import") else {
+        let supportedExtensions: Set<String> = kind == "audio"
+            ? ["mp3", "m4a", "wav", "flac"]
+            : ["pdf", "epub", "txt"]
+        guard supportedExtensions.contains(ext), let endpoint = serverEndpoint("/api/import") else {
             uploadFiles(
                 urls,
                 token: token,
@@ -1214,7 +1217,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, WKNavigationDelegate, 
                 index: index + 1,
                 imported: imported,
                 duplicates: duplicates,
-                failures: failures + ["\(source.lastPathComponent): unsupported file type"]
+                failures: failures + ["\(source.lastPathComponent): file type does not match \(kind)"]
             )
             return
         }

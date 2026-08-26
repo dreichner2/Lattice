@@ -4,8 +4,8 @@ Lattice is a shared knowledge library and local-first macOS and Windows reading
 and study system. The
 repository keeps source code, the cross-subject taxonomy, curated catalog
 metadata, provenance records, and integrity manifests in Git. Private books,
-papers, lectures, and their adjacent sidecars remain on the selected computers
-and can be synchronized through Syncthing.
+papers, lectures, audio, and their adjacent sidecars remain on the selected
+computers and can be synchronized through Syncthing.
 
 ## System boundaries
 
@@ -14,7 +14,7 @@ and can be synchronized through Syncthing.
 │ AppKit shell                                                             │
 │  ├─ library-folder selection and import                                  │
 │  ├─ menus, diagnostics, export/import, and application lifecycle          │
-│  ├─ native PDFKit reader                                                  │
+│  ├─ shared PDF.js reader (PDFKit compatibility fallback)                  │
 │  └─ durable ReaderStore (SQLite)                                          │
 │                                                                          │
 │ WKWebView                                                                 │
@@ -38,7 +38,7 @@ and can be synchronized through Syncthing.
 │  ├─ brokers source-scoped Tutor turns (`lattice_tutor.py`)                 │
 │  ├─ extracts PDF/EPUB/text into a private per-device Tutor index           │
 │  ├─ serves bundled or repository UI resources                             │
-│  ├─ serves byte-ranged PDF/TXT payloads                                   │
+│  ├─ serves allowlisted document/audio payloads with bounded byte ranges   │
 │  ├─ parses and securely serves EPUB resources                             │
 │  └─ exposes token-protected platform file actions                         │
 └───────────────────────────────┬───────────────────────────────────────────┘
@@ -46,9 +46,10 @@ and can be synchronized through Syncthing.
 ┌───────────────────────────────▼───────────────────────────────────────────┐
 │ Selected library folder                                                   │
 │  ├─ CATALOG.md / library-taxonomy.json / metadata / manifests              │
-│  ├─ books/       payload + `<filename>.library.json`                       │
-│  ├─ papers/      payload + `<filename>.library.json`                       │
-│  └─ lectures/    payload + `<filename>.library.json`                       │
+│  ├─ books/       document + `<filename>.library.json`                      │
+│  ├─ papers/      document + `<filename>.library.json`                      │
+│  ├─ lectures/    document + `<filename>.library.json`                      │
+│  └─ audio/       MP3/M4A/WAV/FLAC + `<filename>.library.json`             │
 └───────────────────────────────────────────────────────────────────────────┘
 ```
 
@@ -165,6 +166,14 @@ same Syncthing-allowlisted directory and therefore converge together on paired
 devices. The loader treats sidecars as untrusted input and falls back safely if
 one is missing or invalid.
 
+Audio imports use the separate `audio/` root and `audio` material kind. The
+service accepts MP3, M4A, WAV, and FLAC only after extension-specific bounded
+container checks, serves them from the existing catalog allowlist with explicit
+audio MIME types and RFC byte ranges, and never treats them as reader documents.
+Document formats remain confined to `books/`, `papers/`, and `lectures/`. The
+library status payload publishes this contract as `importConfig`, including the
+kind, root, payload class, accepted extensions, and maximum upload size.
+
 Optional enrichment invokes the locally installed, authenticated Codex CLI with
 `gpt-5.6-luna`. Only the filename, selected material kind, locally extracted
 publication metadata, and allowed subject list are included in the
@@ -191,7 +200,9 @@ sources are extracted incrementally into a SQLite/FTS cache outside both the
 library and reader database. `pypdf` 6.15.0 is vendored for consistent PDF text
 extraction on macOS, Windows, and source checkouts. Human-study-only and
 personalized/private works are never admitted and are pruned if eligibility
-changes. Video sources contribute catalog and lecture-title metadata only.
+changes. Audio payloads are playback-only and are rejected by both the catalog
+eligibility layer and the Tutor extractor suffix allowlist. Video sources
+contribute catalog and lecture-title metadata only.
 
 Each turn invokes the same installed, authenticated Codex CLI used by import
 enrichment, but as a fresh ephemeral run that ignores user configuration and
@@ -252,19 +263,21 @@ only as a compatibility fallback for older interface builds.
 
 ## PDF reader
 
-PDFs opened in the native app use PDFKit. The reader owns rendering, page
-labels, thumbnails, navigation, search, zoom and display modes, notes,
-bookmarks, highlights, and reading sessions. PDF content is indexed locally in
-the background when the document is opened.
-
-The browser version continues to use the browser's PDF renderer.
+PDFs use the same bundled PDF.js workspace on macOS, Windows, and in the
+browser. It owns range-loaded rendering, page labels, thumbnails, outlines,
+navigation, search, zoom, rotation, layout modes, focus mode, and fullscreen.
+The host Reading Desk owns one-based bookmarks, source-linked notes, and the
+embedded Study Workspace. The native bridge mirrors positions, bookmarks, and
+annotations into ReaderStore. A narrow PDFKit path remains only for older
+interface builds and uses the same one-based durable locator convention.
 
 ## EPUB reader
 
 EPUB package parsing and resource serving happen in Python. Rendering happens in
-the shared WebKit reader. The native enhancement layer adds durable quotations
-and notes, chapter text indexing, elapsed reading sessions, and the native
-notebook. EPUB content never executes book-supplied scripts.
+the shared WebKit reader. The shared Reading Desk adds durable quotations,
+notes, exact-position bookmarks, and Study Workspace; the native bridge also
+adds chapter text indexing, elapsed reading sessions, and SQLite mirroring.
+EPUB content never executes book-supplied scripts.
 
 ## Local service identity
 
@@ -310,8 +323,8 @@ WAL files.
 
 The Windows CI build publishes a self-contained x64 WPF app, the bundled Python
 service, the metadata/UI skeleton, the taxonomy, and empty `books/`, `papers/`,
-and `lectures/` directories as a portable ZIP. Copyrighted reading payloads and
-private sidecars are never part of the artifact.
+`lectures/`, and `audio/` directories as a portable ZIP. Copyrighted reading
+and listening payloads and private sidecars are never part of the artifact.
 
 ## Change rules
 

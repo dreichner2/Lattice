@@ -73,6 +73,13 @@ class TutorExtractionTests(unittest.TestCase):
         self.assertTrue(any("Consensus requires" in chunk["text"] for chunk in chunks))
         self.assertEqual(chunks[0]["locator"], "page 1")
 
+    def test_audio_is_never_treated_as_plain_text(self) -> None:
+        with tempfile.TemporaryDirectory() as temporary:
+            path = Path(temporary) / "lecture.mp3"
+            path.write_bytes(b"ID3\x04\x00\x00\x00\x00\x00\x00audio")
+            with self.assertRaisesRegex(RuntimeError, "not text-indexable"):
+                lattice_tutor.extract_source_chunks(path, threading.Event())
+
     def test_private_index_searches_and_prunes_ineligible_sources(self) -> None:
         with tempfile.TemporaryDirectory() as temporary:
             root = Path(temporary) / "library"
@@ -180,6 +187,29 @@ class TutorManagerTests(unittest.TestCase):
         self.assertEqual(status["sources"]["eligibleWorks"], 1)
         self.assertEqual(status["sources"]["restrictedWorks"], 1)
         self.assertEqual(status["sources"]["videoContent"], "catalog-metadata-only")
+
+    def test_source_allowlist_skips_audio_even_if_catalog_flags_are_wrong(self) -> None:
+        audio = self.root / "audio" / "lecture.mp3"
+        audio.parent.mkdir()
+        audio.write_bytes(b"audio fixture")
+        unsafe_library = json.loads(json.dumps(self.library))
+        unsafe_library["works"].append(
+            {
+                "id": "incorrectly-eligible-audio",
+                "title": "Lecture recording",
+                "authors": "Fixture Author",
+                "tutorEligible": True,
+                "files": [
+                    {
+                        **source_record(audio, self.root),
+                        "exists": True,
+                        "tutorEligible": True,
+                    }
+                ],
+            }
+        )
+        sources = self.manager._source_records(unsafe_library, include_documents=False)
+        self.assertNotIn("audio/lecture.mp3", {source["path"] for source in sources})
 
     def test_selected_scope_rejects_restricted_and_unknown_works(self) -> None:
         for work_id in ("restricted-work", "missing-work"):

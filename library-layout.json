@@ -6,7 +6,8 @@
     "books/software-foundations",
     "papers",
     "papers/mit-6006",
-    "lectures"
+    "lectures",
+    "audio"
   ],
   "required_root_entries": [
     "CATALOG.md",
@@ -27,7 +28,8 @@
     "shared_paths": [
       "books",
       "papers",
-      "lectures"
+      "lectures",
+      "audio"
     ]
   }
 }

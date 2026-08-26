@@ -17,7 +17,7 @@ windows\setup\Install Lattice and Connect.cmd
 ```
 
 The default setup downloads the pinned public GitHub Release asset
-`v2.3.3/Lattice-Windows-win-x64.zip` and its `.sha256` companion. It refuses to
+`v2.4.0/Lattice-Windows-win-x64.zip` and its `.sha256` companion. It refuses to
 install unless the SHA-256 matches. It does not download a GitHub Actions
 artifact and does not need a GitHub token.
 

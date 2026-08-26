@@ -31,7 +31,10 @@ const MAX_SAVED_DOCUMENTS = 250;
 const $ = (selector) => document.querySelector(selector);
 const elements = {
   app: $("#pdfApp"),
+  audio: $("#audioButton"),
+  bookmark: $("#bookmarkButton"),
   close: $("#closeButton"),
+  desk: $("#deskButton"),
   documentKicker: $("#documentKicker"),
   documentTitle: $("#documentTitle"),
   documentStats: $("#documentStats"),
@@ -104,6 +107,7 @@ let thumbnailObserver = null;
 let lastFindQuery = "";
 let closePending = false;
 let focusMode = false;
+let selectionTimer = 0;
 
 document.documentElement.dataset.theme = requestedTheme;
 document.title = `${requestedTitle} — Lattice`;
@@ -319,6 +323,39 @@ function goToPage(value) {
   if (!pdfDocument) return;
   pdfViewer.currentPageNumber = normalizePage(value, pdfDocument.numPages);
   elements.viewerContainer.focus({ preventScroll: true });
+}
+
+function setBookmarkState(bookmarked) {
+  const active = bookmarked === true;
+  elements.bookmark.classList.toggle("is-bookmarked", active);
+  elements.bookmark.textContent = active ? "★" : "☆";
+  elements.bookmark.setAttribute("aria-pressed", String(active));
+  elements.bookmark.setAttribute("aria-label", active ? "Remove bookmark from this page" : "Bookmark this page");
+  elements.bookmark.title = active ? "Remove bookmark from this page (B)" : "Bookmark this page (B)";
+}
+
+function togglePageBookmark() {
+  const page = normalizePage(pdfViewer.currentPageNumber, pdfDocument?.numPages || Number.MAX_SAFE_INTEGER);
+  postToShelf("toggle-bookmark", { path: documentPath, page });
+}
+
+function reportSelection() {
+  const selection = window.getSelection();
+  const selectedNode = selection?.rangeCount
+    ? selection.getRangeAt(0).startContainer
+    : selection?.anchorNode;
+  const selectedElement = selectedNode?.nodeType === Node.ELEMENT_NODE
+    ? selectedNode
+    : selectedNode?.parentElement;
+  const pageElement = selectedElement?.closest?.(".page[data-page-number]");
+  if (!selection || !pageElement || !elements.viewer.contains(pageElement)) return;
+  const text = selection.toString().trim().slice(0, 20000);
+  if (!text) return;
+  postToShelf("selection", {
+    path: documentPath,
+    page: normalizePage(pageElement.dataset.pageNumber, pdfDocument?.numPages || Number.MAX_SAFE_INTEGER),
+    text,
+  });
 }
 
 function nextPage() {
@@ -579,7 +616,7 @@ eventBus.on("pagesinit", () => {
   postToShelf("ready", {
     path: documentPath,
     pageCount: pdfDocument.numPages,
-    capabilities: ["range-loading", "search", "single-page", "two-page", "focus-mode", "fullscreen", "rotation"],
+    capabilities: ["range-loading", "search", "single-page", "two-page", "focus-mode", "fullscreen", "rotation", "bookmarks", "reader-desk", "audio", "navigate"],
   });
 });
 
@@ -589,6 +626,10 @@ eventBus.on("pagerendered", (event) => {
 
 eventBus.on("pagechanging", (event) => {
   updatePageControls(event.pageNumber);
+  postToShelf("location", {
+    path: documentPath,
+    page: normalizePage(event.pageNumber, pdfDocument?.numPages || Number.MAX_SAFE_INTEGER),
+  });
   scheduleStateSave();
 });
 
@@ -613,6 +654,9 @@ eventBus.on("updatefindcontrolstate", (event) => {
 });
 
 elements.close.addEventListener("click", () => void requestShelfAction("close"));
+elements.audio.addEventListener("click", () => postToShelf("open-audio", { path: documentPath }));
+elements.bookmark.addEventListener("click", togglePageBookmark);
+elements.desk.addEventListener("click", () => postToShelf("open-desk", { path: documentPath, view: "notes" }));
 elements.open.addEventListener("click", () => void requestShelfAction("open"));
 elements.errorOpen.addEventListener("click", () => void requestShelfAction("open"));
 elements.reveal.addEventListener("click", () => void requestShelfAction("reveal"));
@@ -648,6 +692,10 @@ elements.findForm.addEventListener("submit", (event) => {
 });
 elements.findPrevious.addEventListener("click", () => runFind({ previous: true, again: true }));
 elements.findInput.addEventListener("input", () => runFind());
+document.addEventListener("selectionchange", () => {
+  window.clearTimeout(selectionTimer);
+  selectionTimer = window.setTimeout(reportSelection, 180);
+});
 
 elements.passwordForm.addEventListener("submit", (event) => {
   event.preventDefault();
@@ -710,7 +758,10 @@ document.addEventListener("keydown", (event) => {
     return;
   }
   if (editing || event.ctrlKey || event.metaKey || event.altKey) return;
-  if (event.key.toLowerCase() === "f" && !event.repeat) {
+  if (event.key.toLowerCase() === "b" && !event.repeat) {
+    event.preventDefault();
+    togglePageBookmark();
+  } else if (event.key.toLowerCase() === "f" && !event.repeat) {
     event.preventDefault();
     toggleFocusMode();
   } else if (handlePageNavigationKey(event.key)) {
@@ -737,6 +788,10 @@ window.addEventListener("message", (event) => {
     applyIncomingState(message.state);
   } else if (message.type === "focus") {
     elements.viewerContainer.focus({ preventScroll: true });
+  } else if (message.type === "navigate") {
+    goToPage(message.page ?? message.locator?.page);
+  } else if (message.type === "bookmark-status") {
+    setBookmarkState(message.bookmarked);
   } else if (message.type === "toggle-focus") {
     toggleFocusMode();
   } else if (message.type === "shortcut") {
@@ -748,6 +803,7 @@ window.addEventListener("message", (event) => {
 
 window.addEventListener("beforeunload", () => {
   window.clearTimeout(saveTimer);
+  window.clearTimeout(selectionTimer);
   persistState();
   thumbnailObserver?.disconnect();
   loadingTask?.destroy();

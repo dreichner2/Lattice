@@ -20,7 +20,8 @@ Payload names must:
 - carry an edition only when it distinguishes the work (`clrs-4e.pdf`);
 - avoid author names, download hashes, dates, and full subtitles;
 - use zero-padded sequence numbers for ordered sets (`lec-01.pdf`);
-- keep the format extension honest: PDF, EPUB, ZIP, TGZ, or TXT.
+- keep the format extension honest: PDF, EPUB, ZIP, TGZ, TXT, MP3, M4A, WAV,
+  or FLAC.
 
 The title and full author list belong in metadata, not in the filename.
 
@@ -46,12 +47,13 @@ payload, appending `.library.json` to the complete filename:
 ```text
 books/example.pdf                 → books/example.pdf.library.json
 papers/example.epub               → papers/example.epub.library.json
+audio/example.mp3                 → audio/example.mp3.library.json
 ```
 
-Keeping the payload extension prevents same-stem PDF and EPUB imports from
-colliding. Sidecars are ignored by Git and synchronized through Syncthing. They
-must follow schema version 1 and retain server-owned path, byte count, SHA-256,
-access, and import-provenance fields.
+Keeping the payload extension prevents same-stem imports from colliding.
+Sidecars are ignored by Git and synchronized through Syncthing. They must
+follow schema version 2 and retain server-owned path, material type, byte count,
+SHA-256, access, and import-provenance fields.
 
 ## 4. Subjects and topics are different
 
@@ -99,17 +101,17 @@ out, unavailable, or invalid.
 
 Git tracks the catalog, study guide, rules, source metadata, provenance, hash
 manifests, tooling, and hidden `.gitkeep` files that create the required
-`/books/`, `/papers/`, `/lectures/`, and nested collection directories. The
-payloads inside those directories remain local-only and ignored. This is
-deliberate: the shelf contains mixed rights and should not be republished merely
-because the repository is private.
+`/books/`, `/papers/`, `/lectures/`, `/audio/`, and nested collection
+directories. The payloads inside those directories remain local-only and
+ignored. This is deliberate: the shelf contains mixed rights and should not be
+republished merely because the repository is private.
 
 Syncthing is the private payload transport. Its repository-root `.stignore`
-allowlists only `books/`, `papers/`, and `lectures/`. Private `.library.json`
-sidecars sync because they sit inside those roots; curated catalog metadata,
-taxonomy, and app source continue to come from GitHub. Syncthing must not be
-used to mirror `.git/`, build output, Codex credentials, or a live SQLite
-database.
+allowlists only `books/`, `papers/`, `lectures/`, and `audio/`. Private
+`.library.json` sidecars sync because they sit inside those roots; curated
+catalog metadata, taxonomy, and app source continue to come from GitHub.
+Syncthing must not be used to mirror `.git/`, build output, Codex credentials,
+or a live SQLite database.
 
 The per-device vault may release only a curated payload that has durable
 tracked metadata. Its adjacent sidecar is never released. Check out first
@@ -129,6 +131,8 @@ For an ordinary private import:
 
 1. Drag the file into the app or choose **Add**.
 2. Select the payload kind and review the generated title, subject, and topics.
+   Audio belongs only under **Audio**; documents belong under Book, Paper, or
+   Lecture.
 3. Confirm that the item opens and its sidecar reports the expected path and
    subject.
 4. Let Syncthing finish before editing the same item from the other computer.

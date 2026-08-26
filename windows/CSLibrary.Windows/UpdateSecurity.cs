@@ -17,6 +17,7 @@ internal static class UpdateSecurity
     // as a rollback target while requiring the helper from the next release on.
     private static readonly StableSemanticVersion StorageHelperIntroducedVersion = new(2, 1, 2);
     private static readonly StableSemanticVersion StudyLabIntroducedVersion = new(2, 3, 3);
+    private static readonly StableSemanticVersion ReaderWorkspaceIntroducedVersion = new(2, 4, 0);
     private static readonly string[] StudyLabPackageFiles =
     [
         "ui/study-lab.html",
@@ -27,6 +28,13 @@ internal static class UpdateSecurity
         "ui/vendor/katex/katex.min.css",
         "ui/vendor/katex/katex.min.js",
         "ui/vendor/katex/fonts/KaTeX_Main-Regular.woff2",
+    ];
+    private static readonly string[] ReaderWorkspacePackageFiles =
+    [
+        "ui/reader-desk.css",
+        "ui/reader-desk.js",
+        "ui/audio-player.css",
+        "ui/audio-player.js",
     ];
 
     // The corresponding private key is kept locally outside the repository and
@@ -206,6 +214,14 @@ internal static class UpdateSecurity
         if (RequiresStudyLab(expectedVersion))
         {
             foreach (var relative in StudyLabPackageFiles)
+            {
+                if (!File.Exists(ResolveContainedPath(root, relative)))
+                    throw new InvalidDataException($"The extracted update is missing {relative}.");
+            }
+        }
+        if (expectedVersion.CompareTo(ReaderWorkspaceIntroducedVersion) >= 0)
+        {
+            foreach (var relative in ReaderWorkspacePackageFiles)
             {
                 if (!File.Exists(ResolveContainedPath(root, relative)))
                     throw new InvalidDataException($"The extracted update is missing {relative}.");

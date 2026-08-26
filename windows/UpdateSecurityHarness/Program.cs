@@ -19,6 +19,7 @@ var tests = new (string Name, Action Body)[]
     ("accepts the pre-storage-helper rollback package", AcceptsLegacyPackageWithoutStorageHelper),
     ("requires the storage helper in new packages", RejectsNewPackageWithoutStorageHelper),
     ("requires Study Lab assets in 2.3.3 packages", RejectsNewPackageWithoutStudyLab),
+    ("requires reader workspace assets in 2.4.0 packages", RejectsNewPackageWithoutReaderWorkspace),
     ("removes a complete stale candidate before redownload", RemovesStaleCandidateForRedownload),
     ("removes only recognized expired activation records", RemovesExpiredActivation),
     ("keeps active authority monotonic when an older candidate finishes last", RejectsLateOlderPromotion),
@@ -224,6 +225,18 @@ static void RejectsNewPackageWithoutStudyLab()
         Throws<InvalidDataException>(() => UpdateSecurity.ValidatePackageDirectory(
             root,
             StableSemanticVersion.Parse("2.3.3")));
+    });
+}
+
+static void RejectsNewPackageWithoutReaderWorkspace()
+{
+    WithTemporaryRoot(root =>
+    {
+        BuildPackageDirectory(root, "2.4.0");
+        File.Delete(Path.Combine(root, "ui", "reader-desk.js"));
+        Throws<InvalidDataException>(() => UpdateSecurity.ValidatePackageDirectory(
+            root,
+            StableSemanticVersion.Parse("2.4.0")));
     });
 }
 
@@ -530,6 +543,10 @@ static void BuildPackageDirectory(string root, string version, bool includeStora
         "ui/app.js",
         "ui/tutor.js",
         "ui/tutor-styles.css",
+        "ui/reader-desk.css",
+        "ui/reader-desk.js",
+        "ui/audio-player.css",
+        "ui/audio-player.js",
         "ui/study-lab.html",
         "ui/study-lab.css",
         "ui/study-lab.js",

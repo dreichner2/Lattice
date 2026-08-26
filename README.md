@@ -27,7 +27,7 @@ fallback built from the same shelf UI.
 | 📚 **[Browse the catalog](CATALOG.md)** | Inspect every local work, source, edition, access note, and file path. |
 | 🧭 **[Follow the study guide](STUDY_GUIDE.md)** | Work through a staged curriculum with projects and exit criteria. |
 | 🗂️ **[Review the subject taxonomy](library-taxonomy.json)** | See stable subject IDs, current topic defaults, and selected work overrides. |
-| 🧠 **Use the native notebook** | Search notes, highlights, bookmarks, and indexed book content across the library. |
+| 🧠 **Open the Reading Desk** | Take source-linked notes, save exact places, or work in Study Lab without leaving the page. |
 | 🧾 **[Read the library rules](LIBRARY_RULES.md)** | Understand naming, deduplication, metadata, and remote-storage policy. |
 | 🔎 **[Inspect provenance](notes/provenance/)** | Review import history, source gates, licenses, and conversion boundaries. |
 
@@ -71,11 +71,12 @@ PDFs open in the same Lattice-owned reader on macOS and Windows, with:
 - whole-document search with result navigation;
 - distraction-free focus mode and true fullscreen;
 - restored page, layout, zoom, and rotation; and
+- exact-page bookmarks plus a responsive Reading Desk for notes and Study Lab;
 - an in-reader Shelf control that returns to the existing collection state.
 
 ### EPUB reading
 
-EPUBs use the shared WebKit renderer plus a native-only enhancement layer:
+EPUBs use the shared WebKit renderer plus a native persistence enhancement:
 
 - chapter navigation and searchable contents;
 - native notebook search across EPUB chapter text after chapters are opened;
@@ -86,23 +87,34 @@ EPUBs use the shared WebKit renderer plus a native-only enhancement layer:
 - focus mode and resize-safe pagination; and
 - active-time reading sessions.
 
-### Unified notebook and search
+### Reading Desk and Study Workspace
 
-The native workspace combines reader-created data across every book:
+Every PDF and EPUB has a responsive Reading Desk with three views:
 
-- notes and quotations;
-- PDF and EPUB highlights;
-- bookmarks;
-- active reading sessions; and
-- locally indexed content.
+- **Notes** keeps a quiet Markdown draft beside the page, captures selected
+  passages, and links every saved note to its reading position;
+- **Study Lab** embeds the full Markdown, math, and Python workspace beside the
+  source, automatically linked to that work; and
+- **Places** saves exact one-based PDF pages and multiple distinct positions
+  inside the same EPUB chapter.
 
-Use **Command-Shift-N** for the notebook. Its search field queries notes and
-locally indexed PDF pages and EPUB chapters.
+On narrower windows the desk becomes a compact overlay so the same tools work
+without crushing the reading surface. Standalone Study Workspace also provides
+a searchable notebook rail, starter notebooks, explicit save state, and
+keyboard-first cell editing.
+
+### Audio while reading
+
+Use **Add → Audio** for MP3, M4A, WAV, or FLAC. Audio appears on its own shelf
+and plays through a persistent mini-player that stays available while a PDF or
+EPUB is open. Playback position, speed, volume, and the current queue are kept
+locally; Media Session controls support the system play/pause and seek actions.
 
 ## Reader data and privacy
 
-Progress, bookmarks, annotations, notes, preferences, and sessions are stored in
-a versioned SQLite database:
+The shared reader keeps drafts, notes, and bookmarks in the local WebView/browser
+profile. In the native Mac app, the same records are also mirrored into a
+versioned SQLite database:
 
 ```text
 ~/Library/Application Support/CS Library/Library.sqlite
@@ -174,11 +186,12 @@ books/
 papers/
 └── mit-6006/
 lectures/
+audio/
 ```
 
 When accepting the shared folder, choose the repository root—the folder that
 contains `CATALOG.md`—and use **Send & Receive**. Do not create separate
-Syncthing folders for `books/`, `papers/`, or `lectures/`. The checked-in
+Syncthing folders for `books/`, `papers/`, `lectures/`, or `audio/`. The checked-in
 `.stignore` shares only private payloads and sidecars inside those roots. It
 explicitly excludes Git-owned `.gitkeep` placeholders, the curated
 `lectures/catalog.json`, and incomplete upload files. A sidecar such as
@@ -289,7 +302,7 @@ cd "$HOME\Lattice"
 & ".\windows\setup\Install Lattice and Connect.cmd"
 ```
 
-The setup downloads and installs the pinned Lattice `v2.3.3` release for the
+The setup downloads and installs the pinned Lattice `v2.4.0` release for the
 current user, installs official Syncthing `2.1.3` through WinGet when needed,
 selects this clone as the library, configures the Mac mini hub and shared folder
 on the Windows side, starts both apps, and copies the Windows Syncthing Device ID.
@@ -341,10 +354,11 @@ See [Reader data, backup, and recovery](docs/READER_DATA.md).
 ## Adding material
 
 Drag supported files onto the library window or use the dedicated **Add** button.
-Choose whether an item belongs under `books/`, `papers/`, or `lectures/`; the
-app validates it, chooses a collision-safe filename, and makes it visible
-without a restart. Each imported payload receives an adjacent private sidecar by
-appending `.library.json` to its full filename:
+Choose Book, Paper, or Lecture for PDF/EPUB/TXT documents, or Audio for an
+MP3/M4A/WAV/FLAC recording. The app validates it, chooses a collision-safe
+filename under the matching synchronized root, and makes it visible without a
+restart. Each imported payload receives an adjacent private sidecar by appending
+`.library.json` to its full filename:
 
 ```text
 books/example.pdf
@@ -383,8 +397,9 @@ the [Codex permissions guide](https://learn.chatgpt.com/docs/permissions),
 and [Importing and metadata sidecars](docs/IMPORTING.md).
 
 The repository tracks hidden placeholders for `books/`, `papers/`, `lectures/`,
-and known nested collections, but ignores their payloads. A clone therefore has
-the right paths without putting copyrighted material on the public remote.
+`audio/`, and known nested collections, but ignores their payloads. A clone
+therefore has the right paths without putting copyrighted material on the
+public remote.
 
 ## Browser option
 
@@ -395,10 +410,10 @@ Double-click `open-library.command`, or run:
 ```
 
 The browser version provides the complete shelf, subject and metadata search,
-drag-and-drop import, live file updates, the EPUB reader, PDF/TXT access,
-favorites, reading status, and study documents. Native PDFKit, the durable
-SQLite notebook, native annotations, and global indexed search require the Mac
-app.
+drag-and-drop import, live file updates, PDF/EPUB/TXT reading, the responsive
+Reading Desk, Study Workspace, bookmarks, local notes, audio playback,
+favorites, and reading status. The native Mac app additionally mirrors reader
+data into SQLite and supplies global indexed search and native backups.
 
 The service binds only to `127.0.0.1`. It validates the Host header, selected
 library identity, catalog allowlist, paths, origins, EPUB archive limits, and

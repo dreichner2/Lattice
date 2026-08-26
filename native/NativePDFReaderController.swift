@@ -92,7 +92,7 @@ final class NativePDFReaderController: NSObject, NSTextViewDelegate {
         self.document = document
         stateIdentifier = documentRecord.id
         let storedBookmarks = (try? store.bookmarks(documentID: documentRecord.id)) ?? []
-        bookmarks = storedBookmarks.compactMap { pageIndex(from: $0.locator) }
+        bookmarks = storedBookmarks.compactMap { pageIndex(from: $0.locator, recordID: $0.id) }
         var importedLegacyBookmarks = false
         if bookmarks.isEmpty {
             bookmarks = UserDefaults.standard.array(forKey: legacyStateKey("bookmarks")) as? [Int] ?? []
@@ -101,7 +101,7 @@ final class NativePDFReaderController: NSObject, NSTextViewDelegate {
         bookmarks = Array(Set(bookmarks.filter { $0 >= 0 && $0 < document.pageCount })).sorted()
         durableAnnotations = (try? store.annotations(documentID: documentRecord.id)) ?? []
         pageNotes = Dictionary(uniqueKeysWithValues: durableAnnotations.filter { $0.color == "note" }.compactMap { annotation in
-            guard let page = pageIndex(from: annotation.locator) else { return nil }
+            guard let page = pageIndex(from: annotation.locator, recordID: annotation.id) else { return nil }
             return (String(page), annotation.note)
         })
         if pageNotes.isEmpty {

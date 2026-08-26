@@ -32,7 +32,7 @@ def make_library(root: Path, *, synced: bool) -> None:
     )
     (root / "metadata").mkdir()
     (root / "ui").mkdir()
-    for name in ("books", "papers", "lectures"):
+    for name in ("books", "papers", "lectures", "audio"):
         (root / name).mkdir()
     (root / "books" / "large.pdf").write_bytes((b"lattice fixture\n" * 8192) + b"end")
     (root / "papers" / "paper.txt").write_text("verified", encoding="utf-8")

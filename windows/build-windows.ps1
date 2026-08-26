@@ -24,6 +24,10 @@ $RequiredUiFiles = @(
   "tutor.js",
   "styles.css",
   "tutor-styles.css",
+  "reader-desk.css",
+  "reader-desk.js",
+  "audio-player.css",
+  "audio-player.js",
   "study-lab.html",
   "study-lab.css",
   "study-lab.js",
@@ -101,6 +105,10 @@ try {
     Assert-NativeSuccess "ui/videos.js syntax check"
     node --check ui/tutor.js
     Assert-NativeSuccess "ui/tutor.js syntax check"
+    node --check ui/reader-desk.js
+    Assert-NativeSuccess "ui/reader-desk.js syntax check"
+    node --check ui/audio-player.js
+    Assert-NativeSuccess "ui/audio-player.js syntax check"
     node --check ui/study-lab.js
     Assert-NativeSuccess "ui/study-lab.js syntax check"
     node --check native/ImmersiveEPUB.js

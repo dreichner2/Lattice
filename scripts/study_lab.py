@@ -1,8 +1,9 @@
 """Study Lab persistence for Lattice.
 
-Classic Jupyter-style notebooks with explicit cell kinds. Aidan's rule:
-cells are ``latex`` or ``python`` only — there is no prose/text cell kind
-and no automatic segmentation of mixed content.
+Local-first notebooks with explicit cell kinds. Cells are ``markdown``,
+``latex``, or ``python``; there is no automatic segmentation of mixed content.
+The user always decides whether a cell is prose, mathematics, or executable
+code.
 
 Notebooks live in one SQLite database per library in the user's private
 application-support area, never inside the synchronized library folder
@@ -29,14 +30,14 @@ from datetime import datetime, timedelta, timezone
 from pathlib import Path, PurePosixPath
 from typing import Any
 
-CELL_KINDS = ("latex", "python")
+CELL_KINDS = ("markdown", "latex", "python")
 MAX_TITLE_CHARS = 200
 MAX_CELL_SOURCE_CHARS = 100_000
 MAX_CELLS_PER_NOTEBOOK = 500
 MAX_WORK_PATH_CHARS = 1_024
 MAX_WORK_TITLE_CHARS = 300
 
-_SCHEMA_VERSION = 1
+_SCHEMA_VERSION = 2
 
 
 class StudyError(ValueError):
@@ -134,7 +135,7 @@ def _validate_title(value: Any) -> str:
 def _validate_kind(value: Any) -> str:
     kind = str(value or "")
     if kind not in CELL_KINDS:
-        raise StudyError("Cell kind must be latex or python")
+        raise StudyError("Cell kind must be markdown, latex, or python")
     return kind
 
 
@@ -239,70 +240,118 @@ class StudyLab:
 
     def _migrate(self) -> None:
         with self._lock:
-            self._connection.execute(
-                """
-                CREATE TABLE IF NOT EXISTS meta (
-                    key TEXT PRIMARY KEY,
-                    value TEXT NOT NULL
-                )
-                """
-            )
-            row = self._connection.execute(
-                "SELECT value FROM meta WHERE key = 'schema_version'"
-            ).fetchone()
-            if row is None:
+            try:
+                # Python's sqlite3 driver does not start an implicit transaction
+                # for DDL. Begin before creating or rebuilding anything so an
+                # interruption cannot strand a committed cells_v2 table.
+                self._connection.execute("BEGIN IMMEDIATE")
                 self._connection.execute(
-                    "INSERT INTO meta (key, value) VALUES ('schema_version', ?)",
-                    (str(_SCHEMA_VERSION),),
+                    """
+                    CREATE TABLE IF NOT EXISTS meta (
+                        key TEXT PRIMARY KEY,
+                        value TEXT NOT NULL
+                    )
+                    """
                 )
-            elif int(row["value"]) != _SCHEMA_VERSION:
-                raise StudyError(
-                    f"Unsupported Study Lab schema version {row['value']}"
-                )
-            identity = self._connection.execute(
-                "SELECT value FROM meta WHERE key = 'library_identity'"
-            ).fetchone()
-            if identity is None:
+                row = self._connection.execute(
+                    "SELECT value FROM meta WHERE key = 'schema_version'"
+                ).fetchone()
+                if row is None:
+                    schema_version = _SCHEMA_VERSION
+                    self._connection.execute(
+                        "INSERT INTO meta (key, value) VALUES ('schema_version', ?)",
+                        (str(schema_version),),
+                    )
+                else:
+                    try:
+                        schema_version = int(row["value"])
+                    except (TypeError, ValueError) as exc:
+                        raise StudyError("Study Lab schema version is invalid") from exc
+                    if schema_version not in {1, _SCHEMA_VERSION}:
+                        raise StudyError(
+                            f"Unsupported Study Lab schema version {row['value']}"
+                        )
+
+                identity = self._connection.execute(
+                    "SELECT value FROM meta WHERE key = 'library_identity'"
+                ).fetchone()
+                if identity is None:
+                    self._connection.execute(
+                        "INSERT INTO meta (key, value) VALUES ('library_identity', ?)",
+                        (self.library_id,),
+                    )
+                elif identity["value"] != self.library_id:
+                    raise StudyError("Study Lab database belongs to another library")
+
                 self._connection.execute(
-                    "INSERT INTO meta (key, value) VALUES ('library_identity', ?)",
-                    (self.library_id,),
+                    """
+                    CREATE TABLE IF NOT EXISTS notebooks (
+                        id TEXT PRIMARY KEY,
+                        title TEXT NOT NULL,
+                        created_at TEXT NOT NULL,
+                        updated_at TEXT NOT NULL
+                    )
+                    """
                 )
-            elif identity["value"] != self.library_id:
-                raise StudyError("Study Lab database belongs to another library")
-            self._connection.execute(
-                """
-                CREATE TABLE IF NOT EXISTS notebooks (
-                    id TEXT PRIMARY KEY,
-                    title TEXT NOT NULL,
-                    created_at TEXT NOT NULL,
-                    updated_at TEXT NOT NULL
-                )
-                """
-            )
-            self._connection.execute(
-                """
-                CREATE TABLE IF NOT EXISTS cells (
+                cells_schema = """
                     id TEXT PRIMARY KEY,
                     notebook_id TEXT NOT NULL REFERENCES notebooks(id) ON DELETE CASCADE,
                     position INTEGER NOT NULL,
-                    kind TEXT NOT NULL CHECK(kind IN ('latex', 'python')),
+                    kind TEXT NOT NULL CHECK(kind IN ('markdown', 'latex', 'python')),
                     source TEXT NOT NULL DEFAULT '',
                     created_at TEXT NOT NULL,
                     updated_at TEXT NOT NULL,
                     UNIQUE(notebook_id, position)
+                """
+                if schema_version == 1:
+                    # SQLite cannot alter a CHECK constraint in place. Rebuild
+                    # the small cells table transactionally so existing work is
+                    # preserved while Markdown becomes a first-class note cell.
+                    tables = {
+                        row["name"]
+                        for row in self._connection.execute(
+                            "SELECT name FROM sqlite_master WHERE type = 'table'"
+                        ).fetchall()
+                    }
+                    if "cells" not in tables:
+                        raise StudyError("Study Lab version 1 is missing its cells table")
+                    # A build from before the explicit transaction fix could
+                    # leave only this empty/stale staging table after a crash.
+                    # The authoritative v1 cells table is still intact.
+                    self._connection.execute("DROP TABLE IF EXISTS cells_v2")
+                    self._connection.execute(f"CREATE TABLE cells_v2 ({cells_schema})")
+                    self._connection.execute(
+                        """
+                        INSERT INTO cells_v2
+                            (id, notebook_id, position, kind, source, created_at, updated_at)
+                        SELECT id, notebook_id, position, kind, source, created_at, updated_at
+                        FROM cells
+                        """
+                    )
+                    self._connection.execute("DROP TABLE cells")
+                    self._connection.execute("ALTER TABLE cells_v2 RENAME TO cells")
+                    self._connection.execute(
+                        "UPDATE meta SET value = ? WHERE key = 'schema_version'",
+                        (str(_SCHEMA_VERSION),),
+                    )
+                else:
+                    self._connection.execute(
+                        f"CREATE TABLE IF NOT EXISTS cells ({cells_schema})"
+                    )
+
+                self._connection.execute(
+                    """
+                    CREATE TABLE IF NOT EXISTS notebook_links (
+                        notebook_id TEXT PRIMARY KEY REFERENCES notebooks(id) ON DELETE CASCADE,
+                        work_path TEXT NOT NULL,
+                        work_title TEXT NOT NULL DEFAULT ''
+                    )
+                    """
                 )
-                """
-            )
-            self._connection.execute(
-                """
-                CREATE TABLE IF NOT EXISTS notebook_links (
-                    notebook_id TEXT PRIMARY KEY REFERENCES notebooks(id) ON DELETE CASCADE,
-                    work_path TEXT NOT NULL,
-                    work_title TEXT NOT NULL DEFAULT ''
-                )
-                """
-            )
-            self._connection.commit()
+                self._connection.commit()
+            except Exception:
+                self._connection.rollback()
+                raise
 
     def close(self) -> None:
         with self._lock:

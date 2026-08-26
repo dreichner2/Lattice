@@ -463,6 +463,20 @@ class ServerTests(unittest.TestCase):
         self.assertEqual(caught.exception.code, 403)
         caught.exception.close()
 
+    def test_reader_desk_and_audio_player_assets_are_served_with_exact_types(self) -> None:
+        for route in ("/reader-desk.js", "/audio-player.js"):
+            with self.subTest(route=route), urllib.request.urlopen(
+                self.base + route, timeout=3
+            ) as response:
+                self.assertEqual(response.headers["Content-Type"], "text/javascript; charset=utf-8")
+                self.assertTrue(response.read())
+        for route in ("/reader-desk.css", "/audio-player.css"):
+            with self.subTest(route=route), urllib.request.urlopen(
+                self.base + route, timeout=3
+            ) as response:
+                self.assertEqual(response.headers["Content-Type"], "text/css; charset=utf-8")
+                self.assertTrue(response.read())
+
     def test_pdf_reader_is_embeddable_secure_and_self_contained(self) -> None:
         with urllib.request.urlopen(self.base + "/pdf-reader.html", timeout=3) as response:
             markup = response.read()

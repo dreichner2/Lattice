@@ -34,11 +34,18 @@ still recommended before major library reorganization.
 - reader preferences; and
 - local full-text index entries.
 
+The shared Reading Desk also keeps its working copy and unsaved drafts in the
+local WebView/browser profile. In the Mac app, saved notes and bookmarks are
+mirrored into this SQLite store; neither store is telemetry or remote state.
+
 ## Stable identities
 
-A document ID uses the catalog work ID when available, then the recorded
-SHA-256, and finally the relative path. This allows cataloged progress and
-annotations to follow ordinary filename changes.
+A document ID uses the payload SHA-256 when available and otherwise its relative
+path. Reader state therefore follows an unchanged file when it moves, while a
+PDF and EPUB belonging to the same catalog work remain separate. Opening an old
+work-scoped record migrates only locator data matching the exact payload format;
+ambiguous mixed-format data is preserved under its legacy record rather than
+being guessed or deleted.
 
 ## Schema
 
@@ -74,7 +81,7 @@ search_items / search_items_fts
 `locator_json` is deliberately format-specific. Typical examples:
 
 ```json
-{"type":"pdf","page":42}
+{"type":"pdf","page":42,"pageBase":1}
 ```
 
 ```json
@@ -99,10 +106,13 @@ records.
 
 ## Legacy migration
 
-When a PDF is opened, version 2 imports the previous UserDefaults-based page,
-zoom, display mode, bookmarks, and page notes once. EPUB state is restored
-through the formal bridge and then saved in ReaderStore. The app no longer uses
-browser localStorage as the authoritative native reader database.
+When a PDF is opened, Lattice imports previous UserDefaults-based page, zoom,
+display mode, bookmarks, and page notes once. Zero-based PDFKit locators are
+converted to explicit one-based pages, while already one-based web locators are
+left unchanged. Former work-scoped identities migrate only matching-work,
+matching-format locators; path-fallback identities additionally require the
+exact path. The operation is idempotent. EPUB state is restored through the
+formal bridge and then saved in ReaderStore.
 
 ## Recovery
 

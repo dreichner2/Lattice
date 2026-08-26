@@ -31,6 +31,8 @@ jobs:
           node --check ui/tutor.js
           node --check ui/study-lab.js
           node --check ui/pdf-reader.js
+          node --check ui/reader-desk.js
+          node --check ui/audio-player.js
           node --test tests/*.mjs
 
       - name: Validate durable reader store

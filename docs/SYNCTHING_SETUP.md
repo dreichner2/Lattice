@@ -22,7 +22,7 @@ cd "$HOME\Lattice"
 & ".\windows\setup\Install Lattice and Connect.cmd"
 ```
 
-The script validates the existing scaffold, installs the pinned Lattice `v2.3.3`
+The script validates the existing scaffold, installs the pinned Lattice `v2.4.0`
 package for the current user, installs official Syncthing `2.1.3` through
 WinGet when needed, saves the clone as Lattice's library, and configures this
 exact Syncthing folder on the Windows side:
@@ -60,7 +60,7 @@ commit it. On the Mac mini's authenticated Syncthing GUI, the owner must:
 
 The visible hub label may still be **CS Library** or may already be **Lattice**;
 the stable folder ID above is authoritative. Do not create a second hub folder.
-Do not add `books`, `papers`, or `lectures` as separate Syncthing folders.
+Do not add `books`, `papers`, `lectures`, or `audio` as separate Syncthing folders.
 
 ## macOS clients: one-time setup
 

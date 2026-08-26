@@ -80,7 +80,8 @@ extension NativePDFReaderController {
         default: reader.displayMode = .singlePageContinuous; displayModeControl?.selectedSegment = 0
         }
 
-        let durablePage = (try? store.position(documentID: documentRecord.id))?.page
+        let durablePosition = try? store.position(documentID: documentRecord.id)
+        let durablePage = durablePosition.flatMap(positionPageIndex)
         let legacyPage = defaults.integer(forKey: legacyStateKey("page"))
         let pageIndex = min(max(durablePage ?? legacyPage, 0), max(document.pageCount - 1, 0))
         if let page = document.page(at: pageIndex) {
@@ -115,7 +116,7 @@ extension NativePDFReaderController {
         } else { pageIndex = 0 }
         let progress = document.pageCount > 1 ? Double(pageIndex) / Double(document.pageCount - 1) : 0
         try? store.savePosition(ReaderPosition(
-            documentID: documentRecord.id, locator: pdfLocator(page: pageIndex), page: pageIndex,
+            documentID: documentRecord.id, locator: pdfLocator(page: pageIndex), page: pageIndex + 1,
             progress: progress, updatedAt: Date().timeIntervalSince1970
         ))
         let mode = reader.displayMode == .singlePage ? "page" : (reader.displayMode == .twoUpContinuous ? "spread" : "continuous")
@@ -246,7 +247,7 @@ extension NativePDFReaderController {
         for stored in durableAnnotations where stored.color != "note" {
             guard
                 let locator = locatorObject(stored.locator),
-                let pageIndex = locator["page"] as? Int,
+                let pageIndex = pageIndex(from: stored.locator, recordID: stored.id),
                 let page = document.page(at: pageIndex),
                 let rawBounds = locator["bounds"] as? [String: Any],
                 let x = (rawBounds["x"] as? NSNumber)?.doubleValue,
@@ -291,8 +292,28 @@ extension NativePDFReaderController {
         }
     }
 
-    func pageIndex(from locator: String) -> Int? {
-        (locatorObject(locator)?["page"] as? NSNumber)?.intValue
+    func pageIndex(from locator: String, recordID: String? = nil) -> Int? {
+        guard
+            let object = locatorObject(locator),
+            let storedPage = (object["page"] as? NSNumber)?.intValue
+        else { return nil }
+        let legacyNative = object["pageBase"] == nil
+            && (recordID?.hasPrefix("pdf-bookmark:") == true
+                || recordID?.hasPrefix("pdf-note:") == true
+                || recordID?.hasPrefix("pdf-highlight:") == true)
+        return legacyNative ? max(0, storedPage) : max(0, storedPage - 1)
+    }
+
+    func positionPageIndex(_ position: ReaderPosition) -> Int? {
+        guard
+            let object = locatorObject(position.locator),
+            let storedPage = (object["page"] as? NSNumber)?.intValue
+        else { return position.page.map { max(0, $0) } }
+        let oneBased = object["pageBase"] != nil
+            || object["layout"] != nil
+            || object["scaleValue"] != nil
+            || object["rotation"] != nil
+        return oneBased ? max(0, storedPage - 1) : max(0, storedPage)
     }
 
     func locatorObject(_ locator: String) -> [String: Any]? {
@@ -301,7 +322,7 @@ extension NativePDFReaderController {
     }
 
     func pdfLocator(page: Int, bounds: NSRect? = nil) -> String {
-        var value: [String: Any] = ["type": "pdf", "page": page]
+        var value: [String: Any] = ["type": "pdf", "page": page + 1, "pageBase": 1]
         if let bounds {
             value["bounds"] = ["x": bounds.origin.x, "y": bounds.origin.y, "width": bounds.width, "height": bounds.height]
         }

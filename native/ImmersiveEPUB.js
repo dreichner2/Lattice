@@ -48,7 +48,7 @@
       const keyName = event.key.toLowerCase();
       const selector = event.code === "Space"
         ? (event.shiftKey ? "#epubPrevious" : "#epubNext")
-        : ({ f: "#readerFocusButton:not([hidden])", b: "#readerBookmarkButton:not([hidden])", t: "#readerTocButton:not([hidden])", a: "#readerSettingsButton:not([hidden])", n: "#nativeReaderNotesButton" })[keyName];
+        : ({ f: "#readerFocusButton:not([hidden])", b: "#readerBookmarkButton:not([hidden])", t: "#readerTocButton:not([hidden])", a: "#readerSettingsButton:not([hidden])", n: "#readerDeskButton:not([hidden])" })[keyName];
       if (selector) { event.preventDefault(); topDocument.querySelector(selector)?.click(); }
     }, true);
     return;
@@ -65,6 +65,7 @@
   let selection = "";
   let selectionSource = "";
   const $ = selector => document.querySelector(selector);
+  const hasSharedReaderDesk = () => Boolean(window.__LATTICE_SHARED_READER_DESK__ || $("#readerDesk"));
   const bookKey = () => ($("#readerTitle")?.textContent || "Untitled").trim();
   const chapter = () => ($("#epubChapterLabel")?.textContent || "").trim();
   const read = () => { try { return JSON.parse(localStorage.getItem(key) || "{}") || {}; } catch { return {}; } };
@@ -114,6 +115,7 @@
   };
 
   const ensureUI = () => {
+    if (hasSharedReaderDesk()) return;
     const reader = $("#epubReader");
     const actions = $(".reader-actions");
     if (!reader || !actions) return;
@@ -166,7 +168,7 @@
   };
 
   window.addEventListener("message", event => {
-    if (event.origin !== location.origin) return;
+    if (event.origin !== location.origin || event.source !== $("#epubFrame")?.contentWindow) return;
     if (event.data?.type === "cs-library-reader-index") {
       window.dispatchEvent(new CustomEvent("cs-library-reader-index", { detail: event.data }));
       return;
@@ -197,6 +199,13 @@
       if (pill) pill.hidden = true; if (notes) { notes.hidden = true; notes.classList.remove("has-selection"); }
       $(".native-notes")?.classList.remove("is-open"); return;
     }
+    if (hasSharedReaderDesk()) {
+      pill?.remove();
+      notes?.remove();
+      $(".native-notes")?.remove();
+      $(".native-reader-shortcuts")?.remove();
+      return;
+    }
     ensureUI(); $("#nativeReadingSession")?.removeAttribute("hidden"); $("#nativeReaderNotesButton")?.removeAttribute("hidden"); renderNotes();
     if (!started) started = Date.now();
     if (!timer) timer = setInterval(() => { const minutes = Math.floor((Date.now() - started) / 60000); const node = $("#nativeReadingSession"); if (node) node.textContent = minutes < 60 ? `Reading ${minutes}m` : `Reading ${Math.floor(minutes / 60)}h ${minutes % 60}m`; }, 15000);
@@ -213,7 +222,7 @@
     else if (keyName === "b") { event.preventDefault(); $("#readerBookmarkButton:not([hidden])")?.click(); }
     else if (keyName === "t") { event.preventDefault(); $("#readerTocButton:not([hidden])")?.click(); }
     else if (keyName === "a") { event.preventDefault(); $("#readerSettingsButton:not([hidden])")?.click(); }
-    else if (keyName === "n") { event.preventDefault(); $("#nativeReaderNotesButton")?.click(); }
+    else if (keyName === "n") { event.preventDefault(); (hasSharedReaderDesk() ? $("#readerDeskButton") : $("#nativeReaderNotesButton"))?.click(); }
   }, true);
 
   const install = () => {

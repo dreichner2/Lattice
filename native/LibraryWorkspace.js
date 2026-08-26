@@ -36,6 +36,7 @@
 
   let active = null;
   let annotations = [];
+  let bookmarks = [];
   let saveTimer = 0;
   const call = (action, payload = {}) => window.csLibraryNativeCall?.(action, payload);
   const bridgeAvailable = () => typeof window.csLibraryNativeCall === "function";
@@ -110,8 +111,16 @@
   const refreshAnnotations = async () => {
     if (!active?.id) return render([]);
     try {
-      annotations = await call("annotation.list", { documentId: active.id }) || [];
+      [annotations, bookmarks] = await Promise.all([
+        call("annotation.list", { documentId: active.id }),
+        call("bookmark.list", { documentId: active.id }),
+      ]);
+      annotations = annotations || [];
+      bookmarks = bookmarks || [];
       render(annotations);
+      window.dispatchEvent(new CustomEvent("cs-library-reader-native-snapshot", {
+        detail: { path: active.path, annotations, bookmarks },
+      }));
       showError("");
     } catch (reason) { showError(reason); }
   };
@@ -164,10 +173,19 @@
       try { return canonicalJSON(JSON.parse(item.locator)) === canonicalJSON(locator); } catch { return false; }
     });
     if (detail.bookmarked && !existing) {
-      await call("bookmark.save", { documentId: active.id, locator, label: detail.label || "Saved position" });
+      const payload = {
+        documentId: active.id,
+        locator,
+        label: detail.label || "Saved position",
+      };
+      const id = safeText(detail.id, 2000);
+      if (id) payload.id = id;
+      if (Number(detail.createdAt) > 0) payload.createdAt = Number(detail.createdAt);
+      await call("bookmark.save", payload);
     } else if (!detail.bookmarked && existing) {
       await call("bookmark.delete", { id: existing.id });
     }
+    await refreshAnnotations();
   });
   window.addEventListener("cs-library-reader-save-annotation", async event => {
     if (!active?.id) return;
@@ -198,17 +216,25 @@
     call("session.finish", {}).catch(() => {});
     active = null;
     annotations = [];
+    bookmarks = [];
     panel.classList.remove("is-open");
     render([]);
   });
   document.addEventListener("keydown", event => {
     if (!(event.metaKey || event.ctrlKey) || !event.shiftKey || event.key.toLowerCase() !== "n") return;
     event.preventDefault();
-    button.click();
+    (document.getElementById("readerDeskButton") || button).click();
   }, true);
 
-  (document.head || document.documentElement).append(style);
-  document.body.append(button, panel);
+  const hasSharedReaderDesk = Boolean(
+    window.__LATTICE_SHARED_READER_DESK__
+    || document.getElementById("readerDesk")
+    || document.getElementById("readerDeskButton"),
+  );
+  if (!hasSharedReaderDesk) {
+    (document.head || document.documentElement).append(style);
+    document.body.append(button, panel);
+  }
   render([]);
   window.dispatchEvent(new CustomEvent("cs-library-workspace-ready"));
 })();

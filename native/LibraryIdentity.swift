@@ -5,6 +5,9 @@ enum LibraryIdentity {
     static let protocolVersion = 4
     private static let readableExtensions = Set(["pdf", "epub", "txt"])
     private static let readableRoots = Set(["books", "papers", "lectures"])
+    private static let audioExtensions = Set(["mp3", "m4a", "wav", "flac"])
+    private static let payloadExtensions = readableExtensions.union(audioExtensions)
+    private static let payloadRoots = readableRoots.union(["audio"])
 
     static func canonicalRoot(_ root: URL) -> URL {
         root.standardizedFileURL.resolvingSymlinksInPath()
@@ -15,10 +18,18 @@ enum LibraryIdentity {
     }
 
     static func documentID(workID: String?, path: String, sha256 digest: String? = nil) -> String {
-        let work = workID?.trimmingCharacters(in: .whitespacesAndNewlines) ?? ""
         let hash = digest?.trimmingCharacters(in: .whitespacesAndNewlines).lowercased() ?? ""
-        let identity = !work.isEmpty ? "work:\(work)" : (!hash.isEmpty ? "sha256:\(hash)" : "path:\(normalizedRelativePath(path))")
+        // Reader state belongs to a concrete payload, not the catalog work that
+        // happens to contain it. A single work can legitimately expose both a
+        // PDF and an EPUB; keying by work would mix their positions and notes.
+        // Prefer the digest so state follows an unchanged file when it moves.
+        let identity = !hash.isEmpty ? "sha256:\(hash)" : "path:\(normalizedRelativePath(path))"
         return sha256("cs-library-document:\(identity)")
+    }
+
+    static func legacyWorkDocumentID(workID: String?) -> String? {
+        let work = workID?.trimmingCharacters(in: .whitespacesAndNewlines) ?? ""
+        return work.isEmpty ? nil : sha256("cs-library-document:work:\(work)")
     }
 
     static func fileSHA256(_ url: URL) throws -> String {
@@ -37,12 +48,28 @@ enum LibraryIdentity {
         let normalized = normalizedRelativePath(relativePath)
         guard isReadableRelativePath(normalized) else { return nil }
 
+        return resolveContainedPayload(normalized, root: root, extensions: readableExtensions)
+    }
+
+    static func resolveLibraryPayload(relativePath: String, root: URL) -> URL? {
+        let normalized = normalizedRelativePath(relativePath)
+        guard isLibraryPayloadRelativePath(normalized) else { return nil }
+
+        return resolveContainedPayload(normalized, root: root, extensions: payloadExtensions)
+    }
+
+    private static func resolveContainedPayload(
+        _ normalized: String,
+        root: URL,
+        extensions: Set<String>
+    ) -> URL? {
+
         let canonical = canonicalRoot(root)
         let candidate = canonical.appendingPathComponent(normalized).standardizedFileURL.resolvingSymlinksInPath()
         let rootPrefix = canonical.path.hasSuffix("/") ? canonical.path : canonical.path + "/"
         guard
             candidate.path.hasPrefix(rootPrefix),
-            readableExtensions.contains(candidate.pathExtension.lowercased()),
+            extensions.contains(candidate.pathExtension.lowercased()),
             FileManager.default.fileExists(atPath: candidate.path)
         else { return nil }
         return candidate
@@ -50,12 +77,20 @@ enum LibraryIdentity {
 
     static func isReadableRelativePath(_ value: String) -> Bool {
         let normalized = normalizedRelativePath(value)
-        guard !normalized.isEmpty, !normalized.hasPrefix("/"), !normalized.contains("\0") else { return false }
-        let pieces = normalized.split(separator: "/", omittingEmptySubsequences: false)
-        return pieces.count >= 2
-            && pieces.allSatisfy({ !$0.isEmpty && $0 != "." && $0 != ".." })
-            && readableRoots.contains(String(pieces[0]))
+        return isSafeRelativePath(normalized, roots: readableRoots)
             && readableExtensions.contains(URL(fileURLWithPath: normalized).pathExtension.lowercased())
+    }
+
+    static func isLibraryPayloadRelativePath(_ value: String) -> Bool {
+        let normalized = normalizedRelativePath(value)
+        guard isSafeRelativePath(normalized, roots: payloadRoots) else { return false }
+        let pieces = normalized.split(separator: "/", omittingEmptySubsequences: false)
+        let root = String(pieces[0])
+        let fileExtension = URL(fileURLWithPath: normalized).pathExtension.lowercased()
+        if root == "audio" {
+            return audioExtensions.contains(fileExtension)
+        }
+        return readableRoots.contains(root) && readableExtensions.contains(fileExtension)
     }
 
     static func relativePath(for file: URL, root: URL) -> String? {
@@ -65,6 +100,15 @@ enum LibraryIdentity {
         guard candidate.path.hasPrefix(prefix) else { return nil }
         let relative = String(candidate.path.dropFirst(prefix.count))
         return resolveLibraryFile(relativePath: relative, root: canonical) == candidate ? relative : nil
+    }
+
+    static func relativePayloadPath(for file: URL, root: URL) -> String? {
+        let canonical = canonicalRoot(root)
+        let candidate = file.standardizedFileURL.resolvingSymlinksInPath()
+        let prefix = canonical.path.hasSuffix("/") ? canonical.path : canonical.path + "/"
+        guard candidate.path.hasPrefix(prefix) else { return nil }
+        let relative = String(candidate.path.dropFirst(prefix.count))
+        return resolveLibraryPayload(relativePath: relative, root: canonical) == candidate ? relative : nil
     }
 
     static func sameHTTPOrigin(_ first: URL?, _ second: URL?) -> Bool {
@@ -90,6 +134,14 @@ enum LibraryIdentity {
     private static func normalizedRelativePath(_ value: String) -> String {
         value.replacingOccurrences(of: "\\", with: "/")
             .trimmingCharacters(in: .whitespacesAndNewlines)
+    }
+
+    private static func isSafeRelativePath(_ normalized: String, roots: Set<String>) -> Bool {
+        guard !normalized.isEmpty, !normalized.hasPrefix("/"), !normalized.contains("\0") else { return false }
+        let pieces = normalized.split(separator: "/", omittingEmptySubsequences: false)
+        return pieces.count >= 2
+            && pieces.allSatisfy({ !$0.isEmpty && $0 != "." && $0 != ".." })
+            && roots.contains(String(pieces[0]))
     }
 
     private static func sha256(_ value: String) -> String {

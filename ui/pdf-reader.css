@@ -61,7 +61,7 @@ body,
 }
 
 body {
-  min-width: 480px;
+  min-width: 320px;
   background: var(--canvas-deep);
   color: var(--ink);
   font-family: var(--sans);
@@ -273,6 +273,28 @@ select:focus-visible,
   border-radius: 10px;
   font-size: 9px;
   font-weight: 740;
+}
+
+.bookmark-action.is-bookmarked {
+  border-color: color-mix(in srgb, var(--accent) 48%, var(--line));
+  background: var(--accent-soft);
+  color: var(--accent-deep);
+}
+
+.desk-action,
+.audio-action {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+}
+
+.audio-action {
+  border-color: color-mix(in srgb, var(--accent) 22%, var(--line));
+}
+
+.audio-action span {
+  color: var(--accent-deep);
+  font-size: 12px;
 }
 
 .shelf-button {
@@ -1206,8 +1228,22 @@ kbd {
 
   .brand-copy,
   .header-rule,
-  .text-action {
+  .text-action:not(.desk-action):not(.audio-action) {
     display: none;
+  }
+
+  .desk-action,
+  .audio-action {
+    width: 34px;
+    padding: 0;
+    justify-content: center;
+    gap: 0;
+    font-size: 0;
+  }
+
+  .desk-action span,
+  .audio-action span {
+    font-size: 14px;
   }
 
   .reader-main {
