@@ -567,6 +567,36 @@ async function localAction(path, action) {
   return payload;
 }
 
+async function vaultAction(path, operation) {
+  const response = await fetch(`/api/vault/${operation}`, {
+    method: "POST",
+    headers: {
+      "Content-Type": "application/json",
+      "X-Library-Token": state.token,
+    },
+    body: JSON.stringify({ path }),
+  });
+  const payload = await response.json();
+  if (!response.ok) throw new Error(payload.error || "Vault action failed");
+  return payload;
+}
+
+const VAULT_OPERATION_LABELS = {
+  checkout: "Checked out to the vault",
+  checkin: "Released to the vault",
+  restore: "Restored to this device",
+};
+
+async function runVaultOperation(path, operation) {
+  try {
+    await vaultAction(path, operation);
+    announce(VAULT_OPERATION_LABELS[operation] || "Vault updated");
+    await refreshLibrary(null, { quiet: true });
+  } catch (error) {
+    announce(error.message, true);
+  }
+}
+
 async function responsePayload(response) {
   try {
     return await response.json();
@@ -2082,6 +2112,10 @@ async function openOnMac(work, file) {
 }
 
 async function openFile(work, file) {
+  if (file.availability === "away") {
+    announce("This book is checked out to the vault. Restore it to read here.", true);
+    return;
+  }
   if (file.format === "EPUB") await showEpubReader(work, file);
   else if (file.format === "PDF") showPdfReader(work, file);
   else if (file.format === "TXT") await showTextReader(work, file);
@@ -2279,7 +2313,7 @@ function makeCard(work) {
 
 function makeMaterialCard(material) {
   const work = state.workById.get(material.workId);
-  const card = node("article", `book-card material-card subject-${material.topicId || material.subjectId}${work.cataloged ? "" : " is-new-arrival"}`);
+  const card = node("article", `book-card material-card subject-${material.topicId || material.subjectId}${work.cataloged ? "" : " is-new-arrival"}${material.availability === "away" ? " is-away" : ""}`);
   card.dataset.material = material.path;
   const favorite = button(
     `favorite-button${state.favorites.has(work.id) ? " is-favorite" : ""}`,
@@ -2306,11 +2340,23 @@ function makeMaterialCard(material) {
   const meta = node("div", "book-meta");
   meta.append(node("span", "", subjectSummary(material)), node("span", "", material.format), node("span", "", humanBytes(material.bytes)), node("span", "book-status", material.materialLabel));
   info.append(meta);
+  if (material.availability === "away") {
+    info.append(node("p", "vault-note", "In the vault — restore to read on this device"));
+  }
   const actions = node("div", "card-actions");
   actions.append(
     button("button button-primary button-small", isBrowserReadable(material) ? "Read here" : SYSTEM_OPEN_LABEL, () => openFile(work, material)),
     button("button button-quiet button-small", "Work details", () => showDrawer(work.id)),
   );
+  if (material.availability === "away") {
+    actions.append(
+      button("button button-quiet button-small", "Restore from vault", () => runVaultOperation(material.path, "restore")),
+    );
+  } else if (material.workCataloged !== false) {
+    actions.append(
+      button("button button-quiet button-small", "Check out to vault", () => runVaultOperation(material.path, "checkout")),
+    );
+  }
   info.append(actions);
   card.append(favorite, cover, info);
   return card;
