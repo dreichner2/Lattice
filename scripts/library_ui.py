@@ -42,6 +42,7 @@ from xml.etree import ElementTree
 
 import lattice_tutor
 import study_lab
+import study_python
 
 
 REPO_ROOT = Path(__file__).resolve().parents[1]
@@ -2493,6 +2494,7 @@ class LibraryHTTPServer(ThreadingHTTPServer):
             # A private-database failure must not keep the library from
             # opening; Study Lab endpoints report unavailability instead.
             self.study = None
+        self.study_runtime = study_python.StudyPythonRuntime()
         self._epub_cache: dict[
             str,
             tuple[tuple[int, int], dict[str, Any], dict[str, str]],
@@ -3183,6 +3185,24 @@ class LibraryHTTPServer(ThreadingHTTPServer):
     def study_delete_cell(self, value: dict[str, Any]) -> dict[str, Any]:
         return self._require_study().delete_cell(value)
 
+    # --------------------------------------------------------- study kernel
+
+    def study_kernel_status(self) -> dict[str, Any]:
+        return self.study_runtime.status()
+
+    def study_kernel_run(self, value: dict[str, Any]) -> dict[str, Any]:
+        notebook_id = str(value.get("notebookId") or "")
+        source = value.get("source")
+        if not notebook_id or not isinstance(source, str) or not source.strip():
+            raise ValueError("Kernel runs need a notebookId and non-empty source")
+        return self.study_runtime.run(notebook_id, source)
+
+    def study_kernel_restart(self, value: dict[str, Any]) -> dict[str, Any]:
+        notebook_id = str(value.get("notebookId") or "")
+        if not notebook_id:
+            raise ValueError("Kernel restarts need a notebookId")
+        return self.study_runtime.restart(notebook_id)
+
     def _watch_parent(self) -> None:
         assert self.parent_pid is not None
         while not self._watcher_stop.wait(1.0):
@@ -3243,6 +3263,9 @@ class LibraryHTTPServer(ThreadingHTTPServer):
         tutor = getattr(self, "tutor", None)
         if tutor is not None:
             tutor.close()
+        runtime = getattr(self, "study_runtime", None)
+        if runtime is not None:
+            runtime.stop_all()
         with self._job_lock:
             self._ai_worker_stop.set()
         self._fallback_queued_enrichment_on_shutdown()
@@ -3401,6 +3424,9 @@ class LibraryRequestHandler(BaseHTTPRequestHandler):
                 self._send_json(HTTPStatus.SERVICE_UNAVAILABLE, {"error": str(exc)})
                 return
             self._send_json(HTTPStatus.OK, payload, head_only=head_only)
+            return
+        if request_path == "/api/study/kernel/status":
+            self._send_json(HTTPStatus.OK, self.server.study_kernel_status(), head_only=head_only)
             return
         if request_path.startswith("/api/study/notebook/"):
             notebook_id = urllib.parse.unquote(
@@ -3900,6 +3926,29 @@ class LibraryRequestHandler(BaseHTTPRequestHandler):
                 return
             except ValueError as exc:
                 self._send_json(HTTPStatus.SERVICE_UNAVAILABLE, {"error": str(exc)})
+                return
+            self._send_json(HTTPStatus.OK, result)
+            return
+        if request_path == "/api/study/kernel/status":
+            self._send_json(HTTPStatus.OK, self.server.study_kernel_status(), head_only=head_only)
+            return
+        if request_path in {"/api/study/kernel/run", "/api/study/kernel/restart"}:
+            if not self._mutation_access_allowed():
+                return
+            try:
+                body = self._read_json_request(512 * 1024)
+                if request_path.endswith("/run"):
+                    result = self.server.study_kernel_run(body)
+                else:
+                    result = self.server.study_kernel_restart(body)
+            except study_python.KernelError as exc:
+                self._send_json(HTTPStatus.CONFLICT, {"error": str(exc)})
+                return
+            except study_python.KernelUnavailable as exc:
+                self._send_json(HTTPStatus.SERVICE_UNAVAILABLE, {"error": str(exc)})
+                return
+            except ValueError as exc:
+                self._send_json(HTTPStatus.BAD_REQUEST, {"error": str(exc)})
                 return
             self._send_json(HTTPStatus.OK, result)
             return

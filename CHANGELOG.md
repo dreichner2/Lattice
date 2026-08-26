@@ -9,6 +9,11 @@
   in a per-device SQLite database outside the synchronized library folder,
   can be linked to catalog works, and render LaTeX through a vendored KaTeX.
   New token-guarded endpoints under `/api/study/*`; protocol version is now 4.
+- Study Lab Python kernel: persistent per-notebook CPython processes ported
+  from Lunaris. Python cells gain Run controls with captured stdout/stderr,
+  result values, matplotlib PNG figures (Agg backend), per-cell timeouts,
+  and Restart-kernel semantics. Trusted local execution, documented in
+  SECURITY.md; not a sandbox.
 
 ## 2.3.2 — 2026-08-23
 

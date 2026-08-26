@@ -30,6 +30,8 @@
         <input id="notebookTitle" class="study-notebook-title" type="text"
                aria-label="Notebook title" placeholder="Untitled notebook" maxlength="200">
         <span class="study-work-link" id="workLink"></span>
+        <button class="cell-action" id="restartKernelButton" type="button"
+                title="Stop the Python kernel and clear its variables">Restart kernel</button>
         <span class="study-conflict" id="conflictFlag" hidden>Changed elsewhere — reload to continue</span>
       </div>
       <div id="cellStack" class="cell-stack"></div>

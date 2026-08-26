@@ -37,6 +37,19 @@ malicious document is required.
   payload and adjacent sidecar.
 - Exits when its desktop parent disappears when launched by either packaged app.
 
+### Study Lab Python kernel
+
+- Study Lab can execute Python cells through a persistent CPython process
+  owned by the local service. This is **trusted execution, not a sandbox**:
+  cells run locally with the user's full permissions, exactly like running a
+  script in a terminal.
+- Kernel requests require the same random in-memory token as other
+  mutations, and the service binds only to loopback.
+- The bridge captures cell stdout/stderr so the JSON control channel stays
+  clean, blocks interactive `input()`, caps output and plot sizes, enforces a
+  per-cell timeout by stopping the kernel, and keeps one kernel per notebook
+  with a bounded number of concurrent kernels.
+
 ### Windows installer and updater
 
 - The one-click bootstrap downloads the pinned `v2.3.2` Windows release and

@@ -188,6 +188,45 @@ class StudyServerTests(unittest.TestCase):
         status, _body = self.get("/vendor/katex/..%2F..%2F..%2Flibrary%2FCATALOG.md")
         self.assertEqual(status, 404)
 
+    def test_kernel_run_over_http(self) -> None:
+        status, created = self.post("/api/study/notebooks", {"title": "Kernel nb"})
+        notebook_id = created["notebook"]["id"]
+
+        status, status_payload = self.get("/api/study/kernel/status")
+        self.assertEqual(status, 200)
+        self.assertTrue(status_payload["available"])
+
+        status, run = self.post(
+            "/api/study/kernel/run",
+            {"notebookId": notebook_id, "source": "print('http')\n3 ** 2"},
+        )
+        self.assertEqual(status, 200)
+        self.assertTrue(run["ok"])
+        stream = next(o for o in run["outputs"] if o["type"] == "stream")
+        self.assertIn("http", stream["text"])
+        value = next(o for o in run["outputs"] if o["type"] == "result")
+        self.assertEqual(value["text"], "9")
+
+        status, restarted = self.post(
+            "/api/study/kernel/restart",
+            {"notebookId": notebook_id},
+        )
+        self.assertEqual(status, 200)
+
+        status, run = self.post(
+            "/api/study/kernel/run",
+            {"notebookId": notebook_id, "source": "print('again')"},
+        )
+        self.assertEqual(status, 200)
+        self.assertTrue(run["ok"])
+
+    def test_kernel_rejects_empty_source(self) -> None:
+        status, _body = self.post(
+            "/api/study/kernel/run",
+            {"notebookId": "nb", "source": "   "},
+        )
+        self.assertEqual(status, 400)
+
     def test_mutations_require_token(self) -> None:
         request = urllib.request.Request(
             self.url("/api/study/notebooks"),

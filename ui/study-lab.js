@@ -123,6 +123,15 @@
     const actions = document.createElement("div");
     actions.className = "cell-actions";
 
+    if (cell.kind === "python") {
+      const runButton = document.createElement("button");
+      runButton.type = "button";
+      runButton.className = "cell-action cell-run";
+      runButton.textContent = cell.mode === "edit" ? "Run ▶" : "Run ▶";
+      runButton.addEventListener("click", () => void runCell(cell, runButton));
+      actions.append(runButton);
+    }
+
     const toggle = document.createElement("button");
     toggle.type = "button";
     toggle.className = "cell-action";
@@ -177,6 +186,8 @@
       body.append(editor);
     } else if (cell.kind === "latex") {
       renderLatex(body, cell.source);
+    } else if (cell.outputs && cell.outputs.length) {
+      renderOutputs(body, cell);
     } else {
       renderPythonPreview(body, cell.source);
     }
@@ -327,6 +338,91 @@
     }
   }
 
+  function renderOutputs(container, cell) {
+    container.innerHTML = "";
+    const outputs = cell.outputs || [];
+    if (!outputs.length) return;
+    const wrap = document.createElement("div");
+    wrap.className = "cell-outputs";
+    for (const output of outputs) {
+      if (output.type === "stream") {
+        const pre = document.createElement("pre");
+        pre.className = `cell-output stream-${output.name === "stderr" ? "stderr" : "stdout"}`;
+        pre.textContent = output.text;
+        wrap.append(pre);
+      } else if (output.type === "result") {
+        const pre = document.createElement("pre");
+        pre.className = "cell-output cell-result";
+        pre.textContent = output.text;
+        wrap.append(pre);
+      } else if (output.type === "error") {
+        const block = document.createElement("div");
+        block.className = "cell-output cell-error";
+        const name = document.createElement("strong");
+        name.textContent = `${output.name}: ${output.message}`;
+        const trace = document.createElement("pre");
+        trace.textContent = output.traceback || "";
+        block.append(name, trace);
+        wrap.append(block);
+      } else if (output.type === "image" && output.data) {
+        const image = document.createElement("img");
+        image.className = "cell-output cell-image";
+        image.alt = "Matplotlib figure";
+        image.src = `data:${output.mime || "image/png"};base64,${output.data}`;
+        wrap.append(image);
+      }
+    }
+    container.append(wrap);
+  }
+
+  async function runCell(cell, button) {
+    if (!state.currentId || !cell.source.trim()) {
+      announce("Nothing to run in that cell", true);
+      return;
+    }
+    button.disabled = true;
+    button.textContent = "Running…";
+    try {
+      // Save first so the executed source matches what is on disk.
+      await saveCell(cell);
+      const result = await api("/api/study/kernel/run", {
+        method: "POST",
+        mutate: true,
+        body: JSON.stringify({
+          notebookId: state.currentId,
+          source: cell.source,
+        }),
+      });
+      cell.outputs = result.outputs;
+      cell.mode = "preview";
+      renderCells();
+      announce(result.ok ? "Ran without errors" : "Cell raised an error", !result.ok);
+    } catch (error) {
+      announce(error.message, true);
+    } finally {
+      if (button.isConnected) {
+        button.disabled = false;
+        button.textContent = "Run ▶";
+      }
+    }
+  }
+
+  async function restartKernel() {
+    if (!state.currentId) return;
+    try {
+      await api("/api/study/kernel/restart", {
+        method: "POST",
+        mutate: true,
+        body: JSON.stringify({ notebookId: state.currentId }),
+      });
+      for (const cell of state.cells) delete cell.outputs;
+      renderCells();
+      announce("Kernel restarted — variables cleared");
+    } catch (error) {
+      announce(error.message, true);
+    }
+  }
+
   async function saveTitle() {
     if (!state.currentId) return;
     try {
@@ -361,6 +457,8 @@
     elements.newNotebookButton.addEventListener("click", () => void createNotebook());
     elements.emptyNewButton.addEventListener("click", () => void createNotebook());
     elements.notebookTitle.addEventListener("change", () => void saveTitle());
+    const restartButton = document.getElementById("restartKernelButton");
+    if (restartButton) restartButton.addEventListener("click", () => void restartKernel());
     document.querySelectorAll("[data-add-kind]").forEach((button) => {
       button.addEventListener("click", () => void addCell(button.dataset.addKind));
     });
