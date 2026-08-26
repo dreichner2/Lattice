@@ -30,6 +30,9 @@
 
 ### Fixed
 
+- Tutor's optional Study artifact now uses a strict nullable response-schema
+  field, so current Codex structured-output validation accepts ordinary turns
+  and artifact-producing turns instead of rejecting the request before inference.
 - Tutor now uses Codex's standard read-only sandbox and one disposable excerpt
   workspace on every platform. The original library is never granted to Codex;
   shell, unified-exec, and code-mode are disabled, and citations must name a

@@ -266,6 +266,20 @@ class TutorManagerTests(unittest.TestCase):
         ):
             self.assertIsNone(self.manager._validate_artifact(broken))
 
+    def test_response_schema_models_optional_artifact_as_strict_nullable_field(self) -> None:
+        schema = lattice_tutor._response_schema()
+        self.assertEqual(
+            schema["required"],
+            ["answer", "citations", "artifact"],
+        )
+        artifact = schema["properties"]["artifact"]
+        object_branch = artifact["anyOf"][0]
+        self.assertEqual(
+            object_branch["required"],
+            ["kind", "source", "label"],
+        )
+        self.assertEqual(artifact["anyOf"][1], {"type": "null"})
+
     def test_video_scope_is_metadata_only(self) -> None:
         scope = self.manager._resolve_scope(
             {"scope": "selected", "courseIds": ["course-one"]},
