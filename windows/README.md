@@ -192,13 +192,12 @@ local service, releases the WebView, resolves the parent USB device, saves
 reconnect state, and launches a detached eject helper from local storage. The
 main Lattice process exits completely before the helper makes Windows' native
 eject request. Before disposal, Lattice records the exact PID and start time of
-every process reported by its WebView2 environment; the helper waits for the
-main app and every captured process to exit. If a File Explorer window or tab
-is open on the library drive, the helper shows the blocking location and waits
-for the user to close it before allowing final handles to drain. The helper
-stays visibly in **Ejecting…** and retries only pending or outstanding handle
-closes within a bounded window, allowing a quiet 30-second drain interval
-between native eject requests. Keep the SSD attached until
+the local service tree and every process reported by its WebView2 environment;
+the helper waits for the main app and every captured process to exit. After a
+veto, File Explorer locations on the drive are diagnostic guidance and never
+suppress the first native eject request. The helper stays visibly in
+**Ejecting…** and uses short bounded retries only for pending or outstanding
+handle closes. Keep the SSD attached until
 **Safe to unplug** appears. Lattice does not use volume lock, dismount, offline,
 or mount-point operations. If Windows vetoes eject, Lattice reports the exact
 veto type and name, writes `%LOCALAPPDATA%\CS Library\last-eject-diagnostic.txt`,

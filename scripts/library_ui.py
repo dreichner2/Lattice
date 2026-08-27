@@ -2967,7 +2967,9 @@ class LibraryHTTPServer(ThreadingHTTPServer):
             # A private-database failure must not keep the library from
             # opening; Study Lab endpoints report unavailability instead.
             self.study = None
-        self.study_runtime = study_python.StudyPythonRuntime()
+        self.study_runtime = study_python.StudyPythonRuntime(
+            working_directory=self.study.root if self.study is not None else None,
+        )
         self._epub_cache: dict[
             str,
             tuple[tuple[int, int], dict[str, Any], dict[str, str]],

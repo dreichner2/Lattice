@@ -410,9 +410,12 @@ public partial class MainWindow : Window
 
         var ready = new TaskCompletionSource<string>(TaskCreationOptions.RunContinuationsAsynchronously);
         var errors = new StringBuilder();
+        Directory.CreateDirectory(SettingsRoot);
         var start = new ProcessStartInfo(server)
         {
-            WorkingDirectory = root,
+            // Never let LatticeServer or a child process own the removable
+            // library volume merely because it inherited the server's CWD.
+            WorkingDirectory = SettingsRoot,
             UseShellExecute = false,
             RedirectStandardOutput = true,
             RedirectStandardError = true,
@@ -1629,20 +1632,36 @@ public partial class MainWindow : Window
         }
     }
 
-    private void StopOwnedServerForEject()
+    private IReadOnlyList<EjectProcessIdentity> StopOwnedServerForEject()
     {
         var process = _serverProcess;
-        if (process is null) return;
-        if (!process.HasExited)
+        if (process is null) return Array.Empty<EjectProcessIdentity>();
+        IReadOnlyList<EjectProcessIdentity> trackedProcesses = Array.Empty<EjectProcessIdentity>();
+        try
         {
-            process.Kill(entireProcessTree: true);
-            if (!process.WaitForExit(10_000))
+            if (!process.HasExited)
             {
-                throw new InvalidOperationException(
-                    "LatticeServer did not release the library drive within ten seconds.");
+                trackedProcesses = WindowsProcessTree.Capture(process);
+                try
+                {
+                    process.Kill(entireProcessTree: true);
+                }
+                catch (InvalidOperationException) when (process.HasExited)
+                {
+                    // The server completed its own shutdown between the checks.
+                }
+                if (!process.WaitForExit(10_000))
+                {
+                    throw new InvalidOperationException(
+                        "LatticeServer did not release the library drive within ten seconds.");
+                }
             }
         }
-        StopOwnedServer();
+        finally
+        {
+            StopOwnedServer();
+        }
+        return trackedProcesses;
     }
 
     private IReadOnlyList<EjectProcessIdentity> CaptureWebViewProcessIdentities()
@@ -2223,16 +2242,22 @@ public partial class MainWindow : Window
 
         try
         {
-            StopOwnedServerForEject();
+            var serverProcesses = StopOwnedServerForEject();
             _serverUrl = null;
             ExternalLibraryVolumeRecord.Save(
                 ExternalLibraryVolumeStatePath,
                 ejectTarget,
                 outcome.SyncthingManaged);
             var webViewProcesses = CaptureWebViewProcessIdentities();
+            var ownedProcesses = serverProcesses
+                .Concat(webViewProcesses)
+                .GroupBy(process => process.ProcessId)
+                .Select(group => group.MaxBy(process => process.StartTimeUtcTicks)!)
+                .OrderBy(process => process.ProcessId)
+                .ToArray();
             Browser.Dispose();
             _browserDisposed = true;
-            using var helper = LaunchNativeEjectHelper(ejectTarget, webViewProcesses);
+            using var helper = LaunchNativeEjectHelper(ejectTarget, ownedProcesses);
         }
         catch (Exception error)
         {

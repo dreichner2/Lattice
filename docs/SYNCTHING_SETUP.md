@@ -123,10 +123,13 @@ Date, pauses only folder `cs-library-3b8290f24f15`, stops the dedicated
 Syncthing process and local service, releases its WebView, and saves reconnect
 state. It then launches a detached helper from local storage and closes the
 main Lattice process completely. Lattice passes the helper the exact PID and
-start time of every process in its WebView2 environment, and the helper waits
-for the main app and the complete captured process set to exit before asking
-Windows to eject the parent USB device. It then allows final handles to drain
-and retries only pending or outstanding handle closes within a bounded window.
+start time of the local service tree and every process in its WebView2
+environment, and the helper waits for the main app and the complete captured
+process set to exit before asking Windows to eject the parent USB device. After
+a veto, File Explorer locations are diagnostic guidance and do not block the
+first native request. Lattice then allows final
+handles to drain and retries only pending or outstanding handle closes within a
+short bounded window.
 Keep the SSD attached while **Ejecting…** is shown and unplug only after **Safe
 to unplug**. A Windows veto leaves the library disconnected, reports the exact
 veto type and name, and records `%LOCALAPPDATA%\CS Library\last-eject-diagnostic.txt`;

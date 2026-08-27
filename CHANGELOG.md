@@ -1,5 +1,22 @@
 # Changelog
 
+## Unreleased
+
+### Fixed
+
+- Windows external-drive eject no longer stalls before the first native eject
+  request merely because File Explorer is showing the drive. After a veto,
+  Explorer locations remain in the diagnostic and failure guidance, while
+  Configuration Manager is again the authority for whether the device can be
+  removed.
+- LatticeServer, Tutor, and persistent Study Lab kernels now start from private
+  local working directories instead of inheriting the removable library drive.
+  Eject teardown captures the server and its current descendants by PID and
+  start time, then waits for that complete set alongside WebView2 before asking
+  Windows to eject.
+- Transient pending-close and outstanding-open vetoes use a short bounded retry
+  window again instead of appearing stuck for up to 90 seconds.
+
 ## 2.4.1 — 2026-08-26
 
 ### Added

@@ -9,37 +9,6 @@ using System.Windows.Media;
 
 namespace CSLibrary.Windows;
 
-internal sealed record EjectProcessIdentity(
-    int ProcessId,
-    long StartTimeUtcTicks)
-{
-    internal string Encode() =>
-        $"{ProcessId.ToString(CultureInfo.InvariantCulture)}:{StartTimeUtcTicks.ToString(CultureInfo.InvariantCulture)}";
-
-    internal static EjectProcessIdentity Parse(string value)
-    {
-        var separator = value.IndexOf(':');
-        if (separator <= 0 || separator == value.Length - 1)
-            throw new ArgumentException("A tracked eject process identity is invalid.");
-        if (!int.TryParse(
-                value.AsSpan(0, separator),
-                NumberStyles.None,
-                CultureInfo.InvariantCulture,
-                out var processId)
-            || processId <= 0
-            || !long.TryParse(
-                value.AsSpan(separator + 1),
-                NumberStyles.None,
-                CultureInfo.InvariantCulture,
-                out var startTimeUtcTicks)
-            || startTimeUtcTicks <= 0)
-        {
-            throw new ArgumentException("A tracked eject process identity is invalid.");
-        }
-        return new EjectProcessIdentity(processId, startTimeUtcTicks);
-    }
-}
-
 internal sealed record EjectHelperOptions(
     int ParentProcessId,
     long ParentStartTimeUtcTicks,
@@ -49,7 +18,7 @@ internal sealed record EjectHelperOptions(
 {
     private const string HelperSwitch = "--eject-helper";
     private const string WaitProcessOption = "--wait-process";
-    private const int MaximumWaitProcesses = 64;
+    private const int MaximumWaitProcesses = 128;
 
     internal static bool IsRequested(IReadOnlyList<string> arguments) =>
         arguments.Contains(HelperSwitch, StringComparer.Ordinal);
@@ -124,6 +93,15 @@ internal sealed record EjectHelperOptions(
         IReadOnlyList<EjectProcessIdentity> waitProcesses)
     {
         using var parent = Process.GetCurrentProcess();
+        if (waitProcesses.Count > MaximumWaitProcesses)
+            throw new InvalidOperationException(
+                "Lattice found too many owned processes to verify a safe eject.");
+        if (waitProcesses.Any(process => process.ProcessId == Environment.ProcessId)
+            || waitProcesses.Select(process => process.ProcessId).Distinct().Count() != waitProcesses.Count)
+        {
+            throw new InvalidOperationException(
+                "Lattice could not uniquely identify every owned process before ejecting the drive.");
+        }
         return new EjectHelperOptions(
             Environment.ProcessId,
             parent.StartTime.ToUniversalTime().Ticks,
@@ -173,13 +151,11 @@ internal sealed record EjectHelperOptions(
 
 internal sealed class EjectHelperWindow : Window
 {
-    private const int MaximumEjectAttempts = 4;
+    private const int MaximumEjectAttempts = 8;
     private static readonly TimeSpan TrackedProcessExitTimeout = TimeSpan.FromSeconds(45);
-    private static readonly TimeSpan ExplorerWindowExitTimeout = TimeSpan.FromSeconds(45);
     private static readonly TimeSpan HandleDrainDelay = TimeSpan.FromSeconds(2);
-    private static readonly TimeSpan RetryDelay = TimeSpan.FromSeconds(30);
+    private static readonly TimeSpan RetryDelay = TimeSpan.FromMilliseconds(1500);
     private static readonly TimeSpan ProcessPollDelay = TimeSpan.FromMilliseconds(150);
-    private static readonly TimeSpan ExplorerWindowPollDelay = TimeSpan.FromMilliseconds(500);
     private static readonly string DiagnosticPath = Path.Combine(
         MainWindow.LocalSettingsRoot,
         "last-eject-diagnostic.txt");
@@ -259,16 +235,15 @@ internal sealed class EjectHelperWindow : Window
             $"DriveRoot={_options.DriveRoot}",
             $"DeviceInstanceId={_options.DeviceInstanceId}",
             $"ParentProcessId={_options.ParentProcessId}",
-            $"TrackedWebViewProcessCount={_options.WaitProcesses.Count}",
-            $"TrackedWebViewProcessIds={string.Join(',', _options.WaitProcesses.Select(process => process.ProcessId))}",
+            $"TrackedChildProcessCount={_options.WaitProcesses.Count}",
+            $"TrackedChildProcessIds={string.Join(',', _options.WaitProcesses.Select(process => process.ProcessId))}",
         };
         try
         {
-            _detail.Text = "Waiting for Lattice and its WebView processes to close completely…";
+            _detail.Text = "Waiting for Lattice and its child processes to close completely…";
             var trackedProcessCount = await WaitForTrackedProcessesExitAsync(_options);
             diagnostic.Add($"TrackedProcessTreeExitedMilliseconds={elapsed.Elapsed.TotalMilliseconds:F3}");
             diagnostic.Add($"TrackedProcessCount={trackedProcessCount}");
-            await WaitForExplorerWindowsToReleaseAsync(_options.DriveRoot, diagnostic, elapsed);
             _detail.Text = "Every tracked Lattice process is closed. Waiting for final Windows handles to clear…";
             await Task.Delay(HandleDrainDelay);
             diagnostic.Add($"HandleDrainCompleteMilliseconds={elapsed.Elapsed.TotalMilliseconds:F3}");
@@ -290,10 +265,6 @@ internal sealed class EjectHelperWindow : Window
                 if (result.Success) break;
                 if (!NativeDriveEjector.IsTransientCloseVeto(result)
                     || attempt == MaximumEjectAttempts) break;
-                _detail.Text = $"Windows still has a closing volume handle. Waiting 30 seconds before "
-                    + $"the next safe-eject request ({attempt + 1}/{MaximumEjectAttempts})…";
-                diagnostic.Add(
-                    $"Attempt={attempt} QuietRetryStartedMilliseconds={elapsed.Elapsed.TotalMilliseconds:F3}");
                 await Task.Delay(RetryDelay);
             }
 
@@ -301,6 +272,10 @@ internal sealed class EjectHelperWindow : Window
                 throw new InvalidOperationException("Windows returned no result for the eject request.");
             if (!result.Success)
             {
+                var explorerLocations = FindExplorerLocationsOnDrive(_options.DriveRoot);
+                diagnostic.Add($"ExplorerWindowCount={explorerLocations.Count}");
+                if (explorerLocations.Count > 0)
+                    diagnostic.Add($"ExplorerWindowLocations={string.Join('|', explorerLocations)}");
                 diagnostic.Add($"FinishedUtc={DateTime.UtcNow:O}");
                 diagnostic.Add("Stage=Vetoed");
                 var diagnosticLocation = TryWriteDiagnostic(diagnostic);
@@ -308,6 +283,7 @@ internal sealed class EjectHelperWindow : Window
                     "Windows vetoed the native eject request. The library remains disconnected and the drive "
                     + "was not ejected.\n\n" + result.FailureDetail
                     + $"\nAttempts: {attemptsMade} after every tracked Lattice process exited."
+                    + ExplorerAdvice(explorerLocations)
                     + DiagnosticMessage(diagnosticLocation),
                     "Windows blocked eject");
                 return;
@@ -382,7 +358,7 @@ internal sealed class EjectHelperWindow : Window
             if (elapsed.Elapsed >= TrackedProcessExitTimeout)
             {
                 throw new TaskCanceledException(
-                    "Lattice or one of its WebView processes did not close within 45 seconds, so Windows "
+                    "Lattice or one of its child processes did not close within 45 seconds, so Windows "
                     + $"was not asked to eject the drive. Remaining process IDs: {string.Join(", ", remaining)}");
             }
             await Task.Delay(ProcessPollDelay);
@@ -415,37 +391,11 @@ internal sealed class EjectHelperWindow : Window
         }
     }
 
-    private async Task WaitForExplorerWindowsToReleaseAsync(
-        string driveRoot,
-        ICollection<string> diagnostic,
-        Stopwatch totalElapsed)
-    {
-        var locations = FindExplorerLocationsOnDrive(driveRoot);
-        if (locations.Count == 0)
-        {
-            diagnostic.Add("ExplorerWindowCount=0");
-            return;
-        }
-
-        diagnostic.Add($"ExplorerWindowCount={locations.Count}");
-        diagnostic.Add($"ExplorerWindowLocations={string.Join('|', locations)}");
-        var elapsed = Stopwatch.StartNew();
-        while (locations.Count > 0)
-        {
-            _detail.Text = $"File Explorer is still using {driveRoot}. Close every Explorer window or tab "
-                + "showing this drive; Lattice will continue automatically.";
-            if (elapsed.Elapsed >= ExplorerWindowExitTimeout)
-            {
-                diagnostic.Add($"ExplorerWindowWaitTimedOutMilliseconds={totalElapsed.Elapsed.TotalMilliseconds:F3}");
-                throw new TaskCanceledException(
-                    $"File Explorer is still open on {driveRoot}. Close every File Explorer window or tab "
-                    + "showing this drive, then choose Disconnect library drive again.");
-            }
-            await Task.Delay(ExplorerWindowPollDelay);
-            locations = FindExplorerLocationsOnDrive(driveRoot);
-        }
-        diagnostic.Add($"ExplorerWindowsReleasedMilliseconds={totalElapsed.Elapsed.TotalMilliseconds:F3}");
-    }
+    private static string ExplorerAdvice(IReadOnlyList<string> locations) =>
+        locations.Count == 0
+            ? string.Empty
+            : "\nFile Explorer is currently showing the drive. Close these windows or tabs and try again: "
+                + string.Join(", ", locations);
 
     private static IReadOnlyList<string> FindExplorerLocationsOnDrive(string driveRoot)
     {

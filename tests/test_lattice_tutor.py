@@ -492,10 +492,11 @@ class TutorManagerTests(unittest.TestCase):
     def test_every_platform_uses_one_disposable_read_only_excerpt_workspace(self) -> None:
         captured: list[str] = []
         observed: dict[str, object] = {}
-        response = json.dumps({"answer": "Grounded answer [1]", "citations": []})
         child = (
-            "import json,sys; sys.stdin.read(); "
-            f"print(json.dumps({{'type':'item.completed','item':{{'type':'agent_message','text':{response!r}}}}}))"
+            "import json,os,sys; sys.stdin.read(); "
+            "response=json.dumps({'answer':os.getcwd(),'citations':[]}); "
+            "print(json.dumps({'type':'item.completed','item':"
+            "{'type':'agent_message','text':response}}))"
         )
         prompt = "SELECTED EXCERPT: Dijkstra settles the nearest vertex."
         external_source = Path(r"E:\Lattice Library\books\algorithms.pdf")
@@ -531,7 +532,7 @@ class TutorManagerTests(unittest.TestCase):
 
         workspace = observed["workspace"]
         self.assertIsInstance(workspace, Path)
-        self.assertEqual(result["answer"], "Grounded answer [1]")
+        self.assertEqual(result["answer"], str(workspace))
         self.assertEqual(observed["context"], prompt)
         self.assertEqual(observed["schema_parent"], workspace)
         self.assertNotEqual(workspace, self.root)

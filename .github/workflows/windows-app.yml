@@ -75,7 +75,7 @@ jobs:
         with:
           dotnet-version: "8.0.x"
 
-      - name: Verify signed updater security boundaries
+      - name: Verify updater security and eject process boundaries
         shell: pwsh
         run: dotnet run --project windows/UpdateSecurityHarness/UpdateSecurityHarness.csproj --configuration Release
 
@@ -624,6 +624,8 @@ jobs:
           $server = $null
           $descendantMarker = $null
           $descendantReady = $null
+          $activeKernelProcessIds = @()
+          $teardownFailure = $null
           try {
             Remove-Item $studyRoot -Recurse -Force -ErrorAction SilentlyContinue
             $parent = Start-Process powershell.exe `
@@ -632,6 +634,7 @@ jobs:
             $env:LATTICE_STUDY_ROOT = $studyRoot
             $env:LATTICE_PRIVATE_TOKEN = $privateToken
             $server = Start-Process (Join-Path $package "Server\LatticeServer.exe") `
+              -WorkingDirectory $libraryRoot `
               -ArgumentList @(
                 "--root", $libraryRoot,
                 "--ui-root", (Join-Path $package "ui"),
@@ -772,17 +775,64 @@ jobs:
               throw "Packaged Study kernel descendant survived restart"
             }
 
+            # Simulate the native shell being launched from the external
+            # library root. A persistent kernel must still live under the
+            # private local Study root and remain active until server teardown.
+            $workingDirectoryResult = Invoke-RestMethod `
+              "$url/api/study/kernel/run" `
+              -Method Post `
+              -Headers $mutationHeaders `
+              -ContentType "application/json" `
+              -Body (@{
+                notebookId = [string]$notebook.notebook.id
+                source = "import os`nos.path.commonpath([os.path.abspath(os.getcwd()), os.path.abspath(os.environ['LATTICE_STUDY_ROOT'])]) == os.path.abspath(os.environ['LATTICE_STUDY_ROOT'])"
+              } | ConvertTo-Json -Compress) `
+              -TimeoutSec 30
+            $workingDirectoryOutput = @(
+              $workingDirectoryResult.outputs | Where-Object { $_.type -eq "result" }
+            )
+            if (-not $workingDirectoryResult.ok -or
+                $workingDirectoryOutput.Count -ne 1 -or
+                [string]$workingDirectoryOutput[0].text -cne "True") {
+              throw "Packaged Study kernel retained the external library working directory"
+            }
+            $kernelStatus = Invoke-RestMethod `
+              "$url/api/study/kernel/status" `
+              -Headers $privateHeaders `
+              -TimeoutSec 5
+            if ([int]$kernelStatus.runningKernels -ne 1) {
+              throw "Packaged Study kernel did not remain active until server teardown"
+            }
+            $activeKernelProcessIds = @(
+              Get-CimInstance Win32_Process -Filter "ParentProcessId = $($server.Id)" |
+                Where-Object { [string]$_.CommandLine -like "*--study-kernel*" } |
+                ForEach-Object { [int]$_.ProcessId }
+            )
+            if ($activeKernelProcessIds.Count -ne 1) {
+              throw "Packaged server did not expose exactly one active Study kernel child"
+            }
+
             $parent.Refresh()
             $server.Refresh()
             if ($parent.HasExited) { throw "Parent liveness probe terminated its parent process" }
             if ($server.HasExited) { throw "Packaged server did not remain alive" }
           } finally {
-            if ($server) { Stop-Process -Id $server.Id -Force -ErrorAction SilentlyContinue }
+            if ($server) {
+              Stop-Process -Id $server.Id -Force -ErrorAction SilentlyContinue
+              Wait-Process -Id $server.Id -Timeout 10 -ErrorAction SilentlyContinue
+            }
+            foreach ($kernelProcessId in $activeKernelProcessIds) {
+              Wait-Process -Id $kernelProcessId -Timeout 10 -ErrorAction SilentlyContinue
+              if (Get-Process -Id $kernelProcessId -ErrorAction SilentlyContinue) {
+                $teardownFailure = "Packaged Study kernel survived server teardown"
+              }
+            }
             if ($parent) { Stop-Process -Id $parent.Id -Force -ErrorAction SilentlyContinue }
             if ($descendantMarker) { Remove-Item $descendantMarker -Force -ErrorAction SilentlyContinue }
             if ($descendantReady) { Remove-Item $descendantReady -Force -ErrorAction SilentlyContinue }
             Remove-Item Env:LATTICE_PRIVATE_TOKEN -ErrorAction SilentlyContinue
             Remove-Item Env:LATTICE_STUDY_ROOT -ErrorAction SilentlyContinue
+            if ($teardownFailure) { throw $teardownFailure }
           }
 
       - name: Upload Windows app
