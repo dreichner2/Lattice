@@ -224,6 +224,20 @@ class SupervisorTests(unittest.TestCase):
         value = next(o for o in result["outputs"] if o["type"] == "result")
         self.assertEqual(value["text"], "True")
 
+    def test_kernel_uses_configured_private_working_directory(self) -> None:
+        with tempfile.TemporaryDirectory() as temporary:
+            private_root = Path(temporary).resolve()
+            runtime = study_python.StudyPythonRuntime(
+                python_command=[sys.executable],
+                working_directory=private_root,
+            )
+            try:
+                result = runtime.run("nb-private-cwd", "import os\nos.getcwd()")
+            finally:
+                runtime.stop_all()
+        value = next(o for o in result["outputs"] if o["type"] == "result")
+        self.assertEqual(value["text"], repr(str(private_root)))
+
     def test_busy_kernel_is_never_selected_for_idle_eviction(self) -> None:
         class BusyKernel:
             alive = True

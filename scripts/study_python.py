@@ -17,6 +17,7 @@ import os
 import signal
 import subprocess
 import sys
+import tempfile
 import threading
 import time
 import uuid
@@ -173,7 +174,13 @@ class _Pending:
 class KernelProcess:
     """One ``study_kernel.py`` bridge process bound to one notebook."""
 
-    def __init__(self, command: list[str], on_exit: Any) -> None:
+    def __init__(
+        self,
+        command: list[str],
+        on_exit: Any,
+        *,
+        working_directory: Path,
+    ) -> None:
         self._lock = threading.RLock()
         self._on_exit = on_exit
         self._pending: dict[str, _Pending] = {}
@@ -194,6 +201,7 @@ class KernelProcess:
                 text=True,
                 encoding="utf-8",
                 env=_utf8_environment(),
+                cwd=os.fspath(working_directory),
                 creationflags=creationflags,
                 start_new_session=os.name != "nt",
             )
@@ -419,9 +427,21 @@ class StudyPythonRuntime:
         python_command: list[str] | None = None,
         *,
         frozen: bool | None = None,
+        working_directory: Path | None = None,
     ) -> None:
         self.command = python_command or [sys.executable]
         self.frozen = bool(getattr(sys, "frozen", False)) if frozen is None else frozen
+        requested_working_directory = working_directory or Path(tempfile.gettempdir())
+        try:
+            self.working_directory = requested_working_directory.expanduser().resolve(strict=True)
+        except (OSError, RuntimeError) as exc:
+            raise KernelUnavailable(
+                "The private Study Lab working directory is unavailable"
+            ) from exc
+        if not self.working_directory.is_dir():
+            raise KernelUnavailable(
+                "The private Study Lab working directory is unavailable"
+            )
         self._kernels: dict[str, KernelProcess] = {}
         self._lock = threading.RLock()
         self._closed = False
@@ -493,6 +513,7 @@ class StudyPythonRuntime:
                         kernel = KernelProcess(
                             _kernel_launch_command(self.command, frozen=self.frozen),
                             on_exit=self._handle_exit,
+                            working_directory=self.working_directory,
                         )
                         self._kernels[notebook_id] = kernel
                 if eviction is None:

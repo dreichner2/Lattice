@@ -177,15 +177,15 @@ install Lattice.
   path. This prevents the helper from deleting its own running application.
 - Windows drive eject saves reconnect state and starts a strict eject-helper
   mode only from an executable and working directory outside the library
-  volume. Before disposal, Lattice snapshots every process reported by its
-  WebView2 environment plus the browser process. The helper binds every wait to
-  both PID and process start time, then asks Configuration Manager to resolve
-  the saved USB device ID only after the main app and every captured WebView
-  process have exited.
+  volume. Before disposal, Lattice snapshots the local service process tree,
+  every process reported by its WebView2 environment, and the browser process.
+  The helper binds every wait to both PID and process start time, then asks
+  Configuration Manager to resolve the saved USB device ID only after the main
+  app and every captured child process have exited.
 - The eject helper uses only `CM_Request_Device_EjectW`; it never locks,
   dismounts, offlines, or rewrites a volume mount point. After a two-second
-  handle drain, at most four attempts are allowed and only for Configuration
-  Manager pending-close or outstanding-open vetoes. A safe-to-unplug claim
+  handle drain, at most eight short attempts are allowed and only for
+  Configuration Manager pending-close or outstanding-open vetoes. A safe-to-unplug claim
   requires `CR_SUCCESS`; otherwise the exact final veto is shown, a local
   diagnostic is retained, and the disconnected reconnect record remains
   intact.

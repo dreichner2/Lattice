@@ -1,8 +1,12 @@
 using System.IO.Compression;
+using System.Diagnostics;
 using System.Security.Cryptography;
 using System.Text;
 using System.Text.Json;
 using CSLibrary.Windows;
+
+if (args.Length > 0 && args[0].StartsWith("--process-tree-", StringComparison.Ordinal))
+    return RunProcessTreeHelper(args);
 
 var tests = new (string Name, Action Body)[]
 {
@@ -27,6 +31,7 @@ var tests = new (string Name, Action Body)[]
     ("leaves a corrupt obsolete version without blocking startup", IgnoresCorruptObsoleteVersion),
     ("accepts only an exact out-of-install launcher mirror", AcceptsOnlyExactPortableMirror),
     ("atomically replaces a digest-bound portable launcher", ReplacesVerifiedPortableLauncher),
+    ("captures the exact server child and grandchild identities", CapturesProcessTreeIdentities),
 };
 
 var failures = 0;
@@ -495,6 +500,130 @@ static void ReplacesVerifiedPortableLauncher()
             installRoot));
         Equal("changed-after-start", File.ReadAllText(target));
     });
+}
+
+static void CapturesProcessTreeIdentities()
+{
+    if (!OperatingSystem.IsWindows()) return;
+
+    WithTemporaryRoot(root =>
+    {
+        var readyPath = Path.Combine(root, "tree-ready.txt");
+        var stopPath = Path.Combine(root, "tree-stop.txt");
+        using var rootProcess = StartHarnessProcess(
+            "--process-tree-root",
+            readyPath,
+            stopPath);
+        try
+        {
+            var readyDeadline = Stopwatch.StartNew();
+            while (!File.Exists(readyPath) && readyDeadline.Elapsed < TimeSpan.FromSeconds(10))
+            {
+                if (rootProcess.HasExited)
+                    throw new Exception("The process-tree fixture exited before its descendants were ready.");
+                Thread.Sleep(50);
+            }
+            if (!File.Exists(readyPath))
+                throw new TimeoutException("The process-tree fixture did not become ready.");
+
+            var descendantProcessIds = File.ReadAllText(readyPath)
+                .Split(',', StringSplitOptions.RemoveEmptyEntries)
+                .Select(value => int.Parse(value, System.Globalization.CultureInfo.InvariantCulture))
+                .ToArray();
+            Equal(2, descendantProcessIds.Length);
+
+            var identities = WindowsProcessTree.Capture(rootProcess);
+            var expectedProcessIds = descendantProcessIds.Prepend(rootProcess.Id).ToArray();
+            foreach (var processId in expectedProcessIds)
+            {
+                var identity = identities.SingleOrDefault(value => value.ProcessId == processId)
+                    ?? throw new Exception($"Process tree omitted expected process {processId}.");
+                using var process = Process.GetProcessById(processId);
+                Equal(process.StartTime.ToUniversalTime().Ticks, identity.StartTimeUtcTicks);
+            }
+        }
+        finally
+        {
+            File.WriteAllText(stopPath, "stop");
+            if (!rootProcess.WaitForExit(10_000))
+            {
+                rootProcess.Kill(entireProcessTree: true);
+                rootProcess.WaitForExit(5_000);
+            }
+        }
+    });
+}
+
+static int RunProcessTreeHelper(string[] arguments)
+{
+    if (arguments.Length != 3) return 2;
+    var mode = arguments[0];
+    var readyPath = arguments[1];
+    var stopPath = arguments[2];
+
+    if (mode == "--process-tree-grandchild")
+        return WaitForStop(stopPath) ? 0 : 3;
+
+    if (mode == "--process-tree-child")
+    {
+        using var grandchild = StartHarnessProcess(
+            "--process-tree-grandchild",
+            readyPath,
+            stopPath);
+        var temporaryReadyPath = readyPath + $".{Environment.ProcessId}.tmp";
+        File.WriteAllText(
+            temporaryReadyPath,
+            $"{Environment.ProcessId},{grandchild.Id}");
+        File.Move(temporaryReadyPath, readyPath);
+        var stopped = WaitForStop(stopPath);
+        if (!grandchild.WaitForExit(5_000))
+        {
+            grandchild.Kill(entireProcessTree: true);
+            grandchild.WaitForExit(5_000);
+        }
+        return stopped ? 0 : 3;
+    }
+
+    if (mode == "--process-tree-root")
+    {
+        using var child = StartHarnessProcess(
+            "--process-tree-child",
+            readyPath,
+            stopPath);
+        var stopped = WaitForStop(stopPath);
+        if (!child.WaitForExit(5_000))
+        {
+            child.Kill(entireProcessTree: true);
+            child.WaitForExit(5_000);
+        }
+        return stopped ? 0 : 3;
+    }
+
+    return 2;
+}
+
+static Process StartHarnessProcess(string mode, string readyPath, string stopPath)
+{
+    var executable = Environment.ProcessPath
+        ?? throw new InvalidOperationException("The harness executable path is unavailable.");
+    var start = new ProcessStartInfo(executable)
+    {
+        UseShellExecute = false,
+        CreateNoWindow = true,
+    };
+    start.ArgumentList.Add(mode);
+    start.ArgumentList.Add(readyPath);
+    start.ArgumentList.Add(stopPath);
+    return Process.Start(start)
+        ?? throw new InvalidOperationException("Could not start the process-tree fixture.");
+}
+
+static bool WaitForStop(string stopPath)
+{
+    var elapsed = Stopwatch.StartNew();
+    while (!File.Exists(stopPath) && elapsed.Elapsed < TimeSpan.FromSeconds(60))
+        Thread.Sleep(50);
+    return File.Exists(stopPath);
 }
 
 static byte[] BuildManifest(string version, string? assetUrl = null)

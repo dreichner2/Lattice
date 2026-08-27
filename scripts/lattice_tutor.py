@@ -1619,6 +1619,7 @@ Answer as a tutor. Source-dependent claims need numbered citations. A citation s
                     encoding="utf-8",
                     errors="replace",
                     env=_safe_process_environment(),
+                    cwd=os.fspath(working_directory),
                     start_new_session=start_new_session,
                     creationflags=creationflags,
                 )

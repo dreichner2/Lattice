@@ -10,5 +10,7 @@
     <Compile Include="Program.cs" />
     <Compile Include="..\CSLibrary.Windows\Update*.cs" Link="Updater\%(Filename)%(Extension)" />
     <Compile Include="..\CSLibrary.Windows\PortableLauncherUpdate.cs" Link="Updater\PortableLauncherUpdate.cs" />
+    <Compile Include="..\CSLibrary.Windows\EjectProcessIdentity.cs" Link="Eject\EjectProcessIdentity.cs" />
+    <Compile Include="..\CSLibrary.Windows\WindowsProcessTree.cs" Link="Eject\WindowsProcessTree.cs" />
   </ItemGroup>
 </Project>

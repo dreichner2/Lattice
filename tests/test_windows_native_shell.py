@@ -26,6 +26,7 @@ UPDATE_SERVICE_CODE = WINDOWS / "UpdateService.cs"
 LIBRARY_MOVE_CODE = WINDOWS / "LibraryMoveClient.cs"
 NATIVE_EJECT_CODE = WINDOWS / "NativeDriveEjector.cs"
 EJECT_HELPER_CODE = WINDOWS / "EjectHelperWindow.cs"
+PROCESS_TREE_CODE = WINDOWS / "WindowsProcessTree.cs"
 PORTABLE_LAUNCHER_CODE = WINDOWS / "PortableLauncherUpdate.cs"
 EXTERNAL_VOLUME_CODE = WINDOWS / "ExternalLibraryVolumeRecord.cs"
 WINDOWS_BUILD = ROOT / "windows" / "build-windows.ps1"
@@ -33,6 +34,8 @@ WINDOWS_INSTALLER = ROOT / "windows" / "install.ps1"
 WINDOWS_WORKFLOW = ROOT / ".github" / "workflows" / "windows-app.yml"
 MAC_WORKFLOW = ROOT / ".github" / "workflows" / "native-macos.yml"
 STUDY_PYTHON = ROOT / "scripts" / "study_python.py"
+LIBRARY_UI = ROOT / "scripts" / "library_ui.py"
+LATTICE_TUTOR = ROOT / "scripts" / "lattice_tutor.py"
 XAML_NAME = "{http://schemas.microsoft.com/winfx/2006/xaml}Name"
 XAML_KEY = "{http://schemas.microsoft.com/winfx/2006/xaml}Key"
 
@@ -60,6 +63,7 @@ class WindowsNativeShellTests(unittest.TestCase):
         cls.library_move_code = LIBRARY_MOVE_CODE.read_text(encoding="utf-8")
         cls.native_eject_code = NATIVE_EJECT_CODE.read_text(encoding="utf-8")
         cls.eject_helper_code = EJECT_HELPER_CODE.read_text(encoding="utf-8")
+        cls.process_tree_code = PROCESS_TREE_CODE.read_text(encoding="utf-8")
         cls.portable_launcher_code = PORTABLE_LAUNCHER_CODE.read_text(encoding="utf-8")
         cls.external_volume_code = EXTERNAL_VOLUME_CODE.read_text(encoding="utf-8")
         cls.windows_build = WINDOWS_BUILD.read_text(encoding="utf-8")
@@ -67,6 +71,8 @@ class WindowsNativeShellTests(unittest.TestCase):
         cls.windows_workflow = WINDOWS_WORKFLOW.read_text(encoding="utf-8")
         cls.mac_workflow = MAC_WORKFLOW.read_text(encoding="utf-8")
         cls.study_python = STUDY_PYTHON.read_text(encoding="utf-8")
+        cls.library_ui = LIBRARY_UI.read_text(encoding="utf-8")
+        cls.lattice_tutor = LATTICE_TUTOR.read_text(encoding="utf-8")
 
     def test_native_palette_matches_shared_lattice_surface(self) -> None:
         keyed_values = {
@@ -156,6 +162,15 @@ class WindowsNativeShellTests(unittest.TestCase):
         self.assertIn("--hidden-import study_kernel", self.windows_build)
         self.assertIn("--study-kernel", self.windows_build)
         self.assertIn("Packaged Study Lab kernel", self.windows_build)
+        server_launch = self.window_code[
+            self.window_code.index("private async Task<string> StartServerAsync") :
+            self.window_code.index("private async Task ConfigureWebViewAsync")
+        ]
+        self.assertIn("WorkingDirectory = SettingsRoot", server_launch)
+        self.assertNotIn("WorkingDirectory = root", server_launch)
+        self.assertIn("working_directory=self.study.root", self.library_ui.replace(" ", ""))
+        self.assertIn("cwd=os.fspath(working_directory)", self.study_python)
+        self.assertIn("cwd=os.fspath(working_directory)", self.lattice_tutor)
 
     def test_packaged_kernel_containment_and_integration_stay_covered(self) -> None:
         for contract in (
@@ -175,6 +190,9 @@ class WindowsNativeShellTests(unittest.TestCase):
             "lattice-kernel-descendant.ready",
             "-EncodedCommand",
             "Packaged Study kernel descendant survived restart",
+            "Packaged Study kernel retained the external library working directory",
+            "Packaged Study kernel survived server teardown",
+            "-WorkingDirectory $libraryRoot",
             "LATTICE_PRIVATE_TOKEN",
         ):
             self.assertIn(contract, self.windows_workflow)
@@ -347,27 +365,41 @@ class WindowsNativeShellTests(unittest.TestCase):
         self.assertIn('private const string HelperSwitch = "--eject-helper"', self.eject_helper_code)
         self.assertIn('private const string WaitProcessOption = "--wait-process"', self.eject_helper_code)
         wait_for_parent = self.eject_helper_code.index("await WaitForTrackedProcessesExitAsync(_options)")
-        wait_for_explorer = self.eject_helper_code.index("await WaitForExplorerWindowsToReleaseAsync(")
         request_eject = self.eject_helper_code.index("NativeDriveEjector.RequestEject(")
+        inspect_explorer = self.eject_helper_code.index(
+            "var explorerLocations = FindExplorerLocationsOnDrive(_options.DriveRoot)"
+        )
         self.assertLess(wait_for_parent, request_eject)
-        self.assertLess(wait_for_parent, wait_for_explorer)
-        self.assertLess(wait_for_explorer, request_eject)
+        self.assertLess(request_eject, inspect_explorer)
         self.assertIn("process.StartTime.ToUniversalTime().Ticks", self.eject_helper_code)
-        self.assertIn("MaximumEjectAttempts = 4", self.eject_helper_code)
+        self.assertIn("MaximumEjectAttempts = 8", self.eject_helper_code)
         self.assertIn("TrackedProcessExitTimeout = TimeSpan.FromSeconds(45)", self.eject_helper_code)
-        self.assertIn("ExplorerWindowExitTimeout = TimeSpan.FromSeconds(45)", self.eject_helper_code)
         self.assertIn('Type.GetTypeFromProgID("Shell.Application")', self.eject_helper_code)
         self.assertIn('"LocationURL"', self.eject_helper_code)
-        self.assertIn("Close every Explorer window or tab", self.eject_helper_code)
         self.assertIn("ExplorerWindowLocations=", self.eject_helper_code)
+        self.assertIn("ExplorerAdvice(explorerLocations)", self.eject_helper_code)
+        self.assertNotIn("WaitForExplorerWindowsToReleaseAsync", self.eject_helper_code)
         self.assertNotIn('"Quit"', self.eject_helper_code)
         self.assertIn("HandleDrainDelay = TimeSpan.FromSeconds(2)", self.eject_helper_code)
-        self.assertIn("RetryDelay = TimeSpan.FromSeconds(30)", self.eject_helper_code)
-        self.assertIn("QuietRetryStartedMilliseconds=", self.eject_helper_code)
+        self.assertIn("RetryDelay = TimeSpan.FromMilliseconds(1500)", self.eject_helper_code)
         self.assertIn("NativeDriveEjector.IsTransientCloseVeto(result)", self.eject_helper_code)
         self.assertIn("PNP_VetoPendingClose", self.native_eject_code)
         self.assertIn("PNP_VetoOutstandingOpen", self.native_eject_code)
         self.assertIn("actualDeviceInstanceId", self.native_eject_code)
+
+        for contract in (
+            "CreateToolhelp32Snapshot",
+            "Process32First",
+            "Process32Next",
+            "ParentProcessId",
+            "process.StartTime.ToUniversalTime().Ticks",
+        ):
+            self.assertIn(contract, self.process_tree_code)
+        self.assertIn("WindowsProcessTree.Capture(process)", self.window_code)
+        self.assertIn("serverProcesses", disconnect)
+        self.assertIn("ownedProcesses", disconnect)
+        self.assertIn("group.MaxBy(process => process.StartTimeUtcTicks)", disconnect)
+        self.assertIn("MaximumWaitProcesses = 128", self.eject_helper_code)
         self.assertIn('"last-eject-diagnostic.txt"', self.eject_helper_code)
         self.assertIn("after every tracked Lattice process exited", self.eject_helper_code)
         veto_branch = self.eject_helper_code.index("if (!result.Success)")
