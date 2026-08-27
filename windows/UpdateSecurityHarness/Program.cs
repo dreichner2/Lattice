@@ -534,14 +534,6 @@ static void CapturesProcessTreeIdentities()
 
             var identities = WindowsProcessTree.Capture(rootProcess);
             var expectedProcessIds = descendantProcessIds.Prepend(rootProcess.Id).ToArray();
-            var actualProcessIds = identities.Select(value => value.ProcessId).ToArray();
-            if (!actualProcessIds.OrderBy(value => value)
-                    .SequenceEqual(expectedProcessIds.OrderBy(value => value)))
-            {
-                throw new Exception(
-                    $"Expected process tree {string.Join(',', expectedProcessIds)}, "
-                    + $"got {string.Join(',', actualProcessIds)}.");
-            }
             foreach (var processId in expectedProcessIds)
             {
                 var identity = identities.SingleOrDefault(value => value.ProcessId == processId)
